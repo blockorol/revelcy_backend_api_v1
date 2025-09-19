@@ -22,8 +22,7 @@ use solana_sdk::signature::Signature;
 use solana_transaction_status::UiTransactionEncoding;
 
 use crate::api::premarket;
-use crate::models::premarket::{TxConfirmationStatusDTO, PremarketState, PremarketListResult, TokenDynamicInfo, HolderInfo, LinkType, CommunityLink, CommunityInfoServiceModel, FullPremarketInfo, PremarketInfoServiceModel, TokenInfo, TokenLinks, PremarketGoal, UserInfoShort, JoinConfirmationStatusDTO, OutConfirmationStatusDTO, PremarketOnchainUser, PremarketOnchainData};
-
+use crate::models::premarket::{PremarketState, PremarketListResult, TokenDynamicInfo, HolderInfo, LinkType, CommunityLink, CommunityInfoServiceModel, FullPremarketInfo, PremarketInfoServiceModel, TokenInfo, TokenLinks, PremarketGoal, UserInfoShort, JoinConfirmationStatusDTO, OutConfirmationStatusDTO, PremarketOnchainUser, PremarketOnchainData};
 
 use crate::models::premarket::{
     BuildFinishTxParams, 
@@ -964,6 +963,19 @@ pub async fn check_tx_service(
                                                                         premarket: Pubkey::from_str(premarket_pda).map_err(|_| actix_web::error::ErrorBadRequest("Invalid premarket PDA format"))?,
                                                                     }).await.map_err(|e| actix_web::error::ErrorInternalServerError(format!("Failed to get premarket data: {}", e)))?;
                                                                     println!("Premarket Data: {:?}", premarket_data);
+                                                                    let output = CheckTxResponse{
+                                                                        user_pubkey: None,
+                                                                        name: None,
+                                                                        symbol: None,
+                                                                        uri: None,
+                                                                        deadline: Some(premarket_data.end_timestamp),
+                                                                        goal_sol_lamp: Some(premarket_data.goal_lamports),
+                                                                        max_sol_lamp: Some(premarket_data.max_lamports),
+                                                                        creator_allocate_lamp: None,
+                                                                        premarket: Some(premarket_pda.clone()),
+                                                                        lamports_in: None,
+                                                                    };
+                                                                    return Ok(output);
                                                                 }
                                                                 if partially_decoded.data.starts_with("YVJ16Tm7Yjx") {
                                                                     println!("Join instruction detected");
@@ -981,7 +993,19 @@ pub async fn check_tx_service(
                                                                         Some(premarket_user) => {
                                                                             println!("User found in premarket! Wallet: {}, Contributed: {} lamports", 
                                                                                 premarket_user.wallet, premarket_user.contributed_lamports);
-                                                                            // Additional logic for when user is found
+                                                                            let output = CheckTxResponse{
+                                                                                user_pubkey: Some(premarket_user.wallet.to_string()),
+                                                                                name: None,
+                                                                                symbol: None,
+                                                                                uri: None,
+                                                                                deadline: None,
+                                                                                goal_sol_lamp: None,
+                                                                                max_sol_lamp: None,
+                                                                                creator_allocate_lamp: None,
+                                                                                premarket: None,
+                                                                                lamports_in: Some(premarket_user.contributed_lamports),
+                                                                            };
+                                                                            return Ok(output);
                                                                         },
                                                                         None => { 
                                                                             println!("User {} not found in premarket data", user);
@@ -1009,7 +1033,19 @@ pub async fn check_tx_service(
                                                                         },
                                                                         None => {
                                                                             println!("User {} not found in premarket data", user);
-                                                                            // Additional logic for when user is not found
+                                                                            let output = CheckTxResponse{
+                                                                                user_pubkey: Some(user_pubkey.to_string()),
+                                                                                name: None,
+                                                                                symbol: None,
+                                                                                uri: None,
+                                                                                deadline: None,
+                                                                                goal_sol_lamp: None,
+                                                                                max_sol_lamp: None,
+                                                                                creator_allocate_lamp: None,
+                                                                                premarket: None,
+                                                                                lamports_in: None,
+                                                                            };
+                                                                            return Ok(output);
                                                                         }
                                                                     }
                                                                 }
@@ -1048,20 +1084,65 @@ pub async fn check_tx_service(
                             }
                         } 
                     }
-                    Ok(CheckTxResponse{status: TxConfirmationStatusDTO::Confirmed})
+                    Ok(CheckTxResponse{
+                        user_pubkey: None,
+                        name: None,
+                        symbol: None,
+                        uri: None,
+                        deadline: None,
+                        goal_sol_lamp: None,
+                        max_sol_lamp: None,
+                        creator_allocate_lamp: None,
+                        premarket: None,
+                        lamports_in: None,
+                    })
                 },
                 Err(e) => {
                     println!("Error fetching transaction: {}", e);
-                    Ok(CheckTxResponse{status: TxConfirmationStatusDTO::Pending})
+                    Ok(CheckTxResponse{
+                        user_pubkey: None,
+                        name: None,
+                        symbol: None,
+                        uri: None,
+                        deadline: None,
+                        goal_sol_lamp: None,
+                        max_sol_lamp: None,
+                        creator_allocate_lamp: None,
+                        premarket: None,
+                        lamports_in: None,
+                    })
                 }
             }
         },
         Some(_) => {
-            Ok(CheckTxResponse{status: TxConfirmationStatusDTO::Failed})
+            println!("Transaction failed");
+            Ok(CheckTxResponse{
+                user_pubkey: None,
+                name: None,
+                symbol: None,
+                uri: None,
+                deadline: None,
+                goal_sol_lamp: None,
+                max_sol_lamp: None,
+                creator_allocate_lamp: None,
+                premarket: None,
+                lamports_in: None,
+            })
         },
         None => {
             println!("Transaction status is pending or not found");
-            Ok(CheckTxResponse{status: TxConfirmationStatusDTO::Pending})
+            Ok(CheckTxResponse{
+                user_pubkey: None,
+                name: None,
+                symbol: None,
+                uri: None,
+                deadline: None,
+                goal_sol_lamp: None,
+                max_sol_lamp: None,
+                creator_allocate_lamp: None,
+                premarket: None,
+                lamports_in: None,
+            })
         },
     }
 }

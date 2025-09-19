@@ -1,5 +1,5 @@
 
-use crate::models::premarket::{PremarketState, PremarketListResult, TokenDynamicInfo, HolderInfo, LinkType, CommunityLink, CommunityInfoServiceModel, FullPremarketInfo, PremarketInfoServiceModel, TokenInfo, TokenLinks, PremarketGoal, UserInfoShort, TxConfirmationStatusDTO, JoinConfirmationStatusDTO, OutConfirmationStatusDTO, PremarketOnchainUser, PremarketOnchainData};
+use crate::models::premarket::{PremarketState, PremarketListResult, TokenDynamicInfo, HolderInfo, LinkType, CommunityLink, CommunityInfoServiceModel, FullPremarketInfo, PremarketInfoServiceModel, TokenInfo, TokenLinks, PremarketGoal, UserInfoShort, JoinConfirmationStatusDTO, OutConfirmationStatusDTO, TxConfirmationStatusDTO, PremarketOnchainUser, PremarketOnchainData};
 
 use crate::storage::models::{HolderDbModel, CommunityInfoDbModel, CommunityLinkDbModel, PremarketInfoDbModel};
 use crate::storage::premarket_repo;
@@ -8,6 +8,8 @@ use actix_web::error::ErrorInternalServerError;
 use uuid::Uuid;
 use chrono::Utc;
 use actix_web::error::ErrorBadRequest;
+
+use crate::constants::CRYPTO_PRICE_API_URL;
 
 use solana_client::nonblocking::rpc_client::RpcClient; // CHANGED
 use solana_sdk::pubkey::Pubkey;
@@ -249,11 +251,13 @@ pub async fn get_dynamic_info(
         })
         .collect();
 
-    let current_price_lamp = get_price_by_market_cap(holder_data.reserved_sol_lamp as u64);
-    let price_24h_ago_lamp = get_price_by_market_cap(holder_data.reserved_sol_24h_before_lamp as u64);
+    let current_price_lamp = get_price_by_market_cap(holder_data.reserved_sol_lamp as u64).await;
+    println!("reserved_sol_lamp: {}", holder_data.reserved_sol_lamp);
+    println!("current_price_lamp: {}", current_price_lamp);
+    let price_24h_ago_lamp = get_price_by_market_cap(holder_data.reserved_sol_24h_before_lamp as u64).await;
 
-    let change_24h = if price_24h_ago_lamp > 0 {
-        ((current_price_lamp as f64 - price_24h_ago_lamp as f64) / price_24h_ago_lamp as f64) * 100.0
+    let change_24h = if price_24h_ago_lamp > 0.0 {
+        ((current_price_lamp - price_24h_ago_lamp) / price_24h_ago_lamp) * 100.0
     } else {
         100.0
     };
@@ -325,8 +329,21 @@ pub async fn remove_holder(
         .map_err(actix_web::error::ErrorInternalServerError)
 }
 
-pub fn get_price_by_market_cap(reserved_sol_lamp: u64) -> u64 {
-    return reserved_sol_lamp/1_000_000_000;
+pub async fn get_price_by_market_cap(reserved_sol_lamp: u64) -> f64 {
+    let url = format!("{}ids=solana&vs_currencies=usd", CRYPTO_PRICE_API_URL);
+
+    let current_sol_price = match reqwest::get(url).await {
+        Ok(response) => {
+            match response.json::<serde_json::Value>().await {
+                Ok(json) => json["solana"]["usd"].as_f64().unwrap_or(0.0),
+                Err(_) => 0.0,
+            }
+        },
+        Err(_) => 0.0,
+    };
+    
+    let price = reserved_sol_lamp as f64 / 1_000_000_000_000_000.0 * current_sol_price;
+    (price * 1_000_000.0).round() / 1_000_000.0
 }
 
 pub async fn get_tx_confirmation_status(
@@ -454,3 +471,4 @@ pub async fn get_premarket_data(
         mint,
     })
 }
+
