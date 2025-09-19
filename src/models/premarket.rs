@@ -199,7 +199,7 @@ pub struct PremarketListResult {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TokenDynamicInfo {
     pub holders_count: u32,
-    pub current_price_lamp: u64,
+    pub current_price_lamp: f64,
     pub reserved_sol_lamp: u64,
     pub change_24h: f64,
     pub holders: Vec<HolderInfo>,

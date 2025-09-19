@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::models::premarket::TxConfirmationStatusDTO;
-
 // todo: unlock it and change network to that
 // #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 // pub enum SolanaNetwork {
@@ -125,7 +123,7 @@ pub struct TokenDynamicInfoDTO {
     pub holders_count: u32,
 
     #[serde(with = "string_as_number")]
-    pub current_price_lamp: u64,
+    pub current_price_lamp: f64,
 
     #[serde(with = "string_as_number")]
     pub reserved_sol_lamp: u64,
@@ -189,11 +187,6 @@ pub struct KillPremarketTxRequest {
 #[derive(serde::Serialize)]
 pub struct TxOnlyResponse {
     pub transaction: String,
-}
-
-#[derive(serde::Serialize)]
-pub struct CheckTxResponse {
-    pub status: TxConfirmationStatusDTO,
 }
 
 #[derive(Deserialize, Debug)]
@@ -301,4 +294,18 @@ pub struct DeployTxDTO {
 pub struct CheckTxDTO {
     pub network: String,          // "devnet" | "mainnet-beta"
     pub sig: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CheckTxResponse {
+    pub user_pubkey: Option<String>,
+    pub name: Option<String>,
+    pub symbol: Option<String>,
+    pub uri: Option<String>,
+    pub deadline: Option<i64>,
+    pub goal_sol_lamp: Option<u64>,
+    pub max_sol_lamp: Option<u64>,
+    pub creator_allocate_lamp: Option<u64>,
+    pub premarket: Option<String>,
+    pub lamports_in: Option<u64>,
 }
