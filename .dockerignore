@@ -1,0 +1,6 @@
+target
+.git
+.dockerignore
+Dockerfile
+README.md
+**/*.bk

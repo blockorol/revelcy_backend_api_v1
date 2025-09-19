@@ -1,0 +1,8 @@
+[build]
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "/usr/local/bin/app"
+
+[env]
+PORT = "8080"

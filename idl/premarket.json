@@ -1,0 +1,640 @@
+{
+  "address": "ERCTELKB8tWDcLw4hLLYmxk9kirci5tP3BG4NntpwoAj",
+  "metadata": {
+    "name": "purple_token",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "create_premarket",
+      "discriminator": [
+        15,
+        180,
+        202,
+        194,
+        240,
+        245,
+        166,
+        21
+      ],
+      "accounts": [
+        {
+          "name": "revelcy_auth",
+          "docs": [
+            "The authority account that must match the expected address"
+          ],
+          "signer": true
+        },
+        {
+          "name": "premarket_account",
+          "docs": [
+            "PDA for Premarket account"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "revelcy_auth"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "The mint account to be created and initialized"
+          ]
+        },
+        {
+          "name": "user",
+          "docs": [
+            "The user who funds the account creation"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "docs": [
+            "System program for account creation"
+          ],
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "CreatePremarketArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "distribute_tokens",
+      "discriminator": [
+        105,
+        69,
+        130,
+        52,
+        196,
+        28,
+        176,
+        120
+      ],
+      "accounts": [
+        {
+          "name": "revelcy_auth",
+          "docs": [
+            "The authority account that must match the expected address"
+          ],
+          "signer": true
+        },
+        {
+          "name": "revelcy_auth_ata",
+          "writable": true
+        },
+        {
+          "name": "premarket_account",
+          "docs": [
+            "PDA for Premarket account"
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_mint",
+          "docs": [
+            "The mint account"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "DistributeTokensArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "finish_premarket",
+      "discriminator": [
+        129,
+        21,
+        169,
+        178,
+        144,
+        2,
+        47,
+        67
+      ],
+      "accounts": [
+        {
+          "name": "revelcy_auth",
+          "docs": [
+            "The authority account that must match the expected address"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "premarket_account",
+          "writable": true
+        },
+        {
+          "name": "token_mint",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint_auth"
+        },
+        {
+          "name": "bonding_curve",
+          "writable": true
+        },
+        {
+          "name": "bonding_curve_ata",
+          "writable": true
+        },
+        {
+          "name": "global",
+          "writable": true
+        },
+        {
+          "name": "mpl_token_metadata",
+          "writable": true
+        },
+        {
+          "name": "metadata",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        },
+        {
+          "name": "event_auth",
+          "writable": true
+        },
+        {
+          "name": "pump_fun_program_id"
+        },
+        {
+          "name": "fee_recipient",
+          "writable": true
+        },
+        {
+          "name": "associated_user",
+          "writable": true
+        },
+        {
+          "name": "creator_vault",
+          "writable": true
+        },
+        {
+          "name": "global_volume_accumulator",
+          "writable": true
+        },
+        {
+          "name": "user_volume_accumulator",
+          "writable": true
+        },
+        {
+          "name": "fee_config",
+          "writable": true
+        },
+        {
+          "name": "fee_program",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "FinishPremarketArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "join_to_premarket",
+      "discriminator": [
+        254,
+        254,
+        154,
+        5,
+        60,
+        159,
+        133,
+        182
+      ],
+      "accounts": [
+        {
+          "name": "revelcy_auth",
+          "docs": [
+            "The authority account that must match the expected address"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user",
+          "docs": [
+            "The user who wants to join the premarket"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "premarket_account",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "JoinToPremarketArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "kill_premarket",
+      "discriminator": [
+        10,
+        112,
+        216,
+        238,
+        253,
+        26,
+        122,
+        160
+      ],
+      "accounts": [
+        {
+          "name": "revelcy_auth",
+          "docs": [
+            "The authority account that must match the expected address"
+          ],
+          "signer": true
+        },
+        {
+          "name": "premarket_account",
+          "docs": [
+            "PDA for Premarket account"
+          ],
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "KillPremarketArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "out_of_premarket",
+      "discriminator": [
+        82,
+        13,
+        181,
+        57,
+        54,
+        85,
+        81,
+        82
+      ],
+      "accounts": [
+        {
+          "name": "revelcy_auth",
+          "docs": [
+            "The authority account that must match the expected address"
+          ],
+          "signer": true
+        },
+        {
+          "name": "user",
+          "docs": [
+            "The user who wants to join the premarket"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "premarket_account",
+          "docs": [
+            "PDA for Premarket account"
+          ],
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "OutOfPremarketArgs"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "PremarketData",
+      "discriminator": [
+        118,
+        163,
+        120,
+        118,
+        124,
+        47,
+        20,
+        241
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "PremarketClosed",
+      "msg": "Premarket is closed"
+    },
+    {
+      "code": 6001,
+      "name": "AlreadyJoined",
+      "msg": "User has already joined the premarket"
+    },
+    {
+      "code": 6002,
+      "name": "MaxSolReached",
+      "msg": "Maximum SOL limit reached"
+    },
+    {
+      "code": 6003,
+      "name": "MaxSolPerEntryExceeded",
+      "msg": "Maximum SOL per entry exceeded (max 1 sol)"
+    },
+    {
+      "code": 6004,
+      "name": "ExceedsMaxPremarketBalance",
+      "msg": "Premarket balance exceeds SOL limit"
+    },
+    {
+      "code": 6005,
+      "name": "UserNotInPremarket",
+      "msg": "User is not in the premarket"
+    },
+    {
+      "code": 6006,
+      "name": "UserNotRemoved",
+      "msg": "User was not removed from the premarket"
+    },
+    {
+      "code": 6007,
+      "name": "InsufficientFunds",
+      "msg": "Insufficient funds in the premarket account for withdrawal"
+    },
+    {
+      "code": 6008,
+      "name": "KeyMismatch",
+      "msg": "Recipient account key does not match stored user key."
+    },
+    {
+      "code": 6009,
+      "name": "AccountNotWritable",
+      "msg": "Recipient account must be writable."
+    },
+    {
+      "code": 6010,
+      "name": "AccountCountMismatch",
+      "msg": "Account list length does not match user list length."
+    },
+    {
+      "code": 6011,
+      "name": "PremarketNotClosed",
+      "msg": "Premarket is not closed"
+    },
+    {
+      "code": 6012,
+      "name": "GoalSolNotReached",
+      "msg": "Goal SOL not reached"
+    }
+  ],
+  "types": [
+    {
+      "name": "CreatePremarketArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "end_timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "goal_sol",
+            "type": "u64"
+          },
+          {
+            "name": "max_sol",
+            "type": "u64"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "name": "uri",
+            "type": "string"
+          },
+          {
+            "name": "amount_in_lamports",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DistributeTokensArgs",
+      "type": {
+        "kind": "struct",
+        "fields": []
+      }
+    },
+    {
+      "name": "FinishPremarketArgs",
+      "type": {
+        "kind": "struct",
+        "fields": []
+      }
+    },
+    {
+      "name": "JoinToPremarketArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "amount_in_lamports",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "KillPremarketArgs",
+      "type": {
+        "kind": "struct",
+        "fields": []
+      }
+    },
+    {
+      "name": "MapEntry",
+      "docs": [
+        "A pubkey-lamports struct for users entered premarket"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pubkey",
+            "type": "pubkey"
+          },
+          {
+            "name": "lamports",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OutOfPremarketArgs",
+      "type": {
+        "kind": "struct",
+        "fields": []
+      }
+    },
+    {
+      "name": "PremarketData",
+      "docs": [
+        "A PDA account that stores a list of all users entered premarket"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "users",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "MapEntry"
+                }
+              }
+            }
+          },
+          {
+            "name": "end_timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "goal_sol",
+            "type": "u64"
+          },
+          {
+            "name": "max_sol",
+            "type": "u64"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "name": "uri",
+            "type": "string"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          }
+        ]
+      }
+    }
+  ]
+}

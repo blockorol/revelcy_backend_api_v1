@@ -1,0 +1,15 @@
+use actix_web::web;
+mod file_server;
+mod public_server;
+mod user_server;
+mod premarket_server;
+
+pub fn init_servers(cfg: &mut web::ServiceConfig) {
+    cfg
+        .service(public_server::public_scope())
+        .service(user_server::user_scope())
+        .service(file_server::file_scope())
+        // .service(premarket_server::private_scope())
+        .service(premarket_server::pub_scope())
+;
+}

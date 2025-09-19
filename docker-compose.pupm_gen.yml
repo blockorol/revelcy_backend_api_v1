@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  pump_keys_generator:
+    build:
+      context: .
+      dockerfile: Dockerfile.pump_gen
+    container_name: pump_keys_generator
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      RUST_LOG: "info"
