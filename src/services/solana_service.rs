@@ -241,6 +241,18 @@ pub async fn build_create_premarket_tx(
         .await
         .context("failed to insert mint key into signing_keys")?;
 
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .context("failed to get current time")?
+        .as_secs() as i64;
+    
+    let one_month_seconds = 30 * 24 * 60 * 60; // 30 days in seconds
+    let max_deadline = now + one_month_seconds;
+    
+    if params.deadline > max_deadline {
+        return Err(anyhow!("deadline cannot be longer than 1 month from now. Current time: {}, Max allowed: {}, Provided: {}", 
+            now, max_deadline, params.deadline));
+    }
 
     // всё дальнейшее — в одном блоке, чтобы при Err сделать cleanup
     let result: Result<BuiltTx> = async {
