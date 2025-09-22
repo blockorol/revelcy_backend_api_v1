@@ -405,7 +405,7 @@ pub async fn build_finish_premarket_tx(
     let revelcy = read_revelcy_auth(params.network);
     let revelcy_pub = revelcy.pubkey();
     let associated_user_ata = get_associated_token_address(&revelcy_pub, &mint_pub);
-    let (creator_vault, _) = pda(&pump_fun_program_id, &[b"creator-vault", revelcy_pub.as_ref()]);
+    let (creator_vault, _) = pda(&pump_fun_program_id, &[b"creator-vault", params.user.as_ref()]);
     let (user_volume_accum, _) = pda(&pump_fun_program_id, &[b"user_volume_accumulator", revelcy_pub.as_ref()]);
     let seed1: &[u8] = b"fee_config";
     let seed2: [u8; 32] = [
