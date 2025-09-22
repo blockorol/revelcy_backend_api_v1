@@ -1,3 +1,4 @@
+use std::env;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -7,7 +8,7 @@ fn storage_dir() -> PathBuf {
     match env::var("STORAGE_DIR") {
         Ok(path) => PathBuf::from(path),
         Err(_) => {
-            log::error!("env STORAGE_DIR not found, setted ./storage");
+            println!("env STORAGE_DIR not found, setted ./storage");
             PathBuf::from("./storage")
         }
     }
