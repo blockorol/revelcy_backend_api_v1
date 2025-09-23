@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e
 
+echo "entry point started"
+
 if [ -z "$DATABASE_URL" ]; then
   echo "❌ ERROR: DATABASE_URL is not set!"
   exit 1
