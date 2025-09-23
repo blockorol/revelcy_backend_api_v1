@@ -4,7 +4,10 @@ services:
   db:
     image: postgres
     restart: always
+    env_file:
+      - .env
     environment:
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: revelcy
     ports:
@@ -13,7 +16,7 @@ services:
   backend:
     build: .
     env_file:
-      - .env 
+      - .env
     depends_on:
       - db
     ports:
