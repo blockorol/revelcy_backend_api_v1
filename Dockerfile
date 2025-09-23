@@ -51,12 +51,17 @@ FROM base as builder
 RUN cargo build --release --target x86_64-unknown-linux-musl --bin revelcy-backend-api
 
 # ===== Final minimal image =====
-FROM scratch
+FROM alpine:3.20
+
+# нужен клиент для pg_isready
+RUN apk add --no-cache postgresql-client
+
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/revelcy-backend-api /usr/local/bin/app
 COPY --from=goose /go/bin/goose /usr/local/bin/goose
 COPY migrations /migrations
+COPY --chmod=755 entrypoint.sh /entrypoint.sh
 
 ENV PORT=8080
 ENV RUST_LOG=info
 
-ENTRYPOINT ["/usr/local/bin/app"]
+ENTRYPOINT ["/entrypoint.sh"]

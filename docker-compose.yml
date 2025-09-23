@@ -4,6 +4,8 @@ services:
   db:
     image: postgres
     restart: always
+    env_file:
+      - .env
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -11,18 +13,11 @@ services:
     ports:
       - "5432:5432"
 
-  migrations:
-    build: .
-    command: ["goose", "postgres", "postgres://postgres:postgres@db:5432/revelcy?sslmode=disable", "up"]
-    depends_on:
-      - db
-
   backend:
     build: .
     env_file:
-      - .env 
+      - .env
     depends_on:
       - db
-      - migrations
     ports:
       - "8080:8080"
