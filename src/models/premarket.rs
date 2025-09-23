@@ -1,4 +1,3 @@
-use serde::de::{Deserializer, Error as DeError};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use std::str::FromStr;

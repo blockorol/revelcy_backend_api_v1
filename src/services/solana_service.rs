@@ -9,7 +9,6 @@ use solana_sdk::{
     commitment_config::CommitmentConfig,
     hash::Hash,
     compute_budget::ComputeBudgetInstruction,
-    config::program,
     instruction::{AccountMeta, Instruction},
     message::Message, pubkey::Pubkey,
     signature::{read_keypair_file, Keypair, Signer},
@@ -17,7 +16,6 @@ use solana_sdk::{
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use std::{time::Duration, path::Path, str::FromStr};
-use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::signature::Signature;
 use solana_transaction_status::UiTransactionEncoding;
 
@@ -49,9 +47,7 @@ use sqlx::PgPool;
 
 use spl_associated_token_account::ID as associated_token_program_id;
 use spl_associated_token_account::get_associated_token_address;
-use spl_associated_token_account::get_associated_token_address_with_program_id;
 use spl_token::ID as token_program_id;
-use tokio::time::sleep;
 
 use crate::storage::signing_keys::get_unused_signing_key;
 
