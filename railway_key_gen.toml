@@ -1,0 +1,8 @@
+[build]
+dockerfilePath = "Dockerfile.pump_gen"
+
+[deploy]
+startCommand = "/app/pump-key-generator"
+
+[env]
+PORT = "8080"
