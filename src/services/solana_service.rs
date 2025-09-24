@@ -895,6 +895,8 @@ pub async fn get_valid_latest_blockhash(
         .await
         .context("Failed to get blockhash")?;
 
+    println!("recent_blockhash: {:?}", recent_blockhash);
+
     loop {
         match client
             .is_blockhash_valid(&recent_blockhash, CommitmentConfig::processed())
