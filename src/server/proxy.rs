@@ -1,19 +1,25 @@
-use actix_web::{web, HttpResponse, Scope};
-use awc::Client;
-use futures_util::TryStreamExt as _; // для чтения Payload
+use actix_web::{web, HttpResponse, Scope, HttpRequest};
 use actix_web::http::header;
+use futures_util::TryStreamExt as _;
+use log::info;
+use awc::Client;
 
 pub fn proxy_scope() -> Scope {
     web::scope("/proxy")
         .route("/pump_ipfs", web::post().to(pump_ipfs))
+        .route("/pump_ipfs", web::options().to(pump_ipfs_options))
 }
 
-async fn pump_ipfs(req: actix_web::HttpRequest, mut payload: web::Payload) -> actix_web::Result<HttpResponse> {
-    // Логируем входящий запрос
-    println!(">>> pump_ipfs: входящий запрос {} {}", req.method(), req.uri());
-    for (h, v) in req.headers().iter() {
-        println!("  header: {} = {:?}", h, v);
-    }
+async fn pump_ipfs_options() -> HttpResponse {
+    HttpResponse::NoContent()
+        .insert_header(("Access-Control-Allow-Origin", "*"))
+        .insert_header(("Access-Control-Allow-Methods", "POST, OPTIONS"))
+        .insert_header(("Access-Control-Allow-Headers", "Content-Type, Authorization"))
+        .finish()
+}
+
+async fn pump_ipfs(req: HttpRequest, mut payload: web::Payload) -> actix_web::Result<HttpResponse> {
+    info!(">>> /proxy/pump_ipfs {} {}", req.method(), req.uri());
 
     let content_type = req
         .headers()
@@ -21,38 +27,34 @@ async fn pump_ipfs(req: actix_web::HttpRequest, mut payload: web::Payload) -> ac
         .and_then(|v| v.to_str().ok())
         .unwrap_or("application/octet-stream")
         .to_string();
-    println!("  content-type: {}", content_type);
 
     let mut body = web::BytesMut::new();
     while let Some(chunk) = payload.try_next().await? {
-        println!("  получен chunk размером {}", chunk.len());
         body.extend_from_slice(&chunk);
     }
-    println!("  общий размер тела: {} байт", body.len());
+    info!("  body size: {} bytes", body.len());
 
-    // Отправляем в pump.fun
-    let client = Client::default();
-    println!(">>> pump_ipfs: отправка в https://pump.fun/api/ipfs");
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(90))
+        .finish();
+
     let mut upstream = client
         .post("https://pump.fun/api/ipfs")
         .insert_header((header::CONTENT_TYPE, content_type))
         .send_body(body.freeze())
         .await
         .map_err(|e| {
-            println!("!!! ошибка при отправке в pump.fun: {:?}", e);
+            info!("!!! upstream send error: {:?}", e);
             actix_web::error::ErrorBadGateway(e)
         })?;
 
     let status = upstream.status();
     let bytes = upstream.body().await.map_err(|e| {
-        println!("!!! ошибка при чтении ответа pump.fun: {:?}", e);
+        info!("!!! upstream read error: {:?}", e);
         actix_web::error::ErrorBadGateway(e)
     })?;
+    info!("<<< upstream status: {}, bytes: {}", status, bytes.len());
 
-    println!("<<< pump_ipfs: ответ от pump.fun: status = {}, размер {} байт",
-        status, bytes.len());
-
-    // Вернём клиенту
     Ok(HttpResponse::build(status)
         .insert_header(("Access-Control-Allow-Origin", "*"))
         .insert_header(("Access-Control-Allow-Methods", "POST, OPTIONS"))
