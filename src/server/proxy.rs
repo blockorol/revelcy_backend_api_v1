@@ -2,7 +2,6 @@ use actix_web::{web, HttpResponse, Scope};
 use awc::Client;
 use futures_util::TryStreamExt as _; // для чтения Payload
 use actix_web::http::header;
-use log::info;
 
 pub fn public_scope() -> Scope {
     web::scope("/proxy")
@@ -22,7 +21,7 @@ async fn pump_ipfs(req: actix_web::HttpRequest, mut payload: web::Payload) -> ac
         .and_then(|v| v.to_str().ok())
         .unwrap_or("application/octet-stream")
         .to_string();
-    info!("  content-type: {}", content_type);
+    println!("  content-type: {}", content_type);
 
     let mut body = web::BytesMut::new();
     while let Some(chunk) = payload.try_next().await? {
