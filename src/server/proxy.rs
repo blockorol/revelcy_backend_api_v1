@@ -7,7 +7,7 @@ use awc::Client;
 pub fn proxy_scope() -> Scope {
     web::scope("/proxy")
         .route("/pump_ipfs", web::post().to(pump_ipfs))
-        .route("/pump_ipfs", web::options().to(pump_ipfs_options))
+        .route("/pump_ipfs", web::method(actix_web::http::Method::OPTIONS).to(pump_ipfs_options))
 }
 
 async fn pump_ipfs_options() -> HttpResponse {
