@@ -1,5 +1,4 @@
 use std::str::FromStr;
-use actix_web::rt::net;
 use sqlx::{PgPool};
 use uuid::Uuid;
 use chrono::Utc;
@@ -42,7 +41,6 @@ use crate::services::{
     premarket_service,
     jwt_service,
 };
-use crate::models::premarket::BuiltTx;
 use crate::middleware::jwt::JwtMiddleware;
 
 use crate::services::solana_service::{
@@ -58,10 +56,6 @@ use crate::services::solana_service::{
     deploy_tx_service,
     check_tx_service,
 };
-
-// pub fn private_scope() -> Scope {
-//     web::scope("/premarket")
-// }
 
 pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
     web::scope("/premarket")

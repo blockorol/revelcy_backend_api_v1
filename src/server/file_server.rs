@@ -68,7 +68,7 @@ async fn get_community_image(path: web::Path<String>) -> HttpResponse {
     let token_id = path.into_inner();
     // todo: add id checket to remove symbols
     // todo: add token_id by other key
-    if let Some(png) = file_service::get_png(&token_id) {
+    if let Some(png) = file_service::load_png(&token_id) {
         HttpResponse::Ok()
             .content_type("image/png")
             .body(png)

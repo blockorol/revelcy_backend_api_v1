@@ -3,7 +3,7 @@ use awc::Client;
 use futures_util::TryStreamExt as _; // для чтения Payload
 use actix_web::http::header;
 
-pub fn public_scope() -> Scope {
+pub fn proxy_scope() -> Scope {
     web::scope("/proxy")
         .route("/pump_ipfs", web::post().to(pump_ipfs))
 }
