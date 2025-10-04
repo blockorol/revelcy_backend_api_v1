@@ -33,4 +33,4 @@ target
 .env
 .env.*
 !.env.example
-
+ENVIRONMENT_SETUP.md

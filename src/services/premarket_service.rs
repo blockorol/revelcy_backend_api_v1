@@ -331,19 +331,35 @@ pub async fn remove_holder(
 
 pub async fn get_price_by_market_cap(reserved_sol_lamp: u64) -> f64 {
     let url = format!("{}ids=solana&vs_currencies=usd", CRYPTO_PRICE_API_URL);
+    println!("Fetching SOL price from: {}", url);
 
-    let current_sol_price = match reqwest::get(url).await {
+    let current_sol_price = match reqwest::get(&url).await {
         Ok(response) => {
+            println!("API response status: {}", response.status());
             match response.json::<serde_json::Value>().await {
-                Ok(json) => json["solana"]["usd"].as_f64().unwrap_or(0.0),
-                Err(_) => 0.0,
+                Ok(json) => {
+                    println!("API response JSON: {}", json);
+                    let price = json["solana"]["usd"].as_f64().unwrap_or(0.0);
+                    println!("Extracted SOL price: {}", price);
+                    price
+                },
+                Err(e) => {
+                    println!("JSON parsing error: {:?}", e);
+                    0.0
+                }
             }
         },
-        Err(_) => 0.0,
+        Err(e) => {
+            println!("HTTP request error: {:?}", e);
+            0.0
+        }
     };
     
+    println!("Final current_sol_price: {}", current_sol_price);
     let price = reserved_sol_lamp as f64 / 1_000_000_000_000_000.0 * current_sol_price;
-    (price * 1_000_000.0).round() / 1_000_000.0
+    let final_price = (price * 1_000_000.0).round() / 1_000_000.0;
+    println!("Calculated price: {} (reserved_sol_lamp: {}, final_price: {})", final_price, reserved_sol_lamp, final_price);
+    final_price
 }
 
 pub async fn get_tx_confirmation_status(
