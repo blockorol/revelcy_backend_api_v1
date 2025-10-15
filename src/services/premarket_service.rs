@@ -30,6 +30,7 @@ pub async fn get_full_premarket_info(
                     blockchain_address: pm_db.creator_address
                 },
                 token_info: TokenInfo{
+                    address: pm_db.mint_address,
                     name: pm_db.name,
                     description: pm_db.description,
                     symbol: pm_db.symbol,
@@ -48,6 +49,7 @@ pub async fn get_full_premarket_info(
                 },
                 deadline_timestamp: pm_db.premarket_deadline,
                 created_timestamp: pm_db.premarket_created,
+                finished_timestamp: pm_db.premarket_finished,
             };
             
             let links = if links_db.is_empty() {
@@ -115,6 +117,7 @@ pub async fn get_list(
                     blockchain_address: pm_db.creator_address,
                 },
                 token_info: TokenInfo {
+                    address: pm_db.mint_address,
                     name: pm_db.name,
                     description: pm_db.description,
                     symbol: pm_db.symbol,
@@ -133,6 +136,7 @@ pub async fn get_list(
                 },
                 deadline_timestamp: pm_db.premarket_deadline,
                 created_timestamp: pm_db.premarket_created,
+                finished_timestamp: pm_db.premarket_finished,
             }
         })
         .collect();
@@ -154,6 +158,7 @@ pub async fn create_full_premarket_info(
         bc_address: premarket.blockchain_address,
         creator_address: premarket.creator.blockchain_address,
         creator_id: premarket.creator.id.unwrap_or(Uuid::nil()),
+        mint_address: premarket.token_info.address,
         name: premarket.token_info.name,
         description: premarket.token_info.description,
         symbol: premarket.token_info.symbol,
@@ -166,6 +171,7 @@ pub async fn create_full_premarket_info(
         premarket_goal_sol_lamp: premarket.goal.solana_lamp,
         premarket_deadline: premarket.deadline_timestamp,
         premarket_created: premarket.created_timestamp,
+        premarket_finished: premarket.finished_timestamp,
         state: premarket.state.to_string(),
     };
 
@@ -275,11 +281,13 @@ pub async fn set_premarket_state(
     pool: &PgPool,
     premarket_pubkey: &str,
     new_state: PremarketState,
+    finish_deadline: Option<i64>,
 ) -> Result<(), actix_web::Error>  {
     let affected = premarket_repo::update_premarket_state(
         pool,
         premarket_pubkey,
         &new_state.to_string(),
+        finish_deadline
     )
     .await
     .map_err(actix_web::error::ErrorInternalServerError)?;
