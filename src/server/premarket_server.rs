@@ -142,6 +142,7 @@ pub async fn create_premarket_tx(
             let body = CreatePremarketTxResponse {
                 transaction: res.tx_base64,
                 premarket_account_pda: res.premarket_pda.to_string(),
+                mint_address: res.mint_address.clone(),
             };
             Ok(HttpResponse::Ok().json(body))
         }
@@ -452,6 +453,8 @@ pub async fn get_list_main_info(
             premarket_goal_sol_lamp: premarket_info.goal.solana_lamp.to_string(),
             premarket_deadline: premarket_info.deadline_timestamp,
             premarket_created:  premarket_info.created_timestamp,
+            premarket_finished: premarket_info.premarket_finished,
+            mint_address: premarket_info.token_info.address.clone(),
             state: match premarket_info.state {
                 PremarketState::Premarket => TokenState::Premarket,
                 PremarketState::Canceled  => TokenState::Canceled,
@@ -508,6 +511,8 @@ pub async fn get_main_info(
         premarket_goal_sol_lamp: premarket_info.main_info.goal.solana_lamp.to_string(),
         premarket_deadline: premarket_info.main_info.deadline_timestamp,
         premarket_created: premarket_info.main_info.created_timestamp,
+        premarket_finished:  premarket_info.main_info.finished_timestamp,
+        mint_address: premarket_info.main_info.token_info.address.clone,
         state: match premarket_info.main_info.state {
             PremarketState::Premarket => TokenState::Premarket,
             PremarketState::Canceled => TokenState::Canceled,
@@ -602,6 +607,7 @@ pub async fn created_premarket(
     let premarket = PremarketInfoServiceModel {
         id: None,
         token_info: TokenInfo { 
+            address: info.mint_address,
             name: info.name,
             description: info.description,
             symbol: info.symbol,
@@ -625,6 +631,7 @@ pub async fn created_premarket(
         deadline_timestamp: info.premarket_deadline,
         created_timestamp: info.premarket_created,
         blockchain_address: info.premarket_address,
+        finished_timestamp: None
     };
 
 
@@ -751,6 +758,7 @@ pub async fn finished_premarket(
         &pool,
         &dto.base.premarket_pub_key,
         new_state,
+        Some(Utc::now().timestamp()),
     ).await {
         println!(
             "❌ Failed to set premarket '{}' state to {:?}: {} (tx: {}, wallet: {})",
@@ -818,6 +826,7 @@ pub async fn killed_premarket(
         &pool,
         &dto.base.premarket_pub_key,
         new_state,
+        Some(Utc::now().timestamp())
     ).await {
         println!(
             "❌ Failed to set premarket '{}' state to {:?}: {} (tx: {}, wallet: {})",

@@ -132,13 +132,14 @@ pub async fn create_premarket_and_community(
             premarket_goal_sol_lamp,
             premarket_deadline,
             premarket_created,
-            state
+            state,
+            mint_address
         )
         VALUES (
             $1, $2, $3, $4, $5,
             $6, $7, $8, $9, $10,
             $11, $12, $13, $14, $15,
-            $16, $17
+            $16, $17, $18
         )
         RETURNING *
         "#
@@ -160,6 +161,7 @@ pub async fn create_premarket_and_community(
     .bind(premarket.premarket_deadline)
     .bind(premarket.premarket_created)
     .bind(&premarket.state)
+    .bind(&premarket.mint_address)
     .fetch_one(&mut tx)
     .await?;
 
@@ -206,7 +208,7 @@ pub async fn update_community_info(
     pool: &PgPool,
     bc_address: &str,
     description: &str,
-    token_banner_url: Option<&str>,            // <-- было &str
+    token_banner_url: Option<&str>,
     links: Option<Vec<CommunityLinkDbModel>>,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
@@ -422,16 +424,20 @@ pub async fn update_premarket_state(
     pool: &PgPool,
     premarket_pubkey: &str,
     new_state: &str,
+    finish_deadline: Option<i64>,
 ) -> Result<u64> {
     let res = sqlx::query(
         r#"
         UPDATE premarket_info
-        SET state = $1
+        SET 
+            state = $1,
+            finish_deadline = $3
         WHERE bc_address = $2
         "#,
     )
     .bind(new_state)
     .bind(premarket_pubkey)
+    .bind(finish_deadline) // Option<i64> → NULL, если None
     .execute(pool)
     .await?;
 

@@ -208,7 +208,7 @@ struct CreatePremarketArgsBorsh {
 pub async fn build_create_premarket_tx(
     pool: &PgPool,
     params: BuildPremarketTxParams,
-) -> Result<BuiltTx> {
+) -> Result<BuiltTxCreation> {
     let program_id = program_id_for(params.network);
     let rpc = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
 
@@ -251,7 +251,7 @@ pub async fn build_create_premarket_tx(
     }
 
     // всё дальнейшее — в одном блоке, чтобы при Err сделать cleanup
-    let result: Result<BuiltTx> = async {
+    let result: Result<BuiltTxCreation> = async {
         let mut data = Vec::with_capacity(8 + 128);
         data.extend_from_slice(&anchor_sighash_global(CREATE_METHOD_NAME));
         CreatePremarketArgsBorsh {
@@ -286,7 +286,7 @@ pub async fn build_create_premarket_tx(
         let raw = bincode::serialize(&tx).context("bincode serialize(Transaction) failed")?;
         let tx_b64 = BASE64.encode(raw);
 
-        Ok(BuiltTx { tx_base64: tx_b64, premarket_pda })
+        Ok(BuiltTxCreation { mint_address: mint_pub, tx_base64: tx_b64, premarket_pda })
     }
     .await;
 

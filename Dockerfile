@@ -60,6 +60,8 @@ COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/revelcy-backen
 COPY --from=goose /go/bin/goose /usr/local/bin/goose
 COPY migrations /migrations
 COPY --chmod=755 entrypoint.sh /entrypoint.sh
+# CRLF -> LF to save
+RUN sed -i 's/\r$//' /entrypoint.sh
 
 ENV PORT=8080
 ENV RUST_LOG=info
