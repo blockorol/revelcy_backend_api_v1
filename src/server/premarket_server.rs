@@ -453,7 +453,7 @@ pub async fn get_list_main_info(
             premarket_goal_sol_lamp: premarket_info.goal.solana_lamp.to_string(),
             premarket_deadline: premarket_info.deadline_timestamp,
             premarket_created:  premarket_info.created_timestamp,
-            premarket_finished: premarket_info.premarket_finished,
+            premarket_finished: premarket_info.finished_timestamp,
             mint_address: premarket_info.token_info.address.clone(),
             state: match premarket_info.state {
                 PremarketState::Premarket => TokenState::Premarket,
@@ -512,7 +512,7 @@ pub async fn get_main_info(
         premarket_deadline: premarket_info.main_info.deadline_timestamp,
         premarket_created: premarket_info.main_info.created_timestamp,
         premarket_finished:  premarket_info.main_info.finished_timestamp,
-        mint_address: premarket_info.main_info.token_info.address.clone,
+        mint_address: premarket_info.main_info.token_info.address.clone(),
         state: match premarket_info.main_info.state {
             PremarketState::Premarket => TokenState::Premarket,
             PremarketState::Canceled => TokenState::Canceled,

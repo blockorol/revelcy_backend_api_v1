@@ -11,28 +11,29 @@ use solana_sdk::{
     compute_budget::ComputeBudgetInstruction,
     instruction::{AccountMeta, Instruction},
     message::Message, pubkey::Pubkey,
-    signature::{read_keypair_file, Keypair, Signer},
+    signature::{read_keypair_file, Keypair, Signer, Signature},
     system_program, transaction::Transaction
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use std::{time::Duration, path::Path, str::FromStr};
-use solana_sdk::signature::Signature;
 use solana_transaction_status::UiTransactionEncoding;
 
 use crate::api::premarket;
-use crate::models::premarket::{PremarketState, PremarketListResult, TokenDynamicInfo, HolderInfo, LinkType, CommunityLink, CommunityInfoServiceModel, FullPremarketInfo, PremarketInfoServiceModel, TokenInfo, TokenLinks, PremarketGoal, UserInfoShort, JoinConfirmationStatusDTO, OutConfirmationStatusDTO, PremarketOnchainUser, PremarketOnchainData};
 
 use crate::models::premarket::{
     BuildFinishTxParams, 
     BuildKillTxParams, 
     BuildPremarketTxParams,
     BuiltTx, 
-    DistributeTokensParams, 
+    BuiltTxCreation,
+    CheckTxParams,
     GetPremarketDataParams, 
+    DistributeTokensParams, 
+    PremarketOnchainUser,
+    PremarketOnchainData,
     SolanaNetwork, 
     UpdatePremarketDataParams, 
     DeployTxParams,
-    CheckTxParams,
 };
 
 use crate::api::premarket::CheckTxResponse;
@@ -286,7 +287,7 @@ pub async fn build_create_premarket_tx(
         let raw = bincode::serialize(&tx).context("bincode serialize(Transaction) failed")?;
         let tx_b64 = BASE64.encode(raw);
 
-        Ok(BuiltTxCreation { mint_address: mint_pub, tx_base64: tx_b64, premarket_pda })
+        Ok(BuiltTxCreation { mint_address: mint_pub.clone(), tx_base64: tx_b64, premarket_pda })
     }
     .await;
 
@@ -472,7 +473,7 @@ pub async fn build_finish_premarket_tx(
 }
 
 pub async fn distribute_tk(
-    pool: &PgPool,
+    _pool: &PgPool,
     params: DistributeTokensParams,
 ) -> Result<u64> {
     //extracting params 
@@ -605,7 +606,7 @@ pub async fn build_kill_premarket_tx(
 }
 
 pub async fn test_build_kill_premarket_tx(
-    pool: &PgPool,
+    _pool: &PgPool,
     params: BuildKillTxParams,
 ) -> Result<()> {
     //extract params 
@@ -630,7 +631,7 @@ pub async fn test_build_kill_premarket_tx(
         accounts.push(AccountMeta::new(Pubkey::from_str(&user).unwrap(), false));
     }
 
-    let discriminator: [u8; 8] = [
+    let _discriminator: [u8; 8] = [
         10,
         112,
         216,
@@ -733,7 +734,7 @@ pub async fn get_premarket_data(
 }
 
 pub async fn update_premarket_data(
-    pool: &PgPool,
+    _pool: &PgPool,
     params: UpdatePremarketDataParams,
 ) -> Result<BuiltTx> {
     let network = SolanaNetwork::try_from(params.network.as_str())
@@ -855,7 +856,7 @@ fn parse_privkey_64(s: &str) -> Result<Vec<u8>> {
 
 // !!!now user is CONST i need to change it later!!!
 pub async fn deploy_tx_service(
-    pool: &PgPool,
+    _pool: &PgPool,
     params: DeployTxParams,
 ) -> Result<()> {
     let network = SolanaNetwork::try_from(params.network.as_str())
