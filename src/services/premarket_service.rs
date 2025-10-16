@@ -281,13 +281,13 @@ pub async fn set_premarket_state(
     pool: &PgPool,
     premarket_pubkey: &str,
     new_state: PremarketState,
-    finish_deadline: Option<i64>,
+    premarket_finished: Option<i64>,
 ) -> Result<(), actix_web::Error>  {
     let affected = premarket_repo::update_premarket_state(
         pool,
         premarket_pubkey,
         &new_state.to_string(),
-        finish_deadline
+        premarket_finished
     )
     .await
     .map_err(actix_web::error::ErrorInternalServerError)?;

@@ -424,20 +424,20 @@ pub async fn update_premarket_state(
     pool: &PgPool,
     premarket_pubkey: &str,
     new_state: &str,
-    finish_deadline: Option<i64>,
+    premarket_finished: Option<i64>,
 ) -> Result<u64> {
     let res = sqlx::query(
         r#"
         UPDATE premarket_info
         SET 
             state = $1,
-            finish_deadline = $3
+            premarket_finished = $3
         WHERE bc_address = $2
         "#,
     )
     .bind(new_state)
     .bind(premarket_pubkey)
-    .bind(finish_deadline) // Option<i64> → NULL, если None
+    .bind(premarket_finished)
     .execute(pool)
     .await?;
 
