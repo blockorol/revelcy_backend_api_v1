@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
 
     if count < MIN_KEYS {
         let needed = (MIN_KEYS - count) as usize;
-        info!("Need {} more with postfix; starting grind loop…", needed, target_suffix);
+        info!("Need {} more with {}; starting grind loop…", needed, target_suffix);
         for i in 0..needed {
             info!("step {} of {};", i, needed);
             match grind_store_one(&pool, &target_suffix).await {
