@@ -51,7 +51,7 @@ async fn main() -> Result<()> {
                 Err(e) => error!("Grind/store in step {i:#} failed: {e:#}"),
             }
         }
-        info!("fihish generation for {need:#} new keys");
+        info!("fihish generation for {needed:#} new keys");
     } else {
         info!("Enough keys in DB, nothing to do");
     }
