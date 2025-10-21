@@ -22,10 +22,7 @@ use revelcy_backend_api::storage::signing_keys::insert_mint_signing_key;
 // MOVE CONST TO CONSTANTS FILE 
 pub const TARGET_SUFFIX: &str = "pump";     // base58 suffix
 pub const MIN_KEYS: i64 = 100;              // maintain at least this many token keypairs 
-pub const CHECK_INTERVAL_SECS: u64 = 10;    // how often to re-check count when healthy
 pub const GRIND_THREADS: usize = 0;         // 0 = let solana-keygen auto-pick; else set e.g. 8
-pub const PURPLE_PROGRAM_ID: &str = "ERCTELKB8tWDcLw4hLLYmxk9kirci5tP3BG4NntpwoAj";
-pub const REVELCY_AUTH_ID: &str = "BCQrfWxjt76K1pP9jiT4MhBa6USHNhNexbmvBq8M9ur6";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -47,15 +44,18 @@ async fn main() -> Result<()> {
     if count < MIN_KEYS {
         let needed = (MIN_KEYS - count) as usize;
         info!("Need {} more; starting grind loop…", needed);
-        for _ in 0..needed {
+        for i in 0..needed {
+            info!("step {} of {};", i, needed);
             match grind_store_one(&pool).await {
-                Ok(pk) => info!("Stored key {}", pk),
-                Err(e) => error!("Grind/store failed: {e:#}"),
+                Ok(pk) => info!("Stored key {} in step {}", pk, i),
+                Err(e) => error!("Grind/store in step {i:#} failed: {e:#}"),
             }
         }
+        info!("fihish generation for {need:#} new keys");
     } else {
         info!("Enough keys in DB, nothing to do");
     }
+    
     Ok(())
 }
 
