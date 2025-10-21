@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
         .init();
 
     let db_url = env::var("DATABASE_URL").context("DATABASE_URL not set")?;
-    let target_suffix: &str = env::var("TARGET_SUFFIX").context("TARGET_SUFFIX not set")?;
+    let target_suffix = env::var("TARGET_SUFFIX").context("TARGET_SUFFIX not set")?;
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
 
     if count < MIN_KEYS {
         let needed = (MIN_KEYS - count) as usize;
-        info!("Need {} more; starting grind loop…", needed);
+        info!("Need {} more with postfix; starting grind loop…", needed, target_suffix);
         for i in 0..needed {
             info!("step {} of {};", i, needed);
             match grind_store_one(&pool, &target_suffix).await {
