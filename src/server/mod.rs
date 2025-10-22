@@ -3,6 +3,7 @@ mod file_server;
 mod public_server;
 mod user_server;
 mod premarket_server;
+mod proxy;
 
 pub fn init_servers(cfg: &mut web::ServiceConfig) {
     cfg
@@ -11,5 +12,6 @@ pub fn init_servers(cfg: &mut web::ServiceConfig) {
         .service(file_server::file_scope())
         // .service(premarket_server::private_scope())
         .service(premarket_server::pub_scope())
+        .service(proxy::proxy_scope())
 ;
 }

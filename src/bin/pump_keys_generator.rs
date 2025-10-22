@@ -20,12 +20,8 @@ use revelcy_backend_api::storage::signing_keys::insert_mint_signing_key;
 
 
 // MOVE CONST TO CONSTANTS FILE 
-pub const TARGET_SUFFIX: &str = "pump";     // base58 suffix
 pub const MIN_KEYS: i64 = 100;              // maintain at least this many token keypairs 
-pub const CHECK_INTERVAL_SECS: u64 = 10;    // how often to re-check count when healthy
 pub const GRIND_THREADS: usize = 0;         // 0 = let solana-keygen auto-pick; else set e.g. 8
-pub const PURPLE_PROGRAM_ID: &str = "ERCTELKB8tWDcLw4hLLYmxk9kirci5tP3BG4NntpwoAj";
-pub const REVELCY_AUTH_ID: &str = "BCQrfWxjt76K1pP9jiT4MhBa6USHNhNexbmvBq8M9ur6";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -35,6 +31,8 @@ async fn main() -> Result<()> {
         .init();
 
     let db_url = env::var("DATABASE_URL").context("DATABASE_URL not set")?;
+    let target_suffix = env::var("TARGET_SUFFIX").context("TARGET_SUFFIX not set")?;
+
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&db_url)
@@ -46,16 +44,19 @@ async fn main() -> Result<()> {
 
     if count < MIN_KEYS {
         let needed = (MIN_KEYS - count) as usize;
-        info!("Need {} more; starting grind loop…", needed);
-        for _ in 0..needed {
-            match grind_store_one(&pool).await {
-                Ok(pk) => info!("Stored key {}", pk),
-                Err(e) => error!("Grind/store failed: {e:#}"),
+        info!("Need {} more with {}; starting grind loop…", needed, target_suffix);
+        for i in 0..needed {
+            info!("step {} of {};", i, needed);
+            match grind_store_one(&pool, &target_suffix).await {
+                Ok(pk) => info!("Stored key {} in step {}", pk, i),
+                Err(e) => error!("Grind/store in step {i:#} failed: {e:#}"),
             }
         }
+        info!("fihish generation for {needed:#} new keys");
     } else {
         info!("Enough keys in DB, nothing to do");
     }
+    
     Ok(())
 }
 
@@ -66,17 +67,17 @@ async fn current_count(pool: &PgPool) -> Result<i64> {
     Ok(rec.0)
 }
 
-async fn grind_store_one(pool: &PgPool) -> Result<String> {
+async fn grind_store_one(pool: &PgPool, target_suffix: &str) -> Result<String> {
     // 1) генерируем подходящий ключ без внешнего процесса (и собираем метрики)
     let num_threads = if GRIND_THREADS > 0 { Some(GRIND_THREADS) } else { None };
-    info!("Starting grind for suffix '{}' (threads: {})", TARGET_SUFFIX, num_threads.unwrap_or(0));
-    let (kp, tries, elapsed) = grind_one_suffix(TARGET_SUFFIX, num_threads);
+    info!("Starting grind for suffix '{}' (threads: {})", target_suffix, num_threads.unwrap_or(0));
+    let (kp, tries, elapsed) = grind_one_suffix(target_suffix, num_threads);
 
     let pubkey_b58 = kp.pubkey().to_string();
-    if !pubkey_b58.ends_with(TARGET_SUFFIX) {
+    if !pubkey_b58.ends_with(target_suffix) {
         return Err(anyhow!(
             "generated key does not end with '{}': {}",
-            TARGET_SUFFIX,
+            target_suffix,
             pubkey_b58
         ));
     }
@@ -87,7 +88,7 @@ async fn grind_store_one(pool: &PgPool) -> Result<String> {
 
     info!(
         "Vanity match found: pubkey={} (suffix='{}'), tries≈{}, time={:?}, speed≈{:.1} keys/sec",
-        pubkey_b58, TARGET_SUFFIX, tries, elapsed, rate
+        pubkey_b58, target_suffix, tries, elapsed, rate
     );
 
     // 2) 64-байтный секрет как строка для БД

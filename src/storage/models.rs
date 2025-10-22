@@ -40,6 +40,7 @@ pub struct PremarketInfoDbModel {
     pub creator_address: String,
     pub bc_address: String,
     pub data_uri: String,
+    pub mint_address: String,
     pub name: String,
     pub description: String,
     pub symbol: String,
@@ -54,6 +55,7 @@ pub struct PremarketInfoDbModel {
     pub premarket_goal_sol_lamp: i64,
     pub premarket_deadline: i64,
     pub premarket_created: i64,
+    pub premarket_finished: Option<i64>,
 
     pub state: String, // лучше использовать enum, но можно и строку
 }

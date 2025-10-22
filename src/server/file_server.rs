@@ -6,11 +6,12 @@ use crate::services::file_service;
 
 pub fn file_scope() -> Scope {
     web::scope("/files")
-        .route("/upload/{name}", web::post().to(upload_png)) // todo- remove me
+        .route("/upload/{name}", web::post().to(upload_png))
         .route("/image/{name}", web::get().to(get_png))
+        .route("/avatar/{user_id}", web::get().to(get_avatar))
+        .route("/community_image/{token_id}", web::get().to(get_community_image))
 }
 
-// Загрузка файла
 async fn upload_png(
     path: web::Path<String>,
     mut payload: Multipart
@@ -39,7 +40,6 @@ async fn upload_png(
     HttpResponse::BadRequest().body("No file uploaded")
 }
 
-// Получение файла
 async fn get_png(path: web::Path<String>) -> HttpResponse {
     let name = path.into_inner();
     if let Some(png) = file_service::load_png(&name) {
@@ -50,3 +50,30 @@ async fn get_png(path: web::Path<String>) -> HttpResponse {
         HttpResponse::NotFound().body("Not found")
     }
 }
+
+async fn get_avatar(path: web::Path<String>) -> HttpResponse {
+    // todo: add id checket to remove symbols
+    let user_id = path.into_inner();
+    if let Some(png) = file_service::load_avatar(&user_id) {
+        HttpResponse::Ok()
+            .content_type("image/png")
+            .body(png)
+    } else {
+        HttpResponse::NotFound().body("Not found")
+    }
+}
+
+
+async fn get_community_image(path: web::Path<String>) -> HttpResponse {
+    let token_id = path.into_inner();
+    // todo: add id checket to remove symbols
+    // todo: add token_id by other key
+    if let Some(png) = file_service::load_png(&token_id) {
+        HttpResponse::Ok()
+            .content_type("image/png")
+            .body(png)
+    } else {
+        HttpResponse::NotFound().body("Not found")
+    }
+}
+

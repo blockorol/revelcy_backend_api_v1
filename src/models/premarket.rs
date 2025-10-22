@@ -72,6 +72,13 @@ pub struct BuiltTx {
     pub premarket_pda: Pubkey,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct BuiltTxCreation {
+    pub tx_base64: String,
+    pub premarket_pda: Pubkey,
+    pub mint_address: String
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum SolanaNetwork {
     Devnet,
@@ -87,6 +94,7 @@ pub struct PremarketInfoServiceModel {
     pub goal: PremarketGoal,
     pub deadline_timestamp: i64,
     pub created_timestamp: i64,
+    pub finished_timestamp: Option<i64>,
     pub state: PremarketState,
 }
 
@@ -144,6 +152,7 @@ pub struct PremarketGoal {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TokenInfo {
+    pub address: String,
     pub name: String,
     pub description: String,
     pub symbol: String,

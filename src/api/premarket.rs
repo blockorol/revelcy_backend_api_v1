@@ -71,6 +71,8 @@ pub struct BlockchainInfoDTO {
     pub premarket_goal_sol_lamp: String,
     pub premarket_deadline: i64,
     pub premarket_created: i64,
+    pub premarket_finished: Option<i64>,
+    pub mint_address: String,
     pub state: TokenState,
 }
 
@@ -223,6 +225,7 @@ pub struct CreatePremarketTxRequest {
 pub struct CreatePremarketTxResponse {
     pub transaction: String,           // base64(serialized Transaction)
     pub premarket_account_pda: String, // base58
+    pub mint_address: String,
 }
 
 
