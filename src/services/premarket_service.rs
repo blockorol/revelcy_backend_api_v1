@@ -257,10 +257,14 @@ pub async fn get_dynamic_info(
         })
         .collect();
 
-    let current_price_lamp = get_price_by_market_cap(holder_data.reserved_sol_lamp as u64).await;
     println!("reserved_sol_lamp: {}", holder_data.reserved_sol_lamp);
+    println!("reserved_sol_24h_before_lamp: {}", holder_data.reserved_sol_24h_before_lamp);
+    
+    let current_price_lamp = get_price_by_market_cap(holder_data.reserved_sol_lamp as u64).await;
     println!("current_price_lamp: {}", current_price_lamp);
+    
     let price_24h_ago_lamp = get_price_by_market_cap(holder_data.reserved_sol_24h_before_lamp as u64).await;
+    println!("price_24h_ago_lamp: {}", price_24h_ago_lamp);
 
     let change_24h = if price_24h_ago_lamp > 0.0 {
         ((current_price_lamp - price_24h_ago_lamp) / price_24h_ago_lamp) * 100.0
@@ -337,7 +341,7 @@ pub async fn remove_holder(
         .map_err(actix_web::error::ErrorInternalServerError)
 }
 
-pub async fn get_price_by_market_cap(reserved_sol_lamp: u64) -> f64 {
+pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
     let url = format!("{}ids=solana&vs_currencies=usd", CRYPTO_PRICE_API_URL);
     println!("Fetching SOL price from: {}", url);
 
@@ -362,11 +366,26 @@ pub async fn get_price_by_market_cap(reserved_sol_lamp: u64) -> f64 {
             0.0
         }
     };
-    
     println!("Final current_sol_price: {}", current_sol_price);
-    let price = reserved_sol_lamp as f64 / 1_000_000_000_000_000.0 * current_sol_price;
+
+    let real_sol_amount: f64 = real_lamp_amount as f64/1_000_000_000.0;
+
+    let real_token_bought_amount: u64 = ((1_073_000_000.0 * real_sol_amount)/(30.0 + real_sol_amount)) as u64;
+    println!("Real token bought amount: {}", real_token_bought_amount);
+    let real_token_amount: u64 = 793_100_000 - real_token_bought_amount;
+
+    let virtual_lamp_amount: f64 = real_sol_amount + 30.0;
+    let virtual_token_amount = real_token_amount + 279_900_000;
+
+    let price = virtual_lamp_amount / virtual_token_amount as f64 * current_sol_price;
     let final_price = (price * 1_000_000.0).round() / 1_000_000.0;
-    println!("Calculated price: {} (reserved_sol_lamp: {}, final_price: {})", final_price, reserved_sol_lamp, final_price);
+
+    println!("Real sol amount: {}", real_sol_amount);
+    println!("Real token amount: {}", real_token_amount);
+    println!("Virtual sol amount: {}", virtual_lamp_amount);
+    println!("Virtual token amount: {}", virtual_token_amount);
+    println!("Price: {}", price);
+    println!("Final price: {}", final_price);
     final_price
 }
 
