@@ -8,12 +8,56 @@ use actix_web::error::ErrorInternalServerError;
 use uuid::Uuid;
 use chrono::Utc;
 use actix_web::error::ErrorBadRequest;
-
-use crate::constants::CRYPTO_PRICE_API_URL;
+use crate::config::{get_pyth_subdomain, get_pyth_secret_token};
 
 use solana_client::nonblocking::rpc_client::RpcClient; // CHANGED
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
+use serde::{Deserialize, Serialize};
+
+
+#[derive(Debug, Deserialize)]
+struct PythPriceData {
+    price: String,
+    conf: String,
+    expo: i32,
+    publish_time: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct PythEmaPriceData {
+    price: String,
+    conf: String,
+    expo: i32,
+    publish_time: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct PythMetadata {
+    slot: u64,
+    proof_available_time: u64,
+    prev_publish_time: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct PythParsedData {
+    id: String,
+    price: PythPriceData,
+    ema_price: PythEmaPriceData,
+    metadata: PythMetadata,
+}
+
+#[derive(Debug, Deserialize)]
+struct PythBinaryData {
+    encoding: String,
+    data: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PythResponse {
+    binary: PythBinaryData,
+    parsed: Vec<PythParsedData>,
+}
 
 pub async fn get_full_premarket_info(
     pool: &PgPool,
@@ -342,27 +386,38 @@ pub async fn remove_holder(
 }
 
 pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
-    let url = format!("{}ids=solana&vs_currencies=usd", CRYPTO_PRICE_API_URL);
-    println!("Fetching SOL price from: {}", url);
+    let subdomain = get_pyth_subdomain();
+    let secret_token = get_pyth_secret_token();
+    let url = format!("https://{}.mainnet.pythnet.rpcpool.com/{}/hermes/v2/updates/price/latest?ids%5B%5D=ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d", subdomain, secret_token);
+    println!("Fetching SOL price from Pyth API: {}", url);
 
     let current_sol_price = match reqwest::get(&url).await {
         Ok(response) => {
-            println!("API response status: {}", response.status());
-            match response.json::<serde_json::Value>().await {
-                Ok(json) => {
-                    println!("API response JSON: {}", json);
-                    let price = json["solana"]["usd"].as_f64().unwrap_or(0.0);
-                    println!("Extracted SOL price: {}", price);
-                    price
-                },
+            println!("Pyth API response status: {}", response.status());
+            match response.json::<PythResponse>().await {
+                Ok(pyth_response) => {
+                    println!("Pyth API response: {:?}", pyth_response);
+                    if let Some(parsed_data) = pyth_response.parsed.first() {
+                        // Parse the price string and apply the exponent
+                        let price_str = &parsed_data.price.price;
+                        let expo = parsed_data.price.expo;
+                        let price_value: f64 = price_str.parse().unwrap_or(0.0);
+                        let price = price_value * 10_f64.powi(expo);
+                        println!("Extracted SOL price from Pyth: {}", price);
+                        price
+                    } else {
+                        println!("No parsed data found in Pyth response");
+                        0.0
+                    }
+                }
                 Err(e) => {
-                    println!("JSON parsing error: {:?}", e);
+                    println!("Pyth JSON parsing error: {:?}", e);
                     0.0
                 }
             }
         },
         Err(e) => {
-            println!("HTTP request error: {:?}", e);
+            println!("Pyth HTTP request error: {:?}", e);
             0.0
         }
     };
