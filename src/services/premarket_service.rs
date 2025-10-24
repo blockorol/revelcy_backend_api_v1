@@ -14,50 +14,8 @@ use solana_client::nonblocking::rpc_client::RpcClient; // CHANGED
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 use serde::{Deserialize, Serialize};
+use crate::models::premarket::PythResponse;
 
-
-#[derive(Debug, Deserialize)]
-struct PythPriceData {
-    price: String,
-    conf: String,
-    expo: i32,
-    publish_time: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct PythEmaPriceData {
-    price: String,
-    conf: String,
-    expo: i32,
-    publish_time: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct PythMetadata {
-    slot: u64,
-    proof_available_time: u64,
-    prev_publish_time: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct PythParsedData {
-    id: String,
-    price: PythPriceData,
-    ema_price: PythEmaPriceData,
-    metadata: PythMetadata,
-}
-
-#[derive(Debug, Deserialize)]
-struct PythBinaryData {
-    encoding: String,
-    data: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct PythResponse {
-    binary: PythBinaryData,
-    parsed: Vec<PythParsedData>,
-}
 
 pub async fn get_full_premarket_info(
     pool: &PgPool,
@@ -396,7 +354,7 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
             println!("Pyth API response status: {}", response.status());
             match response.json::<PythResponse>().await {
                 Ok(pyth_response) => {
-                    println!("Pyth API response: {:?}", pyth_response);
+                    //println!("Pyth API response: {:?}", pyth_response);
                     if let Some(parsed_data) = pyth_response.parsed.first() {
                         // Parse the price string and apply the exponent
                         let price_str = &parsed_data.price.price;

@@ -332,3 +332,46 @@ pub struct CheckTxParams {
     pub sig: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct PythPriceData {
+    pub price: String,
+    pub conf: String,
+    pub expo: i32,
+    pub publish_time: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PythEmaPriceData {
+    pub price: String,
+    pub conf: String,
+    pub expo: i32,
+    pub publish_time: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PythMetadata {
+    pub slot: u64,
+    pub proof_available_time: u64,
+    pub prev_publish_time: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PythParsedData {
+    pub id: String,
+    pub price: PythPriceData,
+    pub ema_price: PythEmaPriceData,
+    pub metadata: PythMetadata,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PythBinaryData {
+    pub encoding: String,
+    pub data: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PythResponse {
+    pub binary: PythBinaryData,
+    pub parsed: Vec<PythParsedData>,
+}
+
