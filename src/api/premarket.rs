@@ -21,6 +21,23 @@ use uuid::Uuid;
 //     }
 // }
 
+#[derive(Deserialize, Debug)]
+pub struct GetWhitelistRequest {
+    pub premarket_id: Option<Uuid>,
+    pub premarket_pubkey: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct AddUsersToWhitelistRequest {
+    // one of them required
+    pub premarket_id: Option<Uuid>,
+    pub premarket_pubkey: Option<String>,
+
+    pub user_ids: Option<Vec<Uuid>>,
+    pub wallet_addresses: Option<Vec<String>>,
+}
+
+
 #[derive(Deserialize)]
 pub struct GetMainInfoQuery {
     pub premarket_id: String,

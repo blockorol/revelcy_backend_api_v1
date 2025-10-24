@@ -3,6 +3,44 @@ use crate::models::user::User;
 use sqlx::{PgPool, Row, Result};
 use uuid::Uuid;
 
+pub async fn get_users_by_ids(pool: &PgPool, user_ids: &[Uuid]) -> Result<Vec<User>> {
+    if user_ids.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            u.id,
+            u.username,
+            u.avatar_url,
+            COALESCE(
+              array_agg(w.wallet_address) FILTER (WHERE w.wallet_address IS NOT NULL),
+              ARRAY[]::text[]
+            ) AS wallets
+        FROM users u
+        LEFT JOIN wallets w ON w.user_id = u.id
+        WHERE u.id = ANY($1::uuid[])
+        GROUP BY u.id, u.username, u.avatar_url
+        ORDER BY u.id
+        "#,
+    )
+    .bind(user_ids)
+    .fetch_all(pool)
+    .await?;
+
+    let users = rows
+        .into_iter()
+        .map(|row| User {
+            id: row.get::<Uuid, _>("id"),
+            username: row.try_get::<Option<String>, _>("username").ok().flatten(),
+            avatar_url: row.try_get::<Option<String>, _>("avatar_url").ok().flatten(),
+            wallets: row.get::<Vec<String>, _>("wallets"),
+        })
+        .collect();
+
+    Ok(users)
+}
 
 // Найти пользователя по кошельку
 pub async fn get_user_by_wallet(pool: &PgPool, wallet_address: &str) -> Result<Option<User>> {

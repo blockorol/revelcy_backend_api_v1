@@ -9,6 +9,7 @@ use actix_web::HttpMessage;
 use solana_sdk::pubkey::Pubkey;
 
 use crate::api::premarket::{
+    AddUsersToWhitelistRequest, GetWhitelistRequest,
     JoinPremarketTxRequest, OutPremarketTxRequest, TxOnlyResponse, FinishPremarketTxRequest,
     CreatePremarketTxRequest, CreatePremarketTxResponse,
     GetListQuery, GetListMainInfoDTO, UpdateCommunityDTO,
@@ -38,6 +39,7 @@ use crate::models::premarket::{
 };
 
 use crate::services::{
+    whitelist_service,
     premarket_service,
     jwt_service,
 };
@@ -71,6 +73,9 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/killed", web::post().to(killed_premarket))
         .route("/distribute_tokens", web::post().to(distribute_tokens))
         .route("/update", web::post().to(update_premarket_data_tx))
+        
+        .route("/whitelist/add", web::post().to(add_users_to_whitelist))
+        .route("/whitelist", web::post().to(get_whitelist))
 
         .route("/deploy_tx",   web::post().to(deploy_tx))
         .route("/check_tx",   web::post().to(check_tx))
@@ -83,6 +88,168 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
 
         .route("/tx/test_kill",   web::post().to(test_kill_premarket_tx))
 }
+
+pub async fn get_whitelist(
+    pool: web::Data<PgPool>,
+    req: HttpRequest,
+    payload: web::Json<GetWhitelistRequest>,
+) -> Result<HttpResponse, Error> {
+    let dto = payload.into_inner();
+
+    // 1) auth
+    let token = req
+        .extensions()
+        .get::<String>()
+        .cloned()
+        .ok_or_else(|| ErrorUnauthorized("missing auth token"))?;
+    let token_data = jwt_service::decode_jwt_with_user_info(&token)
+        .map_err(|_| ErrorUnauthorized("invalid token"))?;
+    let caller_user_id = token_data
+        .user_id
+        .ok_or_else(|| ErrorUnauthorized("no user_id in token"))?;
+
+    // 2) resolve premarket_id (DB UUID)
+    let premarket_db_id: Uuid = if let Some(id) = dto.premarket_id {
+        id
+    } else if let Some(pubkey_str) = dto.premarket_pubkey.clone() {
+        let _ = Pubkey::from_str(&pubkey_str)
+            .map_err(|_| ErrorBadRequest("invalid premarket_pubkey"))?;
+        let info = premarket_service::get_full_premarket_info(pool.get_ref(), &pubkey_str)
+            .await
+            .map_err(ErrorInternalServerError)?
+            .ok_or_else(|| ErrorBadRequest("premarket not found"))?;
+        info.main_info
+            .id
+            .ok_or_else(|| ErrorInternalServerError("premarket exists but has no DB id"))?
+    } else {
+        return Err(ErrorBadRequest(
+            "provide either premarket_id (UUID) or premarket_pubkey",
+        ));
+    };
+
+    // 3) owner check (только создатель может читать вайтлист)
+    let pm_full = premarket_service::get_full_premarket_info_by_id(pool.get_ref(), premarket_db_id)
+        .await
+        .map_err(ErrorInternalServerError)?;
+    let owner_id = pm_full
+        .as_ref()
+        .and_then(|i| i.main_info.creator.id)
+        .ok_or_else(|| ErrorBadRequest("premarket not found or has no owner"))?;
+
+    if owner_id != caller_user_id {
+        return Err(ErrorForbidden("only premarket owner can read whitelist"));
+    }
+
+    // 4) получаем подробную инфу о пользователях из whitelist
+    let users = user_service::get_users_info(pool.clone(), 
+        // сначала достаём id'шники, затем user_service агрегирует инфу
+        // (если ты уже сделал whitelist_service::get_whitelist_users — можно звать его напрямую)
+        crate::storage::whitelist_repo::get_whitelist(pool.get_ref(), premarket_db_id)
+            .await
+            .map_err(ErrorInternalServerError)?,
+    )
+    .await
+    .map_err(ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok().json(users))
+}
+
+
+pub async fn add_users_to_whitelist(
+    pool: web::Data<PgPool>,
+    req: HttpRequest,
+    payload: web::Json<AddUsersToWhitelistRequest>,
+) -> Result<HttpResponse, Error> {
+    let dto = payload.into_inner();
+
+    let token = req
+        .extensions()
+        .get::<String>()
+        .cloned()
+        .ok_or_else(|| ErrorUnauthorized("missing auth token"))?;
+    let token_data = jwt_service::decode_jwt_with_user_info(&token)
+        .map_err(|_| ErrorUnauthorized("invalid token"))?;
+
+    let current_user_wallet = token_data
+        .current_wallet
+        .ok_or_else(|| ErrorUnauthorized("no user_id in token"))?;
+
+    
+    let premarket_data = if let Some(id) = dto.premarket_id {
+        let info: crate::models::premarket::FullPremarketInfo = premarket_service::get_premarket_info_by_bc_address(pool.get_ref(), id)
+        .await
+        .map_err(ErrorInternalServerError)?
+        .ok_or_else(|| ErrorBadRequest("premarket not found"))?;
+
+        info
+    } else if let Some(pubkey_str) = dto.premarket_pubkey.clone() {
+        let pk = Pubkey::from_str(&pubkey_str)
+            .map_err(|_| ErrorBadRequest("invalid premarket_pubkey"))?;
+        let info: crate::models::premarket::FullPremarketInfo = premarket_service::get_full_premarket_info(pool.get_ref(), &pk.to_string())
+            .await
+            .map_err(ErrorInternalServerError)?
+            .ok_or_else(|| ErrorBadRequest("premarket not found"))?;
+        info
+    } else {
+        return Err(ErrorBadRequest(
+            "provide either premarket_id (UUID) or premarket_pubkey",
+        ));
+    };
+
+    // let owner_check = 
+    let owner_id = owner_check
+        .as_ref()
+        .and_then(|i| i.main_info.creator.id)
+        .ok_or_else(|| ErrorBadRequest("premarket not found or has no owner"))?;
+
+    if premarket_data.main_info.creator.blockchain_address != current_user_wallet {
+        return Err(ErrorForbidden("only premarket owner can modify whitelist"));
+    }
+
+    let mut total_inserted: u64 = 0;
+    let premarket_db_id = premarket_data.main_info.id;
+
+    if let Some(user_ids) = dto.user_ids.as_ref() {
+        if !user_ids.is_empty() {
+            let cnt = whitelist_service::add_user_ids(pool.get_ref(), premarket_db_id, user_ids)
+                .await
+                .map_err(ErrorInternalServerError)?;
+            total_inserted += cnt;
+        }
+    }
+
+    if let Some(wallets) = dto.wallet_addresses.as_ref() {
+        if !wallets.is_empty() {
+            let cnt = whitelist_service::add_wallets(pool.get_ref(), premarket_db_id, wallets)
+                .await
+                .map_err(ErrorInternalServerError)?;
+            total_inserted += cnt;
+        }
+    }
+
+    if total_inserted == 0
+        && dto
+            .user_ids
+            .as_ref()
+            .map(|v| v.is_empty())
+            .unwrap_or(true)
+        && dto
+            .wallet_addresses
+            .as_ref()
+            .map(|v| v.is_empty())
+            .unwrap_or(true)
+    {
+        return Err(ErrorBadRequest(
+            "provide at least one of: non-empty user_ids or wallet_addresses",
+        ));
+    }
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "premarket_id": premarket_db_id,
+        "inserted": total_inserted
+    })))
+}
+
 
 pub async fn create_premarket_tx(
     req: HttpRequest,
@@ -108,7 +275,7 @@ pub async fn create_premarket_tx(
         Some(pk) => {
             if pk != dto.user_pubkey {
                 println!("user_pubkey does not match token");
-                return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token"));
+                return Ok(HttpResponse::Forbidden().body("user_pubkey does not match token"));
             } else {
                 println!("user_pubkey matches token");
             }
@@ -154,6 +321,7 @@ pub async fn create_premarket_tx(
 }
 
 pub async fn join_premarket_tx(
+    pool: web::Data<PgPool>,
     req: HttpRequest,
     payload: web::Json<JoinPremarketTxRequest>,
 ) -> Result<HttpResponse, actix_web::Error> {
@@ -188,6 +356,34 @@ pub async fn join_premarket_tx(
         Ok(p) => p,
         Err(_) => return Ok(HttpResponse::BadRequest().body("invalid premarket_account")),
     };
+    let premarket_data = match premarket_service::get_full_premarket_info(&pool, &pubkey.to_string()).await {
+        Ok(Some(info)) => info,
+        Ok(None) => return HttpResponse::NotFound().body("Premarket info not found"),
+        Err(err) => {
+            eprintln!("Error fetching premarket info: {:?}", err);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if (premarket_data.main_info.finished_timestamp) {
+        return Ok(HttpResponse::BadRequest().body("Premarket already finished"));
+    }
+    match whitelist_service::has_user_access(pool, premarket_data.main_info.id, token_data.user_id).await {
+        Ok(res) => {
+            if !res {
+                return HttpResponse::Forbidden().body("You are not in whitelist");
+            }
+        },
+        Err(err) => {
+            eprintln!("Error fetching premarket info: {:?}", err);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    // todo: add this logic - don't show to iser
+    // if (premarket_data.main_info.deadline_timestamp < ) {
+    //     return Ok(HttpResponse::BadRequest().body("Premarket already finished"));
+    // }
+
     if dto.amount_sol_lamp == 0 {
         return Ok(HttpResponse::BadRequest().body("amount_sol_lamp must be > 0"));
     }
@@ -203,7 +399,7 @@ pub async fn join_premarket_tx(
         Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
         Err(e) => {
             eprintln!("build_join_premarket_tx error: {e:?}");
-            Ok(HttpResponse::BadRequest().body(format!("error: {e}")))
+            Ok(HttpResponse::InternalServerError.body(format!("error: {e}")))
         }
     }
 }
@@ -604,8 +800,7 @@ pub async fn created_premarket(
     };
 
 
-    let premarket = PremarketInfoServiceModel {
-        id: None,
+    let premarket = CreatePremarketInfoServiceModel {
         token_info: TokenInfo { 
             address: info.mint_address,
             name: info.name,

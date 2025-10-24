@@ -86,8 +86,20 @@ pub enum SolanaNetwork {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreatePremarketInfoServiceModel {
+    pub blockchain_address: String,
+    pub creator: UserInfoShort,
+    pub token_info: TokenInfo,
+    pub goal: PremarketGoal,
+    pub deadline_timestamp: i64,
+    pub created_timestamp: i64,
+    pub finished_timestamp: Option<i64>,
+    pub state: PremarketState,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PremarketInfoServiceModel {
-    pub id: Option<Uuid>, // Option to create method
+    pub id: Uuid,
     pub blockchain_address: String,
     pub creator: UserInfoShort,
     pub token_info: TokenInfo,

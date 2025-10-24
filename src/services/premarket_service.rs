@@ -23,7 +23,7 @@ pub async fn get_full_premarket_info(
     match premarket_repo::get_premarket_info_by_bc_address(pool, bc_address).await {
         Ok(Some((pm_db, cm_db, links_db))) => {
             let premarket_info = PremarketInfoServiceModel {
-                id: Some(pm_db.id),
+                id: pm_db.id,
                 blockchain_address: pm_db.bc_address,
                 creator: UserInfoShort{
                     id: Some(pm_db.creator_id),
@@ -110,7 +110,7 @@ pub async fn get_list(
         .into_iter()
         .map(|pm_db| {
             PremarketInfoServiceModel {
-                id: Some(pm_db.id),
+                id: pm_db.id,
                 blockchain_address: pm_db.bc_address,
                 creator: UserInfoShort {
                     id: Some(pm_db.creator_id),
@@ -150,7 +150,7 @@ pub async fn get_list(
 
 pub async fn create_full_premarket_info(
     pool: &PgPool,
-    premarket: PremarketInfoServiceModel,
+    premarket: CreatePremarketInfoServiceModel,
     community: CommunityInfoServiceModel,
 ) -> Result<(), actix_web::Error> {
     let premarket_db: PremarketInfoDbModel = PremarketInfoDbModel {
