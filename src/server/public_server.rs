@@ -96,12 +96,14 @@ async fn wallet_info(
         };
         
         // Get signatures
-        let all_signatures = get_signatures_for_wallet(&rpc_client, &pubkey_parsed);
-        
+        //let all_signatures = get_signatures_for_wallet(&rpc_client, &pubkey_parsed);
+        let all_signatures: Vec<String> = Vec::new(); // TODO: remove this
         // Get creation time with error handling
-        let creation_time = get_creation_time(&rpc_client, &all_signatures).unwrap().to_string();
-        
+        //let creation_time = get_creation_time(&rpc_client, &all_signatures).unwrap().to_string();
+        let creation_time = "2025-01-01".to_string(); // TODO: remove this
+
         let balance = format!("{:.2}", (balance_lamports as f64) / 1_000_000_000.0);
+        println!("Wallet balance: {}", balance);
         let balance_parsed = balance.parse::<f64>().unwrap_or(0.0);
         
         Ok((creation_time, balance_parsed, all_signatures.len().to_string()))
