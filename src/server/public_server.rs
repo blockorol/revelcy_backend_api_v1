@@ -71,10 +71,10 @@ pub async fn confirm_login(
 async fn wallet_info(
     pubkey: web::Path<String>,
 ) -> HttpResponse {
-    let rpc_url = match std::env::var("SOLANA_DEVNET_RPC") {
+    let rpc_url = match std::env::var("RPC_URL") {
         Ok(url) => url,
         Err(_) => return HttpResponse::InternalServerError().json(serde_json::json!({
-            "error": "SOLANA_DEVNET_RPC environment variable not set"
+            "error": "RPC_URL environment variable not set"
         })),
     };
     

@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
         .init();
 
     let db_url = env::var("DATABASE_URL").context("DATABASE_URL not set")?;
-    let target_suffix = "pu";
+    let target_suffix = env::var("TARGET_SUFFIX").context("TARGET_SUFFIX not set")?;
 
     let pool = PgPoolOptions::new()
         .max_connections(5)

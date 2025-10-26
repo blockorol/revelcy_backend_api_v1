@@ -344,10 +344,13 @@ pub async fn remove_holder(
 }
 
 pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
-    let subdomain = get_pyth_subdomain();
-    let secret_token = get_pyth_secret_token();
-    let url = format!("https://{}.mainnet.pythnet.rpcpool.com/{}/hermes/v2/updates/price/latest?ids%5B%5D=ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d", subdomain, secret_token);
-    println!("Fetching SOL price from Pyth API: {}", url);
+    let url = match std::env::var("PYTH_MAINNET_URL") {
+        Ok(url) => url,
+        Err(_) => {
+            println!("PYTH_MAINNET_URL environment variable not set");
+            return 0.0;
+        },
+    };
 
     let current_sol_price = match reqwest::get(&url).await {
         Ok(response) => {
@@ -361,7 +364,7 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
                         let expo = parsed_data.price.expo;
                         let price_value: f64 = price_str.parse().unwrap_or(0.0);
                         let price = price_value * 10_f64.powi(expo);
-                        println!("Extracted SOL price from Pyth: {}", price);
+                        //println!("Extracted SOL price from Pyth: {}", price);
                         price
                     } else {
                         println!("No parsed data found in Pyth response");
