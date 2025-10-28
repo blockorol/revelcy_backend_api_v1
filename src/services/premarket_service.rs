@@ -268,10 +268,12 @@ pub async fn get_dynamic_info(
     let price_24h_ago_lamp = get_price_by_market_cap(holder_data.reserved_sol_24h_before_lamp as u64).await;
     println!("price_24h_ago_lamp: {}", price_24h_ago_lamp);
 
-    let change_24h = if price_24h_ago_lamp > 0.0 {
+    let change_24h = if price_24h_ago_lamp > 0.0 && price_24h_ago_lamp != current_price_lamp {
         ((current_price_lamp - price_24h_ago_lamp) / price_24h_ago_lamp) * 100.0
+    } else if price_24h_ago_lamp == current_price_lamp {
+        0.01
     } else {
-        100.0
+        0.0
     };
 
     Ok(TokenDynamicInfo {
