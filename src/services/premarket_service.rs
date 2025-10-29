@@ -396,7 +396,7 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
     let virtual_token_amount = real_token_amount + 279_900_000;
 
     let price = virtual_lamp_amount / virtual_token_amount as f64 * current_sol_price;
-    let final_price = (price * 1_000_000.0).round() / 1_000_000.0;
+    let final_price = (price * 1_000_000_000.0).round() / 1_000_000_000.0;
 
     println!("Real sol amount: {}", real_sol_amount);
     println!("Real token amount: {}", real_token_amount);
