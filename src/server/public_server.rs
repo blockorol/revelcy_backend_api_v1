@@ -71,10 +71,10 @@ pub async fn confirm_login(
 async fn wallet_info(
     pubkey: web::Path<String>,
 ) -> HttpResponse {
-    let rpc_url = match std::env::var("SOLANA_DEVNET_RPC") {
+    let rpc_url = match std::env::var("SOLANA_RPC") {
         Ok(url) => url,
         Err(_) => return HttpResponse::InternalServerError().json(serde_json::json!({
-            "error": "SOLANA_DEVNET_RPC environment variable not set"
+            "error": "SOLANA_RPC environment variable not set"
         })),
     };
     
@@ -140,10 +140,10 @@ async fn wallet_info(
 async fn premarket_info(
     premarket_account_str: web::Path<String>,
 ) -> HttpResponse {
-    let rpc_url = match std::env::var("SOLANA_DEVNET_RPC") {
+    let rpc_url = match std::env::var("SOLANA_RPC") {
         Ok(url) => url,
         Err(_) => return HttpResponse::InternalServerError().json(serde_json::json!({
-            "error": "SOLANA_DEVNET_RPC environment variable not set"
+            "error": "SOLANA_RPC environment variable not set"
         })),
     };
     
