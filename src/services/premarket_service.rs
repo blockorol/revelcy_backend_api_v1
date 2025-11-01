@@ -268,10 +268,12 @@ pub async fn get_dynamic_info(
     let price_24h_ago_lamp = get_price_by_market_cap(holder_data.reserved_sol_24h_before_lamp as u64).await;
     println!("price_24h_ago_lamp: {}", price_24h_ago_lamp);
 
-    let change_24h = if price_24h_ago_lamp > 0.0 {
+    let change_24h = if price_24h_ago_lamp > 0.0 && price_24h_ago_lamp != current_price_lamp {
         ((current_price_lamp - price_24h_ago_lamp) / price_24h_ago_lamp) * 100.0
+    } else if price_24h_ago_lamp == current_price_lamp {
+        0.01
     } else {
-        100.0
+        0.0
     };
 
     Ok(TokenDynamicInfo {
@@ -394,7 +396,7 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
     let virtual_token_amount = real_token_amount + 279_900_000;
 
     let price = virtual_lamp_amount / virtual_token_amount as f64 * current_sol_price;
-    let final_price = (price * 1_000_000.0).round() / 1_000_000.0;
+    let final_price = (price * 1_000_000_000.0).round() / 1_000_000_000.0;
 
     println!("Real sol amount: {}", real_sol_amount);
     println!("Real token amount: {}", real_token_amount);
