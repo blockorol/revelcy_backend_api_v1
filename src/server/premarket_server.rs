@@ -21,6 +21,7 @@ use crate::api::premarket::{
     UpdatePremarketDataDTO,
     DeployTxDTO,
     CheckTxDTO,
+    GetHolderEntryPriceQuery, HolderEntryPriceDTO,
 };
 use crate::models::premarket::{
     BuildFinishTxParams, 
@@ -63,6 +64,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/get_main_info", web::get().to(get_main_info))
         .route("/get_list", web::get().to(get_list_main_info))
         .route("/get_dynamic_info", web::get().to(get_dynamic_info))
+        .route("/get_holder_entry_price", web::get().to(get_holder_entry_price))
         .route("/created", web::post().to(created_premarket))
         .route("/update_community", web::post().to(update_community_info))
         .route("/user_joined", web::post().to(user_joined))
@@ -582,6 +584,39 @@ pub async fn get_dynamic_info(
         reserved_sol_lamp: premarket_info.reserved_sol_lamp,
         change_24h: premarket_info.change_24h,
         holders: holders_dto,
+    };
+
+    Ok(HttpResponse::Ok().json(resp))
+}
+
+pub async fn get_holder_entry_price(
+    pool: web::Data<PgPool>,
+    query: web::Query<GetHolderEntryPriceQuery>,
+) -> Result<HttpResponse, Error> {
+    let pubkey = match Pubkey::from_str(&query.premarket_id) {
+        Ok(pk) => pk,
+        Err(_) => return Ok(HttpResponse::BadRequest().body("Invalid premarket_id")),
+    };
+
+    println!("Fetching entry price for holder {} in premarket {}", query.holder_wallet, query.premarket_id);
+
+    let entry_price = match premarket_service::get_holder_entry_price(
+        &pool,
+        &pubkey.to_string(),
+        &query.holder_wallet,
+    ).await {
+        Ok(Some(price)) => price,
+        Ok(None) => {
+            return Ok(HttpResponse::NotFound().body("Holder not found in premarket"));
+        }
+        Err(err) => {
+            eprintln!("Error fetching holder entry price: {:?}", err);
+            return Ok(HttpResponse::InternalServerError().finish());
+        }
+    };
+
+    let resp = HolderEntryPriceDTO {
+        entry_price_lamp: entry_price,
     };
 
     Ok(HttpResponse::Ok().json(resp))

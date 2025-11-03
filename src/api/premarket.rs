@@ -119,6 +119,18 @@ pub struct GetDynamicInfoQuery {
     pub premarket_id: String,
 }
 
+#[derive(Deserialize)]
+pub struct GetHolderEntryPriceQuery {
+    pub premarket_id: String,
+    pub holder_wallet: String,
+}
+
+#[derive(Serialize)]
+pub struct HolderEntryPriceDTO {
+    #[serde(with = "string_as_number")]
+    pub entry_price_lamp: f64,
+}
+
 
 #[derive(Serialize, Deserialize)]
 pub struct TokenDynamicInfoDTO {

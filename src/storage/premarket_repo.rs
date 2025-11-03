@@ -443,3 +443,69 @@ pub async fn update_premarket_state(
 
     Ok(res.rows_affected())
 }
+
+pub async fn get_lamports_before_timestamp(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    timestamp: i64,
+) -> Result<i64> {
+    let premarket_info_id: Uuid = sqlx::query_scalar(
+        r#"
+        SELECT id FROM premarket_info
+        WHERE bc_address = $1
+        "#,
+    )
+    .bind(premarket_pubkey)
+    .fetch_one(pool)
+    .await?;
+
+    let lamports = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COALESCE(SUM(amount_lamport)::BIGINT, 0)
+        FROM premarket_holders
+        WHERE premarket_info_id = $1
+          AND join_timestamp < $2
+          AND (out_timestamp IS NULL OR out_timestamp > $2)
+        "#,
+    )
+    .bind(premarket_info_id)
+    .bind(timestamp)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(lamports)
+}
+
+pub async fn get_holder_join_timestamp(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    holder_wallet: &str,
+) -> Result<Option<i64>> {
+    let premarket_info_id: Uuid = sqlx::query_scalar(
+        r#"
+        SELECT id FROM premarket_info
+        WHERE bc_address = $1
+        "#,
+    )
+    .bind(premarket_pubkey)
+    .fetch_one(pool)
+    .await?;
+
+    let timestamp = sqlx::query_scalar::<_, Option<i64>>(
+        r#"
+        SELECT join_timestamp
+        FROM premarket_holders
+        WHERE premarket_info_id = $1
+          AND holder_wallet = $2
+          AND out_timestamp IS NULL
+        ORDER BY join_timestamp ASC
+        LIMIT 1
+        "#,
+    )
+    .bind(premarket_info_id)
+    .bind(holder_wallet)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(timestamp.flatten())
+}

@@ -533,3 +533,76 @@ pub async fn get_premarket_data(
     })
 }
 
+pub async fn get_holder_entry_price(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    holder_wallet: &str,
+) -> Result<Option<f64>, actix_web::Error> {
+    // Get the holder's join timestamp
+    let join_timestamp = match premarket_repo::get_holder_join_timestamp(pool, premarket_pubkey, holder_wallet).await {
+        Ok(Some(ts)) => ts,
+        Ok(None) => return Ok(None),
+        Err(e) => return Err(ErrorInternalServerError(e)),
+    };
+
+    // Get the total lamports collected before this holder joined
+    let lamports_before_join = premarket_repo::get_lamports_before_timestamp(
+        pool,
+        premarket_pubkey,
+        join_timestamp,
+    )
+    .await
+    .map_err(ErrorInternalServerError)?;
+
+    // Use the same price calculation as get_price_by_market_cap
+    let url = match std::env::var("PYTH_MAINNET_URL") {
+        Ok(url) => url,
+        Err(_) => {
+            println!("PYTH_MAINNET_URL environment variable not set");
+            return Ok(Some(0.0));
+        },
+    };
+
+    let current_sol_price = match reqwest::get(&url).await {
+        Ok(response) => {
+            println!("Pyth API response status: {}", response.status());
+            match response.json::<PythResponse>().await {
+                Ok(pyth_response) => {
+                    if let Some(parsed_data) = pyth_response.parsed.first() {
+                        let price_str = &parsed_data.price.price;
+                        let expo = parsed_data.price.expo;
+                        let price_value: f64 = price_str.parse().unwrap_or(0.0);
+                        let price = price_value * 10_f64.powi(expo);
+                        price
+                    } else {
+                        println!("No parsed data found in Pyth response");
+                        0.0
+                    }
+                }
+                Err(e) => {
+                    println!("Pyth JSON parsing error: {:?}", e);
+                    0.0
+                }
+            }
+        },
+        Err(e) => {
+            println!("Pyth HTTP request error: {:?}", e);
+            0.0
+        }
+    };
+
+    let real_lamp_amount = lamports_before_join as u64;
+    let real_sol_amount: f64 = real_lamp_amount as f64 / 1_000_000_000.0;
+
+    let real_token_bought_amount: u64 = ((1_073_000_000.0 * real_sol_amount) / (30.0 + real_sol_amount)) as u64;
+    let real_token_amount: u64 = 793_100_000 - real_token_bought_amount;
+
+    let virtual_lamp_amount: f64 = real_sol_amount + 30.0;
+    let virtual_token_amount = real_token_amount + 279_900_000;
+
+    let price = virtual_lamp_amount / virtual_token_amount as f64 * current_sol_price;
+    let final_price = (price * 1_000_000_000.0).round() / 1_000_000_000.0;
+    println!("Entry price: {}", final_price);
+
+    Ok(Some(final_price))
+}
