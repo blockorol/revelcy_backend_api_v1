@@ -31,6 +31,7 @@ use crate::models::premarket::{
     DistributeTokensParams, 
     PremarketOnchainUser,
     PremarketOnchainData,
+    PremarketState,
     SolanaNetwork, 
     UpdatePremarketDataParams, 
     DeployTxParams,
@@ -603,6 +604,113 @@ pub async fn build_kill_premarket_tx(
     let tx_b64 = BASE64.encode(raw);
 
     Ok(BuiltTx { tx_base64: tx_b64, premarket_pda: params.premarket })
+}
+
+pub async fn build_extend_premarket_tx(
+    pool: &PgPool,
+    network: SolanaNetwork,
+    user: Pubkey,
+    premarket: Pubkey,
+    new_deadline: i64,
+) -> Result<BuiltTx> {
+    // Check if new_deadline is not longer than 1 week from now
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .context("failed to get current time")?
+        .as_secs() as i64;
+    
+    let one_week_seconds = 7 * 24 * 60 * 60; // 604800 seconds
+    let max_deadline = now + one_week_seconds;
+    
+    if new_deadline > max_deadline {
+        return Err(anyhow!("new_deadline cannot be more than 1 week from now"));
+    }
+
+    // Update database with new deadline
+    crate::services::premarket_service::update_premarket_deadline(
+        pool,
+        &premarket.to_string(),
+        new_deadline,
+    )
+    .await
+    .map_err(|e| anyhow!("failed to update premarket deadline in database: {}", e))?;
+
+    // Set premarket state to "premarket"
+    crate::services::premarket_service::set_premarket_state(
+        pool,
+        &premarket.to_string(),
+        PremarketState::Premarket,
+        None,
+    )
+    .await
+    .map_err(|e| anyhow!("failed to set premarket state in database: {}", e))?;
+
+    let program_id = program_id_for(network);
+    let client = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
+    let revelcy_auth = read_revelcy_auth(network);
+    let system_program = system_program::ID;
+
+    let accounts = vec![
+        AccountMeta::new(revelcy_auth.pubkey(), true),
+        AccountMeta::new(user, true),
+        AccountMeta::new(premarket, false),
+        AccountMeta::new_readonly(system_program, false),
+    ];
+
+    println!("Teeest Premarket Account: {:?}", premarket);
+
+    #[derive(BorshDeserialize, BorshSerialize)]
+    pub struct UpdatePremarketDataArgs {
+        pub end_timestamp: Option<i64>,
+        pub end_timestamp_updated: Option<bool>,
+        pub goal_sol: Option<u64>,
+        pub max_sol: Option<u64>,
+        pub mint: Option<String>,
+        pub name: Option<String>,
+        pub symbol: Option<String>,
+        pub uri: Option<String>,
+        pub creator: Option<String>,
+    }
+
+    let args = UpdatePremarketDataArgs {
+        end_timestamp: Some(new_deadline),
+        end_timestamp_updated: Some(true),
+        goal_sol: None,
+        max_sol: None,
+        mint: None,
+        name: None,
+        symbol: None,
+        uri: None,
+        creator: None,
+    };
+
+    let discriminator: [u8; 8] = [
+        20,
+        82,
+        102,
+        101,
+        150,
+        216,
+        162,
+        52
+    ];
+
+    let mut data = Vec::with_capacity(8 + args.try_to_vec().unwrap().len());
+    data.extend_from_slice(&discriminator);
+    data.extend(args.try_to_vec().unwrap());
+
+    let ix = Instruction { program_id, accounts, data };
+    
+    let blockhash = get_valid_latest_blockhash(&client, 50).await.context("get_latest_blockhash failed")?;
+    let msg = Message::new(&[ix], Some(&user));
+    let mut tx = Transaction::new_unsigned(msg);
+    tx.try_partial_sign(&[&revelcy_auth], blockhash)
+        .context("partial sign (revelcy) failed")?;
+
+    let raw = bincode::serialize(&tx).context("serialize tx failed")?;
+    let tx_b64 = BASE64.encode(raw);
+
+    Ok(BuiltTx { tx_base64: tx_b64, premarket_pda: premarket })
 }
 
 pub async fn test_build_kill_premarket_tx(

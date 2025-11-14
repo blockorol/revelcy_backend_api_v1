@@ -606,3 +606,25 @@ pub async fn get_holder_entry_price(
 
     Ok(Some(final_price))
 }
+
+pub async fn update_premarket_deadline(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    new_deadline: i64,
+) -> Result<(), actix_web::Error> {
+    let affected = premarket_repo::update_premarket_deadline(
+        pool,
+        premarket_pubkey,
+        new_deadline,
+    )
+    .await
+    .map_err(ErrorInternalServerError)?;
+
+    if affected == 0 {
+        return Err(actix_web::error::ErrorNotFound(
+            format!("premarket '{}' not found", premarket_pubkey),
+        ));
+    }
+
+    Ok(())
+}
