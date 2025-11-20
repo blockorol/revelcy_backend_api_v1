@@ -128,7 +128,6 @@ pub async fn create_premarket_and_community(
             telegram,
             twitter,
             web_site,
-            premarket_goal_pers,
             premarket_goal_sol_lamp,
             premarket_deadline,
             premarket_created,
@@ -156,7 +155,6 @@ pub async fn create_premarket_and_community(
     .bind(&premarket.telegram)
     .bind(&premarket.twitter)
     .bind(&premarket.web_site)
-    .bind(premarket.premarket_goal_pers)
     .bind(premarket.premarket_goal_sol_lamp)
     .bind(premarket.premarket_deadline)
     .bind(premarket.premarket_created)

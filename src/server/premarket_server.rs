@@ -451,7 +451,6 @@ pub async fn get_list_main_info(
                 twitter:  premarket_info.token_info.links.twitter.clone(),
                 web_site: premarket_info.token_info.links.web_site.clone(),
             },
-            premarket_goal_pers: premarket_info.goal.percent,
             premarket_goal_sol_lamp: premarket_info.goal.solana_lamp.to_string(),
             premarket_deadline: premarket_info.deadline_timestamp,
             premarket_created:  premarket_info.created_timestamp,
@@ -509,7 +508,6 @@ pub async fn get_main_info(
             twitter: premarket_info.main_info.token_info.links.twitter.clone(),
             web_site: premarket_info.main_info.token_info.links.web_site.clone(),
         },
-        premarket_goal_pers: premarket_info.main_info.goal.percent,
         premarket_goal_sol_lamp: premarket_info.main_info.goal.solana_lamp.to_string(),
         premarket_deadline: premarket_info.main_info.deadline_timestamp,
         premarket_created: premarket_info.main_info.created_timestamp,
@@ -660,7 +658,6 @@ pub async fn created_premarket(
         },
         state: info.state.into(),
         goal: PremarketGoal{
-            percent: info.premarket_goal_pers,
             solana_lamp: solana_lamp,
         },
         deadline_timestamp: info.premarket_deadline,
