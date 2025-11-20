@@ -267,6 +267,13 @@ pub struct FinishedPremarketDTO {
     pub network: String,          // "devnet" | "mainnet-beta"
 }
 
+#[derive(Deserialize)]
+pub struct ExtendedPremarketDTO {
+    pub base: PremarketTransactionDTO,
+    pub network: String,          // "devnet" | "mainnet-beta"
+    pub new_deadline: i64,       // unix timestamp
+}
+
 mod string_as_number {
     use serde::{self, Serializer, Deserializer, Deserialize}; // <--- добавлен Deserialize
     use std::fmt::Display;

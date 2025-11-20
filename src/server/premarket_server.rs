@@ -19,6 +19,7 @@ use crate::api::premarket::{
     DistributeTokensRequest,
     KillPremarketTxRequest,
     ExtendPremarketTxRequest,
+    ExtendedPremarketDTO,
     UpdatePremarketDataDTO,
     DeployTxDTO,
     CheckTxDTO,
@@ -73,6 +74,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/user_out", web::post().to(user_out))
         .route("/finished", web::post().to(finished_premarket))
         .route("/killed", web::post().to(killed_premarket))
+        .route("/extended_premarket", web::post().to(extended_premarket))
         .route("/distribute_tokens", web::post().to(distribute_tokens))
         .route("/update", web::post().to(update_premarket_data_tx))
 
@@ -84,7 +86,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/tx/out",    web::post().to(out_premarket_tx))
         .route("/tx/finish", web::post().to(finish_premarket_tx))
         .route("/tx/kill",   web::post().to(kill_premarket_tx))
-        .route("/tx/extend_premarke_tx", web::post().to(extend_premarket_tx))
+        .route("/tx/extend_premarket", web::post().to(extend_premarket_tx))
 
         .route("/tx/test_kill",   web::post().to(test_kill_premarket_tx))
 }
@@ -417,9 +419,75 @@ pub async fn test_kill_premarket_tx(
     }
 }
 
+pub async fn extended_premarket(
+    pool: web::Data<sqlx::PgPool>,
+    payload: web::Json<ExtendedPremarketDTO>,
+) -> Result<HttpResponse, Error> {
+    let dto = payload.into_inner();
+    
+    // Extract premarket pubkey from DTO
+    let premarket_pubkey = Pubkey::from_str(&dto.base.premarket_pub_key)
+        .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_pub_key"))?;
+    
+    // Parse network
+    let network = SolanaNetwork::try_from(dto.network.as_str())
+        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))?;
+    
+    // Call get_premarket_data to check extended_premarket flag
+    let params = GetPremarketDataParams { network, premarket: premarket_pubkey };
+    let premarket_data = get_premarket_data(params).await
+        .map_err(|e| {
+            eprintln!("❌ Failed to get premarket data: {}", e);
+            actix_web::error::ErrorInternalServerError("failed to get premarket data")
+        })?;
+    
+    // Check if extended_premarket is true
+    if !premarket_data.extended_premarket {
+        return Ok(HttpResponse::BadRequest().body("extended_premarket is not true"));
+    }
+    
+    // Update database with new deadline
+    premarket_service::update_premarket_deadline(
+        pool.get_ref(),
+        &dto.base.premarket_pub_key,
+        dto.new_deadline,
+    )
+    .await
+    .map_err(|e| {
+        eprintln!(
+            "❌ Failed to update premarket '{}' deadline: {} (tx: {}, wallet: {})",
+            dto.base.premarket_pub_key,
+            e,
+            dto.base.tx,
+            dto.base.user_wallet
+        );
+        actix_web::error::ErrorInternalServerError("failed to update premarket deadline")
+    })?;
+
+    // Set premarket state to "premarket"
+    premarket_service::set_premarket_state(
+        pool.get_ref(),
+        &dto.base.premarket_pub_key,
+        PremarketState::Premarket,
+        None,
+    )
+    .await
+    .map_err(|e| {
+        eprintln!(
+            "❌ Failed to set premarket '{}' state to Premarket: {} (tx: {}, wallet: {})",
+            dto.base.premarket_pub_key,
+            e,
+            dto.base.tx,
+            dto.base.user_wallet
+        );
+        actix_web::error::ErrorInternalServerError("failed to set premarket state")
+    })?;
+
+    Ok(HttpResponse::Ok().json("ok"))
+}
+
 pub async fn extend_premarket_tx(
     req: HttpRequest,
-    pool: web::Data<PgPool>,
     payload: web::Json<ExtendPremarketTxRequest>,
 ) -> Result<HttpResponse, actix_web::Error> {
     let dto = payload.into_inner();
@@ -430,9 +498,9 @@ pub async fn extend_premarket_tx(
     let user = Pubkey::from_str(&dto.user_pubkey)
         .map_err(|_| actix_web::error::ErrorBadRequest("invalid user_pubkey"))?;
 
-    let _token = req.extensions().get::<String>().cloned();
+    let token = req.extensions().get::<String>().cloned();
 
-    let token_data = jwt_service::decode_jwt_with_user_info(&_token.unwrap_or_default()).unwrap();
+    let token_data = jwt_service::decode_jwt_with_user_info(&token.unwrap_or_default()).unwrap();
 
     match token_data.current_wallet {
         Some(pk) => {
@@ -449,7 +517,7 @@ pub async fn extend_premarket_tx(
     let premarket = Pubkey::from_str(&dto.premarket_account)
         .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_account"))?;
 
-    match build_extend_premarket_tx(pool.get_ref(), network, user, premarket, dto.new_deadline).await {
+    match build_extend_premarket_tx(network, user, premarket, dto.new_deadline).await {
         Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
         Err(e) => {
             eprintln!("extend_premarket error: {e:?}");

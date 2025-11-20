@@ -607,7 +607,6 @@ pub async fn build_kill_premarket_tx(
 }
 
 pub async fn build_extend_premarket_tx(
-    pool: &PgPool,
     network: SolanaNetwork,
     user: Pubkey,
     premarket: Pubkey,
@@ -625,25 +624,6 @@ pub async fn build_extend_premarket_tx(
     if new_deadline > max_deadline {
         return Err(anyhow!("new_deadline cannot be more than 1 week from now"));
     }
-
-    // Update database with new deadline
-    crate::services::premarket_service::update_premarket_deadline(
-        pool,
-        &premarket.to_string(),
-        new_deadline,
-    )
-    .await
-    .map_err(|e| anyhow!("failed to update premarket deadline in database: {}", e))?;
-
-    // Set premarket state to "premarket"
-    crate::services::premarket_service::set_premarket_state(
-        pool,
-        &premarket.to_string(),
-        PremarketState::Premarket,
-        None,
-    )
-    .await
-    .map_err(|e| anyhow!("failed to set premarket state in database: {}", e))?;
 
     let program_id = program_id_for(network);
     let client = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
@@ -835,6 +815,7 @@ pub async fn get_premarket_data(
     Ok(PremarketOnchainData {
         users: all_entered_users,
         end_timestamp,
+        extended_premarket: end_timestamp_updated,
         goal_lamports: goal_sol,
         max_lamports: max_sol,
         mint,
