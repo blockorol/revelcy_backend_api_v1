@@ -145,7 +145,6 @@ impl FromStr for PremarketState {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PremarketGoal {
-    pub percent: f64,
     pub solana_lamp: i64,
 }
 

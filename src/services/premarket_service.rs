@@ -46,7 +46,6 @@ pub async fn get_full_premarket_info(
                 },
                 state: pm_db.state.into(),
                 goal: PremarketGoal{
-                    percent: pm_db.premarket_goal_pers,
                     solana_lamp: pm_db.premarket_goal_sol_lamp,
                 },
                 deadline_timestamp: pm_db.premarket_deadline,
@@ -133,7 +132,6 @@ pub async fn get_list(
                 },
                 state: pm_db.state.into(),
                 goal: PremarketGoal {
-                    percent: pm_db.premarket_goal_pers,
                     solana_lamp: pm_db.premarket_goal_sol_lamp,
                 },
                 deadline_timestamp: pm_db.premarket_deadline,
@@ -169,7 +167,6 @@ pub async fn create_full_premarket_info(
         telegram: premarket.token_info.links.telegram,
         twitter: premarket.token_info.links.twitter,
         web_site: premarket.token_info.links.web_site,
-        premarket_goal_pers: premarket.goal.percent,
         premarket_goal_sol_lamp: premarket.goal.solana_lamp,
         premarket_deadline: premarket.deadline_timestamp,
         premarket_created: premarket.created_timestamp,
