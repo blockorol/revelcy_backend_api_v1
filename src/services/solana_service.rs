@@ -612,18 +612,6 @@ pub async fn build_extend_premarket_tx(
     premarket: Pubkey,
     new_deadline: i64,
 ) -> Result<BuiltTx> {
-    // Check if new_deadline is not longer than 1 week from now
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .context("failed to get current time")?
-        .as_secs() as i64;
-    
-    let one_week_seconds = 7 * 24 * 60 * 60; // 604800 seconds
-    let max_deadline = now + one_week_seconds;
-    
-    if new_deadline > max_deadline {
-        return Err(anyhow!("new_deadline cannot be more than 1 week from now"));
-    }
 
     let program_id = program_id_for(network);
     let client = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
@@ -664,6 +652,7 @@ pub async fn build_extend_premarket_tx(
         creator: None,
     };
 
+    // 8 is the size of the discriminator
     let discriminator: [u8; 8] = [
         20,
         82,

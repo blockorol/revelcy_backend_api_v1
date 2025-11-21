@@ -507,8 +507,6 @@ pub async fn extend_premarket_tx(
             if pk != dto.user_pubkey {
                 println!("user_pubkey does not match token");
                 return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token"));
-            } else {
-                println!("user_pubkey matches token");
             }
         }
         None => return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token")),
@@ -516,6 +514,15 @@ pub async fn extend_premarket_tx(
 
     let premarket = Pubkey::from_str(&dto.premarket_account)
         .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_account"))?;
+
+    let now = Utc::now().timestamp();
+    
+    let one_week_seconds = 7 * 24 * 60 * 60; // 604800 seconds
+    let max_deadline = now + one_week_seconds;
+    
+    if dto.new_deadline > max_deadline {
+        return Ok(HttpResponse::BadRequest().body("new_deadline cannot be more than 1 week from now"));
+    }
 
     match build_extend_premarket_tx(network, user, premarket, dto.new_deadline).await {
         Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
