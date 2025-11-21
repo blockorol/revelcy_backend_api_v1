@@ -300,6 +300,7 @@ pub struct PremarketOnchainUser {
 pub struct PremarketOnchainData {
     pub users: Vec<PremarketOnchainUser>,
     pub end_timestamp: i64,
+    pub extended_premarket: bool,
     pub goal_lamports: u64,
     pub max_lamports: u64,
     pub mint: Pubkey,

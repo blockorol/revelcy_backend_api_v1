@@ -475,8 +475,8 @@ pub async fn get_premarket_data(
         .await
         .map_err(|e| ErrorInternalServerError(format!("Failed to fetch account: {e}")))?;
 
-    // Minimum length: 8 discriminator + 4 length + (could be zero users) + 8+8+8+32 for tail fields
-    if account.data.len() < 8 + 4 + 8 + 8 + 8 + 32 {
+    // Minimum length: 8 discriminator + 4 length + (could be zero users) + 8+1+8+8+32 for tail fields
+    if account.data.len() < 8 + 4 + 8 + 1 + 8 + 8 + 32 {
         return Err(ErrorBadRequest("Account data too short for premarket layout"));
     }
 
@@ -491,7 +491,7 @@ pub async fn get_premarket_data(
     let users_section_len = users_len.checked_mul(40)
         .ok_or_else(|| ErrorBadRequest("Users length overflow"))?;
 
-    let needed_len = 4 + users_section_len + (8 + 8 + 8 + 32); // vec length + users + tail fields
+    let needed_len = 4 + users_section_len + (8 + 1 + 8 + 8 + 32); // vec length + users + tail fields (end_timestamp + extended_premarket + goal + max + mint)
     if data.len() < needed_len {
         return Err(ErrorBadRequest("Account data too short for declared users length"));
     }
@@ -513,6 +513,9 @@ pub async fn get_premarket_data(
     let end_timestamp = i64::from_le_bytes(data[offset..offset+8].try_into().unwrap());
     offset += 8;
 
+    let extended_premarket = data[offset] != 0;
+    offset += 1;
+
     let goal_lamports = u64::from_le_bytes(data[offset..offset+8].try_into().unwrap());
     offset += 8;
 
@@ -524,6 +527,7 @@ pub async fn get_premarket_data(
     Ok(PremarketOnchainData {
         users,
         end_timestamp,
+        extended_premarket,
         goal_lamports,
         max_lamports,
         mint,
@@ -602,4 +606,26 @@ pub async fn get_holder_entry_price(
     println!("Entry price: {}", final_price);
 
     Ok(Some(final_price))
+}
+
+pub async fn update_premarket_deadline(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    new_deadline: i64,
+) -> Result<(), actix_web::Error> {
+    let affected = premarket_repo::update_premarket_deadline(
+        pool,
+        premarket_pubkey,
+        new_deadline,
+    )
+    .await
+    .map_err(ErrorInternalServerError)?;
+
+    if affected == 0 {
+        return Err(actix_web::error::ErrorNotFound(
+            format!("premarket '{}' not found", premarket_pubkey),
+        ));
+    }
+
+    Ok(())
 }

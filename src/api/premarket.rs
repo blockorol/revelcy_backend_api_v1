@@ -196,6 +196,14 @@ pub struct KillPremarketTxRequest {
     pub premarket_account: String, // base58
 }
 
+#[derive(serde::Deserialize)]
+pub struct ExtendPremarketTxRequest {
+    pub network: String,          // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,      // base58
+    pub premarket_account: String, // base58
+    pub new_deadline: i64,        // unix timestamp
+}
+
 
 #[derive(serde::Serialize)]
 pub struct TxOnlyResponse {
@@ -256,6 +264,13 @@ pub struct UserJoinedToPremarketDTO {
 pub struct FinishedPremarketDTO {
     pub base: PremarketTransactionDTO,
     pub network: String,          // "devnet" | "mainnet-beta"
+}
+
+#[derive(Deserialize)]
+pub struct ExtendedPremarketDTO {
+    pub base: PremarketTransactionDTO,
+    pub network: String,          // "devnet" | "mainnet-beta"
+    pub new_deadline: i64,       // unix timestamp
 }
 
 mod string_as_number {

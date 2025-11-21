@@ -507,3 +507,23 @@ pub async fn get_holder_join_timestamp(
 
     Ok(timestamp.flatten())
 }
+
+pub async fn update_premarket_deadline(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    new_deadline: i64,
+) -> Result<u64> {
+    let res = sqlx::query(
+        r#"
+        UPDATE premarket_info
+        SET premarket_deadline = $1
+        WHERE bc_address = $2
+        "#,
+    )
+    .bind(new_deadline)
+    .bind(premarket_pubkey)
+    .execute(pool)
+    .await?;
+
+    Ok(res.rows_affected())
+}
