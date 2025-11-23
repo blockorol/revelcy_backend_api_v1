@@ -28,7 +28,7 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to connect to the database");
 
-    let rpc_url = env::var("SOLANA_DEVNET_RPC").expect("SOLANA_DEVNET_RPC must be set");
+    let rpc_url = env::var("SOLANA_RPC").expect("SOLANA_RPC must be set");
     let rpc_client = web::Data::new(RpcClient::new(rpc_url)); 
 
     // run server

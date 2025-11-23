@@ -51,7 +51,6 @@ pub struct PremarketInfoDbModel {
     pub twitter: Option<String>,
     pub web_site: Option<String>,
 
-    pub premarket_goal_pers: f64,
     pub premarket_goal_sol_lamp: i64,
     pub premarket_deadline: i64,
     pub premarket_created: i64,

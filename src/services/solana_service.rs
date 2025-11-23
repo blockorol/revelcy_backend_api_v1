@@ -31,6 +31,7 @@ use crate::models::premarket::{
     DistributeTokensParams, 
     PremarketOnchainUser,
     PremarketOnchainData,
+    PremarketState,
     SolanaNetwork, 
     UpdatePremarketDataParams, 
     DeployTxParams,
@@ -84,8 +85,8 @@ fn rpc_url(network: SolanaNetwork) -> String {
 
 fn program_id_for(network: SolanaNetwork) -> Pubkey {
     let (env_key, fallback) = match network {
-        SolanaNetwork::Devnet      => ("PURPLE_PROGRAM_ID_DEV",  "ERCTELKB8tWDcLw4hLLYmxk9kirci5tP3BG4NntpwoAj"),
-        SolanaNetwork::MainnetBeta => ("PURPLE_PROGRAM_ID_MAIN", "ERCTELKB8tWDcLw4hLLYmxk9kirci5tP3BG4NntpwoAj"),
+        SolanaNetwork::Devnet      => ("PURPLE_PROGRAM_ID_DEV",  "AUf85EmXsTYGGgQnYJR2heKCxkTf5WtnKFvpkLtQ58sG"),
+        SolanaNetwork::MainnetBeta => ("PURPLE_PROGRAM_ID_MAIN", "AUf85EmXsTYGGgQnYJR2heKCxkTf5WtnKFvpkLtQ58sG"),
     };
 
     match std::env::var(env_key) {
@@ -605,6 +606,82 @@ pub async fn build_kill_premarket_tx(
     Ok(BuiltTx { tx_base64: tx_b64, premarket_pda: params.premarket })
 }
 
+pub async fn build_extend_premarket_tx(
+    network: SolanaNetwork,
+    user: Pubkey,
+    premarket: Pubkey,
+    new_deadline: i64,
+) -> Result<BuiltTx> {
+
+    let program_id = program_id_for(network);
+    let client = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
+    let revelcy_auth = read_revelcy_auth(network);
+    let system_program = system_program::ID;
+
+    let accounts = vec![
+        AccountMeta::new(revelcy_auth.pubkey(), true),
+        AccountMeta::new(user, true),
+        AccountMeta::new(premarket, false),
+        AccountMeta::new_readonly(system_program, false),
+    ];
+
+    println!("Teeest Premarket Account: {:?}", premarket);
+
+    #[derive(BorshDeserialize, BorshSerialize)]
+    pub struct UpdatePremarketDataArgs {
+        pub end_timestamp: Option<i64>,
+        pub end_timestamp_updated: Option<bool>,
+        pub goal_sol: Option<u64>,
+        pub max_sol: Option<u64>,
+        pub mint: Option<String>,
+        pub name: Option<String>,
+        pub symbol: Option<String>,
+        pub uri: Option<String>,
+        pub creator: Option<String>,
+    }
+
+    let args = UpdatePremarketDataArgs {
+        end_timestamp: Some(new_deadline),
+        end_timestamp_updated: Some(true),
+        goal_sol: None,
+        max_sol: None,
+        mint: None,
+        name: None,
+        symbol: None,
+        uri: None,
+        creator: None,
+    };
+
+    // 8 is the size of the discriminator
+    let discriminator: [u8; 8] = [
+        20,
+        82,
+        102,
+        101,
+        150,
+        216,
+        162,
+        52
+    ];
+
+    let mut data = Vec::with_capacity(8 + args.try_to_vec().unwrap().len());
+    data.extend_from_slice(&discriminator);
+    data.extend(args.try_to_vec().unwrap());
+
+    let ix = Instruction { program_id, accounts, data };
+    
+    let blockhash = get_valid_latest_blockhash(&client, 50).await.context("get_latest_blockhash failed")?;
+    let msg = Message::new(&[ix], Some(&user));
+    let mut tx = Transaction::new_unsigned(msg);
+    tx.try_partial_sign(&[&revelcy_auth], blockhash)
+        .context("partial sign (revelcy) failed")?;
+
+    let raw = bincode::serialize(&tx).context("serialize tx failed")?;
+    let tx_b64 = BASE64.encode(raw);
+
+    Ok(BuiltTx { tx_base64: tx_b64, premarket_pda: premarket })
+}
+
 pub async fn test_build_kill_premarket_tx(
     _pool: &PgPool,
     params: BuildKillTxParams,
@@ -727,6 +804,7 @@ pub async fn get_premarket_data(
     Ok(PremarketOnchainData {
         users: all_entered_users,
         end_timestamp,
+        extended_premarket: end_timestamp_updated,
         goal_lamports: goal_sol,
         max_lamports: max_sol,
         mint,

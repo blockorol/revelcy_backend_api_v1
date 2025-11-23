@@ -67,7 +67,6 @@ pub struct BlockchainInfoDTO {
     pub creator_address:String,
     pub premarket_address: String,
     pub links: TokenLinksDTO,
-    pub premarket_goal_pers: f64,
     pub premarket_goal_sol_lamp: String,
     pub premarket_deadline: i64,
     pub premarket_created: i64,
@@ -117,6 +116,18 @@ pub enum TokenState {
 #[derive(Deserialize)]
 pub struct GetDynamicInfoQuery {
     pub premarket_id: String,
+}
+
+#[derive(Deserialize)]
+pub struct GetHolderEntryPriceQuery {
+    pub premarket_id: String,
+    pub holder_wallet: String,
+}
+
+#[derive(Serialize)]
+pub struct HolderEntryPriceDTO {
+    #[serde(with = "string_as_number")]
+    pub entry_price_lamp: f64,
 }
 
 
@@ -185,6 +196,14 @@ pub struct KillPremarketTxRequest {
     pub premarket_account: String, // base58
 }
 
+#[derive(serde::Deserialize)]
+pub struct ExtendPremarketTxRequest {
+    pub network: String,          // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,      // base58
+    pub premarket_account: String, // base58
+    pub new_deadline: i64,        // unix timestamp
+}
+
 
 #[derive(serde::Serialize)]
 pub struct TxOnlyResponse {
@@ -245,6 +264,13 @@ pub struct UserJoinedToPremarketDTO {
 pub struct FinishedPremarketDTO {
     pub base: PremarketTransactionDTO,
     pub network: String,          // "devnet" | "mainnet-beta"
+}
+
+#[derive(Deserialize)]
+pub struct ExtendedPremarketDTO {
+    pub base: PremarketTransactionDTO,
+    pub network: String,          // "devnet" | "mainnet-beta"
+    pub new_deadline: i64,       // unix timestamp
 }
 
 mod string_as_number {

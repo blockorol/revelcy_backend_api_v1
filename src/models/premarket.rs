@@ -145,7 +145,6 @@ impl FromStr for PremarketState {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PremarketGoal {
-    pub percent: f64,
     pub solana_lamp: i64,
 }
 
@@ -301,6 +300,7 @@ pub struct PremarketOnchainUser {
 pub struct PremarketOnchainData {
     pub users: Vec<PremarketOnchainUser>,
     pub end_timestamp: i64,
+    pub extended_premarket: bool,
     pub goal_lamports: u64,
     pub max_lamports: u64,
     pub mint: Pubkey,
@@ -330,5 +330,48 @@ pub struct DeployTxParams {
 pub struct CheckTxParams {
     pub network: String,          // "devnet" | "mainnet-beta"
     pub sig: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PythPriceData {
+    pub price: String,
+    pub conf: String,
+    pub expo: i32,
+    pub publish_time: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PythEmaPriceData {
+    pub price: String,
+    pub conf: String,
+    pub expo: i32,
+    pub publish_time: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PythMetadata {
+    pub slot: u64,
+    pub proof_available_time: u64,
+    pub prev_publish_time: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PythParsedData {
+    pub id: String,
+    pub price: PythPriceData,
+    pub ema_price: PythEmaPriceData,
+    pub metadata: PythMetadata,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PythBinaryData {
+    pub encoding: String,
+    pub data: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PythResponse {
+    pub binary: PythBinaryData,
+    pub parsed: Vec<PythParsedData>,
 }
 

@@ -8,12 +8,14 @@ use actix_web::error::ErrorInternalServerError;
 use uuid::Uuid;
 use chrono::Utc;
 use actix_web::error::ErrorBadRequest;
-
-use crate::constants::CRYPTO_PRICE_API_URL;
+use crate::config::{get_pyth_subdomain, get_pyth_secret_token};
 
 use solana_client::nonblocking::rpc_client::RpcClient; // CHANGED
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
+use serde::{Deserialize, Serialize};
+use crate::models::premarket::PythResponse;
+
 
 pub async fn get_full_premarket_info(
     pool: &PgPool,
@@ -44,7 +46,6 @@ pub async fn get_full_premarket_info(
                 },
                 state: pm_db.state.into(),
                 goal: PremarketGoal{
-                    percent: pm_db.premarket_goal_pers,
                     solana_lamp: pm_db.premarket_goal_sol_lamp,
                 },
                 deadline_timestamp: pm_db.premarket_deadline,
@@ -131,7 +132,6 @@ pub async fn get_list(
                 },
                 state: pm_db.state.into(),
                 goal: PremarketGoal {
-                    percent: pm_db.premarket_goal_pers,
                     solana_lamp: pm_db.premarket_goal_sol_lamp,
                 },
                 deadline_timestamp: pm_db.premarket_deadline,
@@ -167,7 +167,6 @@ pub async fn create_full_premarket_info(
         telegram: premarket.token_info.links.telegram,
         twitter: premarket.token_info.links.twitter,
         web_site: premarket.token_info.links.web_site,
-        premarket_goal_pers: premarket.goal.percent,
         premarket_goal_sol_lamp: premarket.goal.solana_lamp,
         premarket_deadline: premarket.deadline_timestamp,
         premarket_created: premarket.created_timestamp,
@@ -257,15 +256,21 @@ pub async fn get_dynamic_info(
         })
         .collect();
 
-    let current_price_lamp = get_price_by_market_cap(holder_data.reserved_sol_lamp as u64).await;
     println!("reserved_sol_lamp: {}", holder_data.reserved_sol_lamp);
+    println!("reserved_sol_24h_before_lamp: {}", holder_data.reserved_sol_24h_before_lamp);
+    
+    let current_price_lamp = get_price_by_market_cap(holder_data.reserved_sol_lamp as u64).await;
     println!("current_price_lamp: {}", current_price_lamp);
+    
     let price_24h_ago_lamp = get_price_by_market_cap(holder_data.reserved_sol_24h_before_lamp as u64).await;
+    println!("price_24h_ago_lamp: {}", price_24h_ago_lamp);
 
-    let change_24h = if price_24h_ago_lamp > 0.0 {
+    let change_24h = if price_24h_ago_lamp > 0.0 && price_24h_ago_lamp != current_price_lamp {
         ((current_price_lamp - price_24h_ago_lamp) / price_24h_ago_lamp) * 100.0
+    } else if price_24h_ago_lamp == current_price_lamp {
+        0.01
     } else {
-        100.0
+        0.0
     };
 
     Ok(TokenDynamicInfo {
@@ -337,36 +342,65 @@ pub async fn remove_holder(
         .map_err(actix_web::error::ErrorInternalServerError)
 }
 
-pub async fn get_price_by_market_cap(reserved_sol_lamp: u64) -> f64 {
-    let url = format!("{}ids=solana&vs_currencies=usd", CRYPTO_PRICE_API_URL);
-    println!("Fetching SOL price from: {}", url);
+pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
+    let url = match std::env::var("PYTH_MAINNET_URL") {
+        Ok(url) => url,
+        Err(_) => {
+            println!("PYTH_MAINNET_URL environment variable not set");
+            return 0.0;
+        },
+    };
 
     let current_sol_price = match reqwest::get(&url).await {
         Ok(response) => {
-            println!("API response status: {}", response.status());
-            match response.json::<serde_json::Value>().await {
-                Ok(json) => {
-                    println!("API response JSON: {}", json);
-                    let price = json["solana"]["usd"].as_f64().unwrap_or(0.0);
-                    println!("Extracted SOL price: {}", price);
-                    price
-                },
+            println!("Pyth API response status: {}", response.status());
+            match response.json::<PythResponse>().await {
+                Ok(pyth_response) => {
+                    //println!("Pyth API response: {:?}", pyth_response);
+                    if let Some(parsed_data) = pyth_response.parsed.first() {
+                        // Parse the price string and apply the exponent
+                        let price_str = &parsed_data.price.price;
+                        let expo = parsed_data.price.expo;
+                        let price_value: f64 = price_str.parse().unwrap_or(0.0);
+                        let price = price_value * 10_f64.powi(expo);
+                        //println!("Extracted SOL price from Pyth: {}", price);
+                        price
+                    } else {
+                        println!("No parsed data found in Pyth response");
+                        0.0
+                    }
+                }
                 Err(e) => {
-                    println!("JSON parsing error: {:?}", e);
+                    println!("Pyth JSON parsing error: {:?}", e);
                     0.0
                 }
             }
         },
         Err(e) => {
-            println!("HTTP request error: {:?}", e);
+            println!("Pyth HTTP request error: {:?}", e);
             0.0
         }
     };
-    
     println!("Final current_sol_price: {}", current_sol_price);
-    let price = reserved_sol_lamp as f64 / 1_000_000_000_000_000.0 * current_sol_price;
-    let final_price = (price * 1_000_000.0).round() / 1_000_000.0;
-    println!("Calculated price: {} (reserved_sol_lamp: {}, final_price: {})", final_price, reserved_sol_lamp, final_price);
+
+    let real_sol_amount: f64 = real_lamp_amount as f64/1_000_000_000.0;
+
+    let real_token_bought_amount: u64 = ((1_073_000_000.0 * real_sol_amount)/(30.0 + real_sol_amount)) as u64;
+    println!("Real token bought amount: {}", real_token_bought_amount);
+    let real_token_amount: u64 = 793_100_000 - real_token_bought_amount;
+
+    let virtual_lamp_amount: f64 = real_sol_amount + 30.0;
+    let virtual_token_amount = real_token_amount + 279_900_000;
+
+    let price = virtual_lamp_amount / virtual_token_amount as f64 * current_sol_price;
+    let final_price = (price * 1_000_000_000.0).round() / 1_000_000_000.0;
+
+    println!("Real sol amount: {}", real_sol_amount);
+    println!("Real token amount: {}", real_token_amount);
+    println!("Virtual sol amount: {}", virtual_lamp_amount);
+    println!("Virtual token amount: {}", virtual_token_amount);
+    println!("Price: {}", price);
+    println!("Final price: {}", final_price);
     final_price
 }
 
@@ -441,8 +475,8 @@ pub async fn get_premarket_data(
         .await
         .map_err(|e| ErrorInternalServerError(format!("Failed to fetch account: {e}")))?;
 
-    // Minimum length: 8 discriminator + 4 length + (could be zero users) + 8+8+8+32 for tail fields
-    if account.data.len() < 8 + 4 + 8 + 8 + 8 + 32 {
+    // Minimum length: 8 discriminator + 4 length + (could be zero users) + 8+1+8+8+32 for tail fields
+    if account.data.len() < 8 + 4 + 8 + 1 + 8 + 8 + 32 {
         return Err(ErrorBadRequest("Account data too short for premarket layout"));
     }
 
@@ -457,7 +491,7 @@ pub async fn get_premarket_data(
     let users_section_len = users_len.checked_mul(40)
         .ok_or_else(|| ErrorBadRequest("Users length overflow"))?;
 
-    let needed_len = 4 + users_section_len + (8 + 8 + 8 + 32); // vec length + users + tail fields
+    let needed_len = 4 + users_section_len + (8 + 1 + 8 + 8 + 32); // vec length + users + tail fields (end_timestamp + extended_premarket + goal + max + mint)
     if data.len() < needed_len {
         return Err(ErrorBadRequest("Account data too short for declared users length"));
     }
@@ -479,6 +513,9 @@ pub async fn get_premarket_data(
     let end_timestamp = i64::from_le_bytes(data[offset..offset+8].try_into().unwrap());
     offset += 8;
 
+    let extended_premarket = data[offset] != 0;
+    offset += 1;
+
     let goal_lamports = u64::from_le_bytes(data[offset..offset+8].try_into().unwrap());
     offset += 8;
 
@@ -490,9 +527,105 @@ pub async fn get_premarket_data(
     Ok(PremarketOnchainData {
         users,
         end_timestamp,
+        extended_premarket,
         goal_lamports,
         max_lamports,
         mint,
     })
 }
 
+pub async fn get_holder_entry_price(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    holder_wallet: &str,
+) -> Result<Option<f64>, actix_web::Error> {
+    // Get the holder's join timestamp
+    let join_timestamp = match premarket_repo::get_holder_join_timestamp(pool, premarket_pubkey, holder_wallet).await {
+        Ok(Some(ts)) => ts,
+        Ok(None) => return Ok(None),
+        Err(e) => return Err(ErrorInternalServerError(e)),
+    };
+
+    // Get the total lamports collected before this holder joined
+    let lamports_before_join = premarket_repo::get_lamports_before_timestamp(
+        pool,
+        premarket_pubkey,
+        join_timestamp,
+    )
+    .await
+    .map_err(ErrorInternalServerError)?;
+
+    // Use the same price calculation as get_price_by_market_cap
+    let url = match std::env::var("PYTH_MAINNET_URL") {
+        Ok(url) => url,
+        Err(_) => {
+            println!("PYTH_MAINNET_URL environment variable not set");
+            return Ok(Some(0.0));
+        },
+    };
+
+    let current_sol_price = match reqwest::get(&url).await {
+        Ok(response) => {
+            println!("Pyth API response status: {}", response.status());
+            match response.json::<PythResponse>().await {
+                Ok(pyth_response) => {
+                    if let Some(parsed_data) = pyth_response.parsed.first() {
+                        let price_str = &parsed_data.price.price;
+                        let expo = parsed_data.price.expo;
+                        let price_value: f64 = price_str.parse().unwrap_or(0.0);
+                        let price = price_value * 10_f64.powi(expo);
+                        price
+                    } else {
+                        println!("No parsed data found in Pyth response");
+                        0.0
+                    }
+                }
+                Err(e) => {
+                    println!("Pyth JSON parsing error: {:?}", e);
+                    0.0
+                }
+            }
+        },
+        Err(e) => {
+            println!("Pyth HTTP request error: {:?}", e);
+            0.0
+        }
+    };
+
+    let real_lamp_amount = lamports_before_join as u64;
+    let real_sol_amount: f64 = real_lamp_amount as f64 / 1_000_000_000.0;
+
+    let real_token_bought_amount: u64 = ((1_073_000_000.0 * real_sol_amount) / (30.0 + real_sol_amount)) as u64;
+    let real_token_amount: u64 = 793_100_000 - real_token_bought_amount;
+
+    let virtual_lamp_amount: f64 = real_sol_amount + 30.0;
+    let virtual_token_amount = real_token_amount + 279_900_000;
+
+    let price = virtual_lamp_amount / virtual_token_amount as f64 * current_sol_price;
+    let final_price = (price * 1_000_000_000.0).round() / 1_000_000_000.0;
+    println!("Entry price: {}", final_price);
+
+    Ok(Some(final_price))
+}
+
+pub async fn update_premarket_deadline(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    new_deadline: i64,
+) -> Result<(), actix_web::Error> {
+    let affected = premarket_repo::update_premarket_deadline(
+        pool,
+        premarket_pubkey,
+        new_deadline,
+    )
+    .await
+    .map_err(ErrorInternalServerError)?;
+
+    if affected == 0 {
+        return Err(actix_web::error::ErrorNotFound(
+            format!("premarket '{}' not found", premarket_pubkey),
+        ));
+    }
+
+    Ok(())
+}

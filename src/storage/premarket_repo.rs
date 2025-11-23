@@ -128,7 +128,6 @@ pub async fn create_premarket_and_community(
             telegram,
             twitter,
             web_site,
-            premarket_goal_pers,
             premarket_goal_sol_lamp,
             premarket_deadline,
             premarket_created,
@@ -139,7 +138,7 @@ pub async fn create_premarket_and_community(
             $1, $2, $3, $4, $5,
             $6, $7, $8, $9, $10,
             $11, $12, $13, $14, $15,
-            $16, $17, $18
+            $16, $17
         )
         RETURNING *
         "#
@@ -156,7 +155,6 @@ pub async fn create_premarket_and_community(
     .bind(&premarket.telegram)
     .bind(&premarket.twitter)
     .bind(&premarket.web_site)
-    .bind(premarket.premarket_goal_pers)
     .bind(premarket.premarket_goal_sol_lamp)
     .bind(premarket.premarket_deadline)
     .bind(premarket.premarket_created)
@@ -438,6 +436,92 @@ pub async fn update_premarket_state(
     .bind(new_state)
     .bind(premarket_pubkey)
     .bind(premarket_finished)
+    .execute(pool)
+    .await?;
+
+    Ok(res.rows_affected())
+}
+
+pub async fn get_lamports_before_timestamp(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    timestamp: i64,
+) -> Result<i64> {
+    let premarket_info_id: Uuid = sqlx::query_scalar(
+        r#"
+        SELECT id FROM premarket_info
+        WHERE bc_address = $1
+        "#,
+    )
+    .bind(premarket_pubkey)
+    .fetch_one(pool)
+    .await?;
+
+    let lamports = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COALESCE(SUM(amount_lamport)::BIGINT, 0)
+        FROM premarket_holders
+        WHERE premarket_info_id = $1
+          AND join_timestamp < $2
+          AND (out_timestamp IS NULL OR out_timestamp > $2)
+        "#,
+    )
+    .bind(premarket_info_id)
+    .bind(timestamp)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(lamports)
+}
+
+pub async fn get_holder_join_timestamp(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    holder_wallet: &str,
+) -> Result<Option<i64>> {
+    let premarket_info_id: Uuid = sqlx::query_scalar(
+        r#"
+        SELECT id FROM premarket_info
+        WHERE bc_address = $1
+        "#,
+    )
+    .bind(premarket_pubkey)
+    .fetch_one(pool)
+    .await?;
+
+    let timestamp = sqlx::query_scalar::<_, Option<i64>>(
+        r#"
+        SELECT join_timestamp
+        FROM premarket_holders
+        WHERE premarket_info_id = $1
+          AND holder_wallet = $2
+          AND out_timestamp IS NULL
+        ORDER BY join_timestamp ASC
+        LIMIT 1
+        "#,
+    )
+    .bind(premarket_info_id)
+    .bind(holder_wallet)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(timestamp.flatten())
+}
+
+pub async fn update_premarket_deadline(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    new_deadline: i64,
+) -> Result<u64> {
+    let res = sqlx::query(
+        r#"
+        UPDATE premarket_info
+        SET premarket_deadline = $1
+        WHERE bc_address = $2
+        "#,
+    )
+    .bind(new_deadline)
+    .bind(premarket_pubkey)
     .execute(pool)
     .await?;
 
