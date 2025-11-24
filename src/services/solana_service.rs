@@ -86,7 +86,7 @@ fn rpc_url(network: SolanaNetwork) -> String {
 fn program_id_for(network: SolanaNetwork) -> Pubkey {
     let (env_key, fallback) = match network {
         SolanaNetwork::Devnet      => ("PURPLE_PROGRAM_ID_DEV",  "AUf85EmXsTYGGgQnYJR2heKCxkTf5WtnKFvpkLtQ58sG"),
-        SolanaNetwork::MainnetBeta => ("PURPLE_PROGRAM_ID_MAIN", "AUf85EmXsTYGGgQnYJR2heKCxkTf5WtnKFvpkLtQ58sG"),
+        SolanaNetwork::MainnetBeta => ("PURPLE_PROGRAM_ID_MAIN", "AtuMMXXjyAW3fSJrnWYon1ynxUA7CyQ3Qz2E6JqiTmhu"),
     };
 
     match std::env::var(env_key) {
