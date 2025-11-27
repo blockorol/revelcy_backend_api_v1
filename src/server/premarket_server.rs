@@ -59,6 +59,7 @@ use crate::services::solana_service::{
     update_premarket_data,
     deploy_tx_service,
     check_tx_service,
+    kill_premarket,
 };
 
 pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
@@ -948,6 +949,21 @@ pub async fn finished_premarket(
         Ok(_) => {
             let msg = format!("Tokens distributed!");
             println!("{}", msg);
+            let params = BuildKillTxParams {
+                network: network,
+                user: user,
+                premarket: premarket,
+                users: vec![],
+            };
+            match kill_premarket(&pool, params).await {
+                Ok(_) => {
+                    println!("Premarket killed!");
+                }
+                Err(e) => {
+                    eprintln!("Error killing premarket: {:?}", e);
+                }
+            }
+            
         }
         Err(e) => {
             eprintln!("Error distributing tokens: {:?}", e);
