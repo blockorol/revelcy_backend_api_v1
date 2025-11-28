@@ -47,6 +47,14 @@ pub struct BuildKillTxParams {
 }
 
 #[derive(Debug, Clone)]
+pub struct BuildClaimTokensTxParams {
+    pub network: SolanaNetwork,
+    pub user: solana_sdk::pubkey::Pubkey,
+    pub premarket: solana_sdk::pubkey::Pubkey,
+    pub token_mint: solana_sdk::pubkey::Pubkey,
+}
+
+#[derive(Debug, Clone)]
 pub struct GetPremarketDataParams {
     pub network: SolanaNetwork,
     pub premarket: solana_sdk::pubkey::Pubkey,
@@ -294,6 +302,7 @@ pub enum OutConfirmationStatusDTO {
 pub struct PremarketOnchainUser {
     pub wallet: Pubkey,
     pub contributed_lamports: u64,
+    pub claimed: bool,
 }
 
 #[derive(Debug, Clone)]

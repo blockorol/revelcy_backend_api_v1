@@ -275,9 +275,10 @@ pub async fn insert_holder(
                 holder_wallet,
                 amount_lamport,
                 join_timestamp,
-                out_timestamp
+                out_timestamp,
+                claimed
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
         )
         .bind(holder.id)
@@ -287,6 +288,7 @@ pub async fn insert_holder(
         .bind(holder.amount_lamport)
         .bind(holder.join_timestamp)
         .bind(holder.out_timestamp)
+        .bind(holder.claimed)
         .execute(pool)
         .await?;
 
@@ -359,6 +361,7 @@ pub async fn get_holders_by_premarket_id(
             ph.amount_lamport,
             ph.join_timestamp,
             ph.out_timestamp,
+            ph.claimed,
             u.avatar_url,
             u.username
         FROM premarket_holders ph
@@ -522,6 +525,40 @@ pub async fn update_premarket_deadline(
     )
     .bind(new_deadline)
     .bind(premarket_pubkey)
+    .execute(pool)
+    .await?;
+
+    Ok(res.rows_affected())
+}
+
+pub async fn update_holder_claimed_status(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    holder_wallet: &str,
+    claimed: bool,
+) -> Result<u64> {
+    let premarket_info_id: Uuid = sqlx::query_scalar(
+        r#"
+        SELECT id FROM premarket_info
+        WHERE bc_address = $1
+        "#,
+    )
+    .bind(premarket_pubkey)
+    .fetch_one(pool)
+    .await?;
+
+    let res = sqlx::query(
+        r#"
+        UPDATE premarket_holders
+        SET claimed = $1
+        WHERE premarket_info_id = $2 
+          AND holder_wallet = $3
+          AND out_timestamp IS NULL
+        "#,
+    )
+    .bind(claimed)
+    .bind(premarket_info_id)
+    .bind(holder_wallet)
     .execute(pool)
     .await?;
 

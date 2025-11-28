@@ -682,6 +682,48 @@ pub async fn build_extend_premarket_tx(
     Ok(BuiltTx { tx_base64: tx_b64, premarket_pda: premarket })
 }
 
+pub async fn build_claim_tokens_tx(
+    params: crate::models::premarket::BuildClaimTokensTxParams,
+) -> Result<crate::models::premarket::BuiltTx> {
+    let program_id = program_id_for(params.network);
+    let client = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
+    let revelcy_auth = read_revelcy_auth(params.network);
+    let system_program = system_program::ID;
+
+    // Get associated token accounts
+    let revelcy_auth_ata = get_associated_token_address(&revelcy_auth.pubkey(), &params.token_mint);
+    let user_ata = get_associated_token_address(&params.user, &params.token_mint);
+
+    let accounts = vec![
+        AccountMeta::new(revelcy_auth.pubkey(), true),           // 1. revelcy_auth (writable, signer)
+        AccountMeta::new(revelcy_auth_ata, false),               // 2. revelcy_auth_ata (writable)
+        AccountMeta::new(params.user, true),                     // 3. user (writable, signer)
+        AccountMeta::new(user_ata, false),                       // 4. user_ata (writable)
+        AccountMeta::new(params.premarket, false),               // 5. premarket_account (writable)
+        AccountMeta::new_readonly(params.token_mint, false),     // 6. token_mint
+        AccountMeta::new_readonly(system_program, false),        // 7. system_program
+        AccountMeta::new_readonly(token_program_id, false),      // 8. token_program
+        AccountMeta::new_readonly(associated_token_program_id, false), // 9. associated_token_program
+    ];
+
+    const CLAIM_METHOD_NAME: &str = "claim_tokens";
+    let mut data = Vec::with_capacity(8);
+    data.extend_from_slice(&anchor_sighash_global(CLAIM_METHOD_NAME));
+
+    let ix = Instruction { program_id, accounts, data };
+    
+    let blockhash = get_valid_latest_blockhash(&client, 50).await.context("get_latest_blockhash failed")?;
+    let msg = Message::new(&[ix], Some(&params.user));
+    let mut tx = Transaction::new_unsigned(msg);
+    tx.try_partial_sign(&[&revelcy_auth], blockhash)
+        .context("partial sign (revelcy) failed")?;
+
+    let raw = bincode::serialize(&tx).context("serialize tx failed")?;
+    let tx_b64 = BASE64.encode(raw);
+
+    Ok(crate::models::premarket::BuiltTx { tx_base64: tx_b64, premarket_pda: params.premarket })
+}
+
 pub async fn test_build_kill_premarket_tx(
     _pool: &PgPool,
     params: BuildKillTxParams,
@@ -759,29 +801,30 @@ pub async fn get_premarket_data(
     println!("\nUsers vector length: {}", users_len);
     
     // Calculate offset after the user vector
-    // Format: 4 bytes for length + (users_len * (32 bytes for pubkey + 8 bytes for lamports))
-    let offset_after_users = 4 + (users_len as usize * 40);
+    // Format: 4 bytes for length + (users_len * (32 bytes for pubkey + 8 bytes for lamports + 1 byte for claimed))
+    let offset_after_users = 4 + (users_len as usize * 41);
     let mut all_entered_users = Vec::<PremarketOnchainUser>::new();
 
     // Extract user data if available
     if users_len > 0 {
         for i in 0..users_len as usize {
-            let user_offset = 4 + (i * 40); // 4 bytes for vector length + i * entry size
+            let user_offset = 4 + (i * 41); // 4 bytes for vector length + i * entry size
             let pubkey_bytes = &data[user_offset..user_offset+32];
             let pubkey = Pubkey::new_from_array(pubkey_bytes.try_into()?);
 
             let lamports_bytes = &data[user_offset+32..user_offset+40];
             let lamports = u64::from_le_bytes(lamports_bytes.try_into()?);
 
+            let claimed = data[user_offset+40] != 0;
+
             let user = PremarketOnchainUser {
                 wallet: pubkey,
                 contributed_lamports: lamports,
+                claimed,
             };
             all_entered_users.push(user);
 
-            let lamports_bytes = &data[user_offset+32..user_offset+40];
-            let lamports = u64::from_le_bytes(lamports_bytes.try_into()?);
-            println!("User {}: {} contributed {} lamports", i, pubkey, lamports);
+            println!("User {}: {} contributed {} lamports, claimed: {}", i, pubkey, lamports, claimed);
         }
     }
     
@@ -1236,5 +1279,3 @@ pub async fn check_tx_service(
     }
 }
 
-
-//test

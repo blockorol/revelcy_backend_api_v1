@@ -204,6 +204,27 @@ pub struct ExtendPremarketTxRequest {
     pub new_deadline: i64,        // unix timestamp
 }
 
+#[derive(serde::Deserialize)]
+pub struct ClaimTokensTxRequest {
+    pub network: String,          // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,      // base58
+    pub premarket_account: String, // base58
+    pub token_mint: String,       // base58
+}
+
+#[derive(serde::Deserialize)]
+pub struct TokenClaimedDTO {
+    pub network: String,          // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,      // base58
+    pub premarket_account: String, // base58
+}
+
+#[derive(serde::Serialize)]
+pub struct TokenClaimedResponse {
+    pub claimed: bool,
+    pub updated_in_db: bool,
+}
+
 
 #[derive(serde::Serialize)]
 pub struct TxOnlyResponse {

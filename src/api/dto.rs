@@ -30,7 +30,7 @@ pub struct WalletInfoResponseDto {
 
 #[derive(Serialize)]
 pub struct PremarketInfoResponseDto {
-    pub users: Vec<(String, u64)>,
+    pub users: Vec<(String, u64, bool)>,
     pub end_timestamp: i64,
     pub goal_sol: u64,
     pub max_sol: u64,
