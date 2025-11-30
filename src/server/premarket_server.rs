@@ -796,6 +796,7 @@ pub async fn get_dynamic_info(
             icon_url: h.icon_url,
             username: h.username,
             amount_sol_lamp: h.amount_sol_lamp,
+            claimed: h.claimed,
         })
         .collect();
 
@@ -968,6 +969,7 @@ pub async fn user_joined(
         username: None,
         join_timestamp: Utc::now().timestamp_millis(),
         amount_sol_lamp: dto.join_amount_in_sol_lamport,
+        claimed: false,
     };
     println!("holder created");
 
@@ -1024,39 +1026,6 @@ pub async fn finished_premarket(
             dto.base.user_wallet
         );
         return Err(e);
-    }
-    
-
-
-    let network_str = dto.network;
-    let network = SolanaNetwork::try_from(network_str.as_str())
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))?;
-    let premarket = Pubkey::from_str(&dto.base.premarket_pub_key)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket pubkey"))?;
-    let user = Pubkey::from_str(&dto.base.user_wallet)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid user wallet"))?;
-    let params = GetPremarketDataParams { network, premarket };
-    let premarket_data = get_premarket_data(params).await?;
-    let users = premarket_data.users
-        .into_iter()
-        .map(|u| u.wallet.to_string())
-        .collect();
-    let params = DistributeTokensParams {
-        network: network,
-        user: user,
-        premarket: premarket,
-        token_mint: premarket_data.mint,
-        users: users,
-    };
-    match distribute_tk(&pool, params).await {
-        Ok(_) => {
-            let msg = format!("Tokens distributed!");
-            println!("{}", msg);
-        }
-        Err(e) => {
-            eprintln!("Error distributing tokens: {:?}", e);
-            eprintln!("Manual distribution needed for mint: {:?}", &premarket_data.mint);
-        }
     }
 
     println!(

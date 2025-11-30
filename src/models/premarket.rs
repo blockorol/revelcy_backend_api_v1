@@ -236,6 +236,7 @@ pub struct HolderInfo {
     pub icon_url: Option<String>,
     pub username: Option<String>,
     pub amount_sol_lamp: u64,
+    pub claimed: bool,
 }
 impl From<TokenDynamicInfo> for TokenDynamicInfoDTO {
     fn from(info: TokenDynamicInfo) -> Self {
@@ -258,6 +259,7 @@ impl From<HolderInfo> for HolderInfoDTO {
             icon_url: holder.icon_url,
             username: holder.username,
             amount_sol_lamp: holder.amount_sol_lamp,
+            claimed: holder.claimed,
         }
     }
 }

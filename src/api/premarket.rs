@@ -154,6 +154,7 @@ pub struct HolderInfoDTO {
     pub username: Option<String>, // just to get based on user info
     #[serde(with = "string_as_number")]
     pub amount_sol_lamp: u64,
+    pub claimed: bool,
 }
 
 #[derive(serde::Deserialize)]

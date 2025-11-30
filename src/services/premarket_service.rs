@@ -253,6 +253,7 @@ pub async fn get_dynamic_info(
             icon_url: h.avatar_url,
             username: h.username,
             amount_sol_lamp: h.amount_lamport as u64,
+            claimed: h.claimed,
         })
         .collect();
 
