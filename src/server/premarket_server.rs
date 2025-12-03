@@ -24,6 +24,8 @@ use crate::api::premarket::{
     DeployTxDTO,
     CheckTxDTO,
     GetHolderEntryPriceQuery, HolderEntryPriceDTO,
+    ClaimTokensTxRequest,
+    TokenClaimedDTO, TokenClaimedResponse,
 };
 use crate::models::premarket::{
     BuildFinishTxParams, 
@@ -31,6 +33,7 @@ use crate::models::premarket::{
     BuildKillTxParams, 
     BuildOutTxParams, 
     BuildPremarketTxParams, 
+    BuildClaimTokensTxParams,
     CommunityInfoServiceModel, 
     CommunityLink, DeployTxParams,
     DistributeTokensParams, GetPremarketDataParams,
@@ -53,6 +56,7 @@ use crate::services::solana_service::{
     build_finish_premarket_tx, 
     build_kill_premarket_tx,
     build_extend_premarket_tx,
+    build_claim_tokens_tx,
     test_build_kill_premarket_tx,
     distribute_tk,
     get_premarket_data,
@@ -77,6 +81,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/extended_premarket", web::post().to(extended_premarket))
         .route("/distribute_tokens", web::post().to(distribute_tokens))
         .route("/update", web::post().to(update_premarket_data_tx))
+        .route("/token_claimed", web::post().to(token_claimed))
 
         .route("/deploy_tx",   web::post().to(deploy_tx))
         .route("/check_tx",   web::post().to(check_tx))
@@ -87,7 +92,8 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/tx/finish", web::post().to(finish_premarket_tx))
         .route("/tx/kill",   web::post().to(kill_premarket_tx))
         .route("/tx/extend_premarket", web::post().to(extend_premarket_tx))
-
+        .route("/tx/claim_tokens", web::post().to(claim_tokens_tx))
+        
         .route("/tx/test_kill",   web::post().to(test_kill_premarket_tx))
 }
 
@@ -419,6 +425,104 @@ pub async fn test_kill_premarket_tx(
     }
 }
 
+pub async fn claim_tokens_tx(
+    req: HttpRequest,
+    payload: web::Json<ClaimTokensTxRequest>,
+) -> Result<HttpResponse, actix_web::Error> {
+    let dto = payload.into_inner();
+
+    let network = SolanaNetwork::try_from(dto.network.as_str())
+        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))?;
+
+    let user = Pubkey::from_str(&dto.user_pubkey)
+        .map_err(|_| actix_web::error::ErrorBadRequest("invalid user_pubkey"))?;
+
+    let token = req.extensions().get::<String>().cloned();
+
+    let token_data = jwt_service::decode_jwt_with_user_info(&token.unwrap_or_default()).unwrap();
+
+    match token_data.current_wallet {
+        Some(pk) => {
+            if pk != dto.user_pubkey {
+                println!("user_pubkey does not match token");
+                return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token"));
+            } else {
+                println!("user_pubkey matches token");
+            }
+        }
+        None => return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token")),
+    }
+
+    let premarket = Pubkey::from_str(&dto.premarket_account)
+        .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_account"))?;
+
+    let token_mint = Pubkey::from_str(&dto.token_mint)
+        .map_err(|_| actix_web::error::ErrorBadRequest("invalid token_mint"))?;
+
+    let params = BuildClaimTokensTxParams {
+        network,
+        user,
+        premarket,
+        token_mint,
+    };
+
+    match build_claim_tokens_tx(params).await {
+        Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
+        Err(e) => {
+            eprintln!("build_claim_tokens_tx error: {e:?}");
+            Ok(HttpResponse::InternalServerError().body("failed to build claim tokens tx"))
+        }
+    }
+}
+
+pub async fn token_claimed(
+    pool: web::Data<PgPool>,
+    payload: web::Json<TokenClaimedDTO>,
+) -> Result<HttpResponse, actix_web::Error> {
+    let dto = payload.into_inner();
+
+    let network = SolanaNetwork::try_from(dto.network.as_str())
+        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))?;
+
+    let premarket = Pubkey::from_str(&dto.premarket_account)
+        .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_account"))?;
+
+    // Create async RPC client based on network
+    let rpc_url = match network {
+        SolanaNetwork::Devnet => std::env::var("SOLANA_DEVNET_RPC")
+            .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string()),
+        SolanaNetwork::MainnetBeta => std::env::var("SOLANA_MAINNET_RPC")
+            .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string()),
+    };
+    
+    let client = solana_client::nonblocking::rpc_client::RpcClient::new(rpc_url);
+
+    // Check on-chain claimed status and update database if needed
+    match premarket_service::check_and_update_claimed_status(
+        pool.get_ref(),
+        &client,
+        &premarket,
+        &dto.user_pubkey,
+    )
+    .await
+    {
+        Ok((claimed, updated_in_db)) => {
+            println!(
+                "User {} claimed status: {}, DB updated: {}",
+                dto.user_pubkey, claimed, updated_in_db
+            );
+            Ok(HttpResponse::Ok().json(TokenClaimedResponse {
+                claimed,
+                updated_in_db,
+            }))
+        }
+        Err(e) => {
+            eprintln!("token_claimed error: {e:?}");
+            Err(e)
+        }
+    }
+}
+
 pub async fn extended_premarket(
     pool: web::Data<sqlx::PgPool>,
     payload: web::Json<ExtendedPremarketDTO>,
@@ -692,6 +796,7 @@ pub async fn get_dynamic_info(
             icon_url: h.icon_url,
             username: h.username,
             amount_sol_lamp: h.amount_sol_lamp,
+            claimed: h.claimed,
         })
         .collect();
 
@@ -864,6 +969,7 @@ pub async fn user_joined(
         username: None,
         join_timestamp: Utc::now().timestamp_millis(),
         amount_sol_lamp: dto.join_amount_in_sol_lamport,
+        claimed: false,
     };
     println!("holder created");
 
@@ -920,39 +1026,6 @@ pub async fn finished_premarket(
             dto.base.user_wallet
         );
         return Err(e);
-    }
-    
-
-
-    let network_str = dto.network;
-    let network = SolanaNetwork::try_from(network_str.as_str())
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))?;
-    let premarket = Pubkey::from_str(&dto.base.premarket_pub_key)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket pubkey"))?;
-    let user = Pubkey::from_str(&dto.base.user_wallet)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid user wallet"))?;
-    let params = GetPremarketDataParams { network, premarket };
-    let premarket_data = get_premarket_data(params).await?;
-    let users = premarket_data.users
-        .into_iter()
-        .map(|u| u.wallet.to_string())
-        .collect();
-    let params = DistributeTokensParams {
-        network: network,
-        user: user,
-        premarket: premarket,
-        token_mint: premarket_data.mint,
-        users: users,
-    };
-    match distribute_tk(&pool, params).await {
-        Ok(_) => {
-            let msg = format!("Tokens distributed!");
-            println!("{}", msg);
-        }
-        Err(e) => {
-            eprintln!("Error distributing tokens: {:?}", e);
-            eprintln!("Manual distribution needed for mint: {:?}", &premarket_data.mint);
-        }
     }
 
     println!(

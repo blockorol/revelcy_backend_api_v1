@@ -191,7 +191,11 @@ async fn premarket_info(
                 let lamports = u64::from_le_bytes(lamports_bytes.try_into().unwrap());
                 offset += 8;
 
-                users.push((pubkey, lamports));
+                // Extract claimed (1 byte)
+                let claimed = data[offset] != 0;
+                offset += 1;
+
+                users.push((pubkey, lamports, claimed));
             }
         }
         

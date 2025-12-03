@@ -154,6 +154,7 @@ pub struct HolderInfoDTO {
     pub username: Option<String>, // just to get based on user info
     #[serde(with = "string_as_number")]
     pub amount_sol_lamp: u64,
+    pub claimed: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -202,6 +203,27 @@ pub struct ExtendPremarketTxRequest {
     pub user_pubkey: String,      // base58
     pub premarket_account: String, // base58
     pub new_deadline: i64,        // unix timestamp
+}
+
+#[derive(serde::Deserialize)]
+pub struct ClaimTokensTxRequest {
+    pub network: String,          // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,      // base58
+    pub premarket_account: String, // base58
+    pub token_mint: String,       // base58
+}
+
+#[derive(serde::Deserialize)]
+pub struct TokenClaimedDTO {
+    pub network: String,          // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,      // base58
+    pub premarket_account: String, // base58
+}
+
+#[derive(serde::Serialize)]
+pub struct TokenClaimedResponse {
+    pub claimed: bool,
+    pub updated_in_db: bool,
 }
 
 
