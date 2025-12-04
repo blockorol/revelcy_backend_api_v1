@@ -88,6 +88,7 @@ pub struct HolderDbModel {
     pub amount_lamport: i64,
     pub join_timestamp: i64,
     pub out_timestamp: Option<i64>,
+    pub claimed: bool,
     pub avatar_url: Option<String>, // Just to response with join
     pub username: Option<String>,   // Just to response with join
 
