@@ -564,12 +564,14 @@ pub async fn build_kill_premarket_tx(
     let revelcy = read_revelcy_auth(params.network);
     let revelcy_pub = revelcy.pubkey();
     let premarket_account = params.premarket;
+    let user = params.user;
     let system_program = system_program::ID;
     let all_entered_users = params.users;
 
     let mut accounts = vec![
         AccountMeta::new(revelcy_pub, true),
         AccountMeta::new(premarket_account, false),
+        AccountMeta::new(user, false),
         AccountMeta::new_readonly(system_program, false),
     ];
 
