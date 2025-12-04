@@ -69,6 +69,7 @@ pub struct BlockchainInfoDTO {
     pub links: TokenLinksDTO,
     pub premarket_goal_sol_lamp: String,
     pub premarket_deadline: i64,
+    pub premarket_is_extended: Option<bool>,
     pub premarket_created: i64,
     pub premarket_finished: Option<i64>,
     pub mint_address: String,

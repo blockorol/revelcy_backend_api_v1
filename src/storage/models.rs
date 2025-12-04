@@ -53,6 +53,7 @@ pub struct PremarketInfoDbModel {
 
     pub premarket_goal_sol_lamp: i64,
     pub premarket_deadline: i64,
+    pub is_extended: bool,
     pub premarket_created: i64,
     pub premarket_finished: Option<i64>,
 

@@ -95,6 +95,7 @@ pub struct PremarketInfoServiceModel {
     pub deadline_timestamp: i64,
     pub created_timestamp: i64,
     pub finished_timestamp: Option<i64>,
+    pub is_extended: bool,
     pub state: PremarketState,
 }
 
