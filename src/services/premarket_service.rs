@@ -253,6 +253,7 @@ pub async fn get_dynamic_info(
             icon_url: h.avatar_url,
             username: h.username,
             amount_sol_lamp: h.amount_lamport as u64,
+            claimed: h.claimed,
         })
         .collect();
 
@@ -319,6 +320,7 @@ pub async fn add_holder(
         join_timestamp:holder.join_timestamp,
         amount_lamport: holder.amount_sol_lamp as i64,
         out_timestamp: None,
+        claimed: false,
         avatar_url: None, 
         username: None
     };
@@ -487,8 +489,8 @@ pub async fn get_premarket_data(
     let users_len_bytes: [u8; 4] = data[0..4].try_into().unwrap();
     let users_len = u32::from_le_bytes(users_len_bytes) as usize;
 
-    // Each user entry: 32 (pubkey) + 8 (lamports)
-    let users_section_len = users_len.checked_mul(40)
+    // Each user entry: 32 (pubkey) + 8 (lamports) + 1 (claimed)
+    let users_section_len = users_len.checked_mul(41)
         .ok_or_else(|| ErrorBadRequest("Users length overflow"))?;
 
     let needed_len = 4 + users_section_len + (8 + 1 + 8 + 8 + 32); // vec length + users + tail fields (end_timestamp + extended_premarket + goal + max + mint)
@@ -502,11 +504,13 @@ pub async fn get_premarket_data(
         let pk_slice = &data[offset..offset+32];
         let wallet = Pubkey::new_from_array(pk_slice.try_into().unwrap());
         let lamports = u64::from_le_bytes(data[offset+32..offset+40].try_into().unwrap());
+        let claimed = data[offset+40] != 0;
         users.push(PremarketOnchainUser {
             wallet,
             contributed_lamports: lamports,
+            claimed,
         });
-        offset += 40;
+        offset += 41;
     }
 
     // Tail fields
@@ -628,4 +632,60 @@ pub async fn update_premarket_deadline(
     }
 
     Ok(())
+}
+
+pub async fn check_and_update_claimed_status(
+    pool: &PgPool,
+    client: &RpcClient,
+    premarket_pubkey: &Pubkey,
+    user_wallet: &str,
+) -> Result<(bool, bool), actix_web::Error> {
+    // Get on-chain premarket data
+    let onchain_data = get_premarket_data(client, premarket_pubkey)
+        .await
+        .map_err(ErrorInternalServerError)?;
+
+    // Parse user wallet pubkey
+    let user_pubkey = Pubkey::from_str(user_wallet)
+        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid user wallet address"))?;
+
+    // Find user in on-chain data
+    let user_entry = onchain_data.users.iter().find(|u| u.wallet == user_pubkey);
+
+    match user_entry {
+        Some(user) if user.claimed => {
+            // User has claimed on-chain, update database
+            let affected = premarket_repo::update_holder_claimed_status(
+                pool,
+                &premarket_pubkey.to_string(),
+                user_wallet,
+                true,
+            )
+            .await
+            .map_err(ErrorInternalServerError)?;
+
+            println!(
+                "✅ Updated claimed status for user {} in premarket {}: affected {} rows",
+                user_wallet,
+                premarket_pubkey,
+                affected
+            );
+
+            Ok((true, affected > 0))
+        }
+        Some(_user) => {
+            // User exists but hasn't claimed yet
+            println!(
+                "ℹ️  User {} has not claimed tokens yet in premarket {}",
+                user_wallet, premarket_pubkey
+            );
+            Ok((false, false))
+        }
+        None => {
+            // User not found in premarket
+            Err(actix_web::error::ErrorNotFound(
+                format!("User {} not found in premarket {}", user_wallet, premarket_pubkey),
+            ))
+        }
+    }
 }
