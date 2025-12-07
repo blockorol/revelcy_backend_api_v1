@@ -48,6 +48,7 @@ pub async fn get_full_premarket_info(
                 goal: PremarketGoal{
                     solana_lamp: pm_db.premarket_goal_sol_lamp,
                 },
+                is_extended: pm_db.is_extended,
                 deadline_timestamp: pm_db.premarket_deadline,
                 created_timestamp: pm_db.premarket_created,
                 finished_timestamp: pm_db.premarket_finished,
@@ -134,6 +135,7 @@ pub async fn get_list(
                 goal: PremarketGoal {
                     solana_lamp: pm_db.premarket_goal_sol_lamp,
                 },
+                is_extended: pm_db.is_extended,
                 deadline_timestamp: pm_db.premarket_deadline,
                 created_timestamp: pm_db.premarket_created,
                 finished_timestamp: pm_db.premarket_finished,
@@ -171,6 +173,7 @@ pub async fn create_full_premarket_info(
         premarket_deadline: premarket.deadline_timestamp,
         premarket_created: premarket.created_timestamp,
         premarket_finished: premarket.finished_timestamp,
+        is_extended: false,
         state: premarket.state.to_string(),
     };
 
