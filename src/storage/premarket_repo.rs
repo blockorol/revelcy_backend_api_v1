@@ -519,7 +519,8 @@ pub async fn update_premarket_deadline(
     let res = sqlx::query(
         r#"
         UPDATE premarket_info
-        SET premarket_deadline = $1
+        SET premarket_deadline = $1,
+            is_extended = true
         WHERE bc_address = $2
         "#,
     )

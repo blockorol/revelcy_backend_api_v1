@@ -593,6 +593,7 @@ pub async fn extended_premarket(
 pub async fn extend_premarket_tx(
     req: HttpRequest,
     payload: web::Json<ExtendPremarketTxRequest>,
+    pool: web::Data<PgPool>,
 ) -> Result<HttpResponse, actix_web::Error> {
     let dto = payload.into_inner();
 
@@ -616,8 +617,30 @@ pub async fn extend_premarket_tx(
         None => return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token")),
     }
 
-    let premarket = Pubkey::from_str(&dto.premarket_account)
+    let premarket_key = Pubkey::from_str(&dto.premarket_account)
         .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_account"))?;
+
+    let params = GetPremarketDataParams { network, premarket: premarket_key };
+    let premarket = premarket_service::get_full_premarket_info(&pool, &premarket_key)
+    .await
+    .map_err(|e| {
+        eprintln!("❌ Failed to get premarket({}) data: {}", params, e);
+        actix_web::error::ErrorBadRequest("Premarket not found")
+    })?
+    .ok_or_else(|| {
+        eprintln!("❌ Premarket not found ({})", params);
+        actix_web::error::ErrorBadRequest("Premarket not found")
+    })?;
+
+    if premarket.main_info.is_extended {
+        return Ok(HttpResponse::BadRequest().body("Premarket is already extended"));
+    }
+    if premarket.main_info.state != PremarketState::Premarket {
+        return Ok(HttpResponse::BadRequest().body("Premarket is wrong state for extension"));
+    }
+    if premarket.main_info.deadline_timestamp > Utc::now().timestamp() {
+        return Ok(HttpResponse::BadRequest().body("Premarket deadline has not yet passed"));
+    }
 
     let now = Utc::now().timestamp();
     
@@ -628,7 +651,7 @@ pub async fn extend_premarket_tx(
         return Ok(HttpResponse::BadRequest().body("new_deadline cannot be more than 1 week from now"));
     }
 
-    match build_extend_premarket_tx(network, user, premarket, dto.new_deadline).await {
+    match build_extend_premarket_tx(network, user, premarket_key, dto.new_deadline).await {
         Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
         Err(e) => {
             eprintln!("extend_premarket error: {e:?}");
@@ -674,6 +697,7 @@ pub async fn get_list_main_info(
                 twitter:  premarket_info.token_info.links.twitter.clone(),
                 web_site: premarket_info.token_info.links.web_site.clone(),
             },
+            premarket_is_extended: premarket_info.is_extended,
             premarket_goal_sol_lamp: premarket_info.goal.solana_lamp.to_string(),
             premarket_deadline: premarket_info.deadline_timestamp,
             premarket_created:  premarket_info.created_timestamp,
@@ -733,6 +757,7 @@ pub async fn get_main_info(
         },
         premarket_goal_sol_lamp: premarket_info.main_info.goal.solana_lamp.to_string(),
         premarket_deadline: premarket_info.main_info.deadline_timestamp,
+        premarket_is_extended: premarket_info.main_info.is_extended,
         premarket_created: premarket_info.main_info.created_timestamp,
         premarket_finished:  premarket_info.main_info.finished_timestamp,
         mint_address: premarket_info.main_info.token_info.address.clone(),
@@ -887,7 +912,8 @@ pub async fn created_premarket(
         deadline_timestamp: info.premarket_deadline,
         created_timestamp: info.premarket_created,
         blockchain_address: info.premarket_address,
-        finished_timestamp: None
+        finished_timestamp: None,
+        is_extended: false,
     };
 
 
