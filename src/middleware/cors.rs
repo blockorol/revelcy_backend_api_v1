@@ -16,6 +16,7 @@ pub fn cors_middleware() -> Cors {
         eprintln!("⚠️  CORS_ORIGINS not set — allow_any_origin()");
         cors = cors.allow_any_origin();
     } else {
+        println!("🔐 Allow CORS with settings: {}", origin);
         for origin in origins.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
             println!("🔐 Allow CORS origin: {}", origin);
             cors = cors.allowed_origin(origin);
