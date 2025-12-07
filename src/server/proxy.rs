@@ -7,7 +7,6 @@ use awc::Client;
 pub fn proxy_scope() -> Scope {
     web::scope("/proxy")
         .route("/pump_ipfs", web::post().to(pump_ipfs))
-        .route("/pump_ipfs", web::method(actix_web::http::Method::OPTIONS).to(pump_ipfs_options))
 }
 
 async fn pump_ipfs_options() -> HttpResponse {
@@ -55,9 +54,5 @@ async fn pump_ipfs(req: HttpRequest, mut payload: web::Payload) -> actix_web::Re
     })?;
     info!("<<< upstream status: {}, bytes: {}", status, bytes.len());
 
-    Ok(HttpResponse::build(status)
-        .insert_header(("Access-Control-Allow-Origin", "*"))
-        .insert_header(("Access-Control-Allow-Methods", "POST, OPTIONS"))
-        .insert_header(("Access-Control-Allow-Headers", "Content-Type, Authorization"))
-        .body(bytes))
+    Ok(HttpResponse::build(status).body(bytes))
 }

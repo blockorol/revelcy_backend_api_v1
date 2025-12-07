@@ -5,10 +5,12 @@ use std::env;
 pub fn cors_middleware() -> Cors {
     let mut cors = Cors::default()
         .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
-        .allowed_headers(vec![
-            http::header::AUTHORIZATION,
-            http::header::CONTENT_TYPE,
-        ])
+        .allow_any_header() // <<-- ключевая штука
+
+        // .allowed_headers(vec![
+        //     http::header::AUTHORIZATION,
+        //     http::header::CONTENT_TYPE,
+        // ])
         .max_age(3600);
         cors = cors.allow_any_origin();
 
