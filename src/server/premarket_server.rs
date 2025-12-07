@@ -621,7 +621,7 @@ pub async fn extend_premarket_tx(
         .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_account"))?;
 
     let params = GetPremarketDataParams { network, premarket: premarket_key };
-    let premarket = premarket_service::get_full_premarket_info(&pool, &premarket_key)
+    let premarket = premarket_service::get_full_premarket_info(&pool, &dto.premarket_account)
     .await
     .map_err(|e| {
         eprintln!("❌ Failed to get premarket({}) data: {}", params, e);
