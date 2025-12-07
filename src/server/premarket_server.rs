@@ -624,11 +624,11 @@ pub async fn extend_premarket_tx(
     let premarket = premarket_service::get_full_premarket_info(&pool, &dto.premarket_account)
     .await
     .map_err(|e| {
-        eprintln!("❌ Failed to get premarket({}) data: {}", params, e);
+        eprintln!("❌ Failed to get premarket({}) data: {}", params.premarket.to_string(), e);
         actix_web::error::ErrorBadRequest("Premarket not found")
     })?
     .ok_or_else(|| {
-        eprintln!("❌ Premarket not found ({})", params);
+        eprintln!("❌ Premarket not found ({})", params.premarket.to_string());
         actix_web::error::ErrorBadRequest("Premarket not found")
     })?;
 
