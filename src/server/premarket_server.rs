@@ -101,6 +101,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
 
 pub async fn sign_create_premarket_transaction(
     req: HttpRequest,
+    pool: web::Data<PgPool>, // ← добавили pool
     payload: web::Json<TxToSignRequest>,
 ) -> Result<HttpResponse, Error> {
     let dto = payload.into_inner();
@@ -121,34 +122,16 @@ pub async fn sign_create_premarket_transaction(
 
     let tx_type = dto.tx_type.as_str();
 
-    // --- Validation (for each type we log) ---
+    // --- Validation ---
     let is_supported = match tx_type {
-        "create_premarket" => {
-            println!("[VALIDATE] create_premarket");
-            true
-        }
-        "join_premarket" => {
-            println!("[VALIDATE] join_premarket");
-            true
-        }
-        "out_of_premarket" => {
-            println!("[VALIDATE] out_of_premarket");
-            true
-        }
-        "finish_premarket" => {
-            println!("[VALIDATE] finish_premarket");
-            true
-        }
-        "extend_premarket" => {
-            println!("[VALIDATE] extend_premarket");
-            true
-        }
-        "claim_tokens" => {
-            println!("[VALIDATE] claim_tokens");
-            true
-        }
+        "create_premarket" |
+        "join_premarket"   |
+        "out_of_premarket" |
+        "finish_premarket" |
+        "extend_premarket" |
+        "claim_tokens"     |
         "refund_premarket" => {
-            println!("[VALIDATE] refund_premarket");
+            println!("[VALIDATE] {tx_type}");
             true
         }
         _ => {
@@ -157,21 +140,69 @@ pub async fn sign_create_premarket_transaction(
         }
     };
 
-    // --- If validation fails -> do nothing ---
     if !is_supported {
-        return Ok(HttpResponse::BadRequest().body(format!(
-            "invalid tx_type: {}",
-            tx_type
-        )));
+        return Ok(HttpResponse::BadRequest()
+            .body(format!("invalid tx_type: {}", tx_type)));
     }
 
-    // --- One unified signing for all supported types ---
-    let sign_result = solana_service::sign_tx_with_revelcy(&dto.unsigned_tx, network);
+    // ============================
+    // 1️⃣ finish_premarket → extra signature: mint_kp
+    // ============================
+    if tx_type == "finish_premarket" {
+        // premarket is requered
+        let premarket_str = match dto.premarket {
+            Some(ref v) => v,
+            None => {
+                return Ok(HttpResponse::BadRequest()
+                    .body("missing premarket field for finish_premarket"));
+            }
+        };
 
-    match sign_result {
-        Ok(signed_tx) => Ok(HttpResponse::Ok().json(TxOnlyResponse {
-            transaction: signed_tx,
-        })),
+        let premarket_pub = match Pubkey::from_str(premarket_str) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Ok(HttpResponse::BadRequest()
+                    .body("invalid premarket pubkey format"));
+            }
+        };
+
+        // mint_kp загрузка
+        let mint_kp = match solana_service::get_mint_kp(pool.get_ref(), premarket_pub).await {
+            Ok(kp) => kp,
+            Err(e) => {
+                eprintln!("mint_kp load error: {e:?}");
+                return Ok(HttpResponse::InternalServerError()
+                    .body("failed to load mint key"));
+            }
+        };
+
+        let extra_signers = vec![mint_kp];
+        let signed = solana_service::sign_tx_with_revelcy(
+            &dto.unsigned_tx,
+            network,
+            Some(&extra_signers),
+        );
+
+        return match signed {
+            Ok(tx) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: tx })),
+            Err(e) => {
+                eprintln!("sign_transaction error (finish): {e:?}");
+                Ok(HttpResponse::InternalServerError().body("failed to sign transaction"))
+            }
+        };
+    }
+
+    // ============================
+    // 2️⃣ Rest → only Revelcy sign
+    // ============================
+    let signed = solana_service::sign_tx_with_revelcy(
+        &dto.unsigned_tx,
+        network,
+        None, // ← без доп. ключей
+    );
+
+    match signed {
+        Ok(tx) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: tx })),
         Err(e) => {
             eprintln!("sign_transaction error ({tx_type}): {e:?}");
             Ok(HttpResponse::InternalServerError().body("failed to sign transaction"))

@@ -198,6 +198,7 @@ fn anchor_sighash_global(name: &str) -> [u8; 8] {
 pub fn sign_tx_with_revelcy(
     tx_base64: &str,
     network: SolanaNetwork,
+    extra_signers: Option<&[Keypair]>,
 ) -> Result<String> {
     let revelcy = read_revelcy_auth(network);
 
@@ -210,9 +211,21 @@ pub fn sign_tx_with_revelcy(
 
     let blockhash = tx.message.recent_blockhash;
 
-    tx.try_partial_sign(&[&revelcy], blockhash)
-        .context("failed to partially sign transaction with revelcyAuth")?;
+    // 2) Собираем список всех подписантов: revelcy + (опционально) доп. ключи
+    let mut signers: Vec<&Keypair> = Vec::new();
+    signers.push(&revelcy);
 
+    if let Some(extra) = extra_signers {
+        for kp in extra {
+            signers.push(kp);
+        }
+    }
+
+    // 3) Частичная подпись всеми ключами
+    tx.try_partial_sign(&signers, blockhash)
+        .context("failed to partially sign transaction with revelcyAuth and extra_signers")?;
+
+    // 4) Сериализация обратно в base64
     let signed_raw =
         bincode::serialize(&tx).context("bincode serialize(signed Transaction) failed")?;
     let signed_b64 = BASE64.encode(signed_raw);
@@ -431,6 +444,33 @@ pub async fn build_out_premarket_tx_unsigned(
         premarket_pda: params.premarket,
     })
 }
+
+pub async fn get_mint_kp(
+    pool: &PgPool,
+    premarket: Pubkey,
+) -> Result<Keypair> {
+    // mint key из БД
+    let pair = get_mint_signing_keypair_by_premarket(pool, &premarket.to_string())
+        .await
+        .context("signing_keys: mint key not found for this premarket")?
+        .ok_or_else(|| anyhow!("mint key not found for premarket {}", premarket))?;
+
+    let mint_bytes = parse_privkey_64(&pair.priv_key)
+        .context("mint priv_key parse failed")?;
+
+    if mint_bytes.len() != 64 {
+        return Err(anyhow!(
+            "mint priv_key must be 64 bytes, got {}",
+            mint_bytes.len()
+        ));
+    }
+
+    let mint_kp = Keypair::from_bytes(&mint_bytes)
+        .context("mint priv_key: invalid keypair bytes")?;
+
+    Ok(mint_kp)
+}
+
 pub async fn build_finish_premarket_tx_unsigned(
     pool: &PgPool,
     params: BuildFinishTxParams,
@@ -440,17 +480,8 @@ pub async fn build_finish_premarket_tx_unsigned(
     let (mint_auth, pump_fun_program_id, pumpfun_global, metaplex_program, event_auth,
          fee_recipient, rent_sysvar, global_volume_accum, fee_program) = constants(params.network);
 
-    // mint key из БД
-    let pair = get_mint_signing_keypair_by_premarket(pool, &params.premarket.to_string())
-        .await
-        .context("signing_keys: mint key not found for this premarket")?
-        .ok_or_else(|| anyhow!("mint key not found for premarket {}", params.premarket))?;
-
-    let mint_bytes = parse_privkey_64(&pair.priv_key).context("mint priv_key parse failed")?;
-    if mint_bytes.len() != 64 {
-        return Err(anyhow!("mint priv_key must be 64 bytes, got {}", mint_bytes.len()));
-    }
-    let mint_kp = Keypair::from_bytes(&mint_bytes).context("mint priv_key: invalid keypair bytes")?;
+    // mint key из БД через helper
+    let mint_kp = get_mint_kp(pool, params.premarket).await?;
     let mint_pub = mint_kp.pubkey();
 
     // PDAs/ATAs
