@@ -251,7 +251,8 @@ pub struct PremarketTransactionDTO {
 pub struct TxToSignRequest {
     pub network: String,          // "devnet" | "mainnet-beta"
     pub unsigned_tx: String,      // base64(serialized Transaction)
-    pub tx_type: String,        // "create_premarket" | "join_premarket" | ...
+    pub tx_type: String,          // "create_premarket" | "join_premarket" | ...
+    pub premarket: Option<String>,
 }
 
 #[derive(Deserialize)]
