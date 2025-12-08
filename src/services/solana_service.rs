@@ -337,111 +337,13 @@ pub async fn build_create_premarket_tx_unsigned(
     result
 }
 
-
-pub async fn build_create_premarket_tx(
-    pool: &PgPool,
-    params: BuildPremarketTxParams,
-) -> Result<BuiltTxCreation> {
-    let program_id = program_id_for(params.network);
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
-
-    let mint = if let Some(pair) = get_unused_signing_key(pool).await? {
-        let bytes = parse_privkey_64(&pair.priv_key)
-            .context("signing_keys.priv_key parse failed")?;
-        Keypair::from_bytes(&bytes).context("invalid keypair bytes in signing_keys")?
-    } else {
-        Keypair::new()
-    };
-
-
-    let mint_pub = mint.pubkey().to_string();
-
-    println!("Using mint pubkey: {}", mint_pub);
-
-    delete_signing_key_by_pubkey(pool, &mint_pub).await?;
-
-    let revelcy = read_revelcy_auth(params.network);
-    let revelcy_pub = revelcy.pubkey();
-    let (premarket_pda, _bump) =
-        Pubkey::find_program_address(&[revelcy_pub.as_ref(), mint.pubkey().as_ref()], &program_id);
-
-    let priv_b58 = bs58::encode(mint.to_bytes()).into_string();
-    insert_mint_signing_key(pool, &premarket_pda.to_string(), &mint_pub, &priv_b58)
-        .await
-        .context("failed to insert mint key into signing_keys")?;
-
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .context("failed to get current time")?
-        .as_secs() as i64;
-    
-    let one_month_seconds = 30 * 24 * 60 * 60; // 30 days in seconds
-    let max_deadline = now + one_month_seconds;
-    
-    if params.deadline > max_deadline {
-        return Err(anyhow!("deadline cannot be longer than 1 month from now. Current time: {}, Max allowed: {}, Provided: {}", 
-            now, max_deadline, params.deadline));
-    }
-
-    // всё дальнейшее — в одном блоке, чтобы при Err сделать cleanup
-    let result: Result<BuiltTxCreation> = async {
-        let mut data = Vec::with_capacity(8 + 128);
-        data.extend_from_slice(&anchor_sighash_global(CREATE_METHOD_NAME));
-        CreatePremarketArgsBorsh {
-            end_timestamp: params.deadline,
-            goal_sol: params.goal,
-            max_sol: params.max,
-            name: params.name,
-            symbol: params.symbol,
-            uri: params.uri,
-            amount_in_lamports: params.creator_allocate,
-        }
-        .serialize(&mut data)
-        .context("borsh serialize of CreatePremarketArgs failed")?;
-
-
-        let accounts = vec![
-            AccountMeta::new_readonly(revelcy_pub, true), // revelcy_auth (signer)
-            AccountMeta::new(premarket_pda, false),       // premarket_account (writable)
-            AccountMeta::new_readonly(mint.pubkey(), false), // mint
-            AccountMeta::new(params.user, true),          // user (writable, signer)
-            AccountMeta::new_readonly(system_program::ID, false), // system_program
-        ];
-        let ix = Instruction { program_id, accounts, data };
-
-        let blockhash = get_valid_latest_blockhash(&rpc, 50).await.context("get_latest_blockhash failed")?;
-
-        let msg = Message::new(&[ix], Some(&params.user));
-        let mut tx = Transaction::new_unsigned(msg);
-        tx.try_partial_sign(&[&revelcy], blockhash)
-            .context("failed to partially sign transaction with revelcyAuth")?;
-
-        let raw = bincode::serialize(&tx).context("bincode serialize(Transaction) failed")?;
-        let tx_b64 = BASE64.encode(raw);
-
-        Ok(BuiltTxCreation { mint_address: mint_pub.clone(), tx_base64: tx_b64, premarket_pda })
-    }
-    .await;
-
-    if let Err(ref e) = result {
-        if let Err(clean_err) = delete_signing_key_by_pubkey(pool, &mint_pub).await {
-            eprintln!(
-                "cleanup: failed to delete signing_key for pub_key {}: {clean_err:?} (root error: {e:?})",
-                mint_pub
-            );
-        }
-    }
-
-    result
-}
-
 #[derive(borsh::BorshSerialize)]
 struct JoinArgsBorsh {
     amount_in_lamports: u64,
 }
 
-// join → async + nonblocking
-pub async fn build_join_premarket_tx(
+// join → unsigned
+pub async fn build_join_premarket_tx_unsigned(
     params: crate::models::premarket::BuildJoinTxParams,
 ) -> Result<crate::models::premarket::BuiltTx> {
     let program_id = program_id_for(params.network);
@@ -470,19 +372,25 @@ pub async fn build_join_premarket_tx(
     ];
 
     let ix = Instruction { program_id, accounts, data };
-    let blockhash = get_valid_latest_blockhash(&rpc, 50).await.context("get_latest_blockhash failed")?;
+    let blockhash = get_valid_latest_blockhash(&rpc, 50)
+        .await
+        .context("get_latest_blockhash failed")?;
+
     let msg = Message::new(&[ix], Some(&params.user));
     let mut tx = Transaction::new_unsigned(msg);
 
-    tx.try_partial_sign(&[&revelcy], blockhash)?;
+    // только выставляем blockhash, без подписей
+    tx.message.recent_blockhash = blockhash;
 
     let raw = bincode::serialize(&tx)?;
     let tx_b64 = BASE64.encode(raw);
-    Ok(crate::models::premarket::BuiltTx { tx_base64: tx_b64, premarket_pda: params.premarket })
+    Ok(crate::models::premarket::BuiltTx {
+        tx_base64: tx_b64,
+        premarket_pda: params.premarket,
+    })
 }
-
-// out → async + nonblocking
-pub async fn build_out_premarket_tx(
+// out → unsigned
+pub async fn build_out_premarket_tx_unsigned(
     params: crate::models::premarket::BuildOutTxParams,
 ) -> Result<crate::models::premarket::BuiltTx> {
     let program_id = program_id_for(params.network);
@@ -507,17 +415,23 @@ pub async fn build_out_premarket_tx(
     ];
 
     let ix = Instruction { program_id, accounts, data };
-    let blockhash = get_valid_latest_blockhash(&rpc, 50).await.context("get_latest_blockhash failed")?;
+    let blockhash = get_valid_latest_blockhash(&rpc, 50)
+        .await
+        .context("get_latest_blockhash failed")?;
+
     let msg = Message::new(&[ix], Some(&params.user));
     let mut tx = Transaction::new_unsigned(msg);
-    tx.try_partial_sign(&[&revelcy], blockhash)?;
+
+    tx.message.recent_blockhash = blockhash;
 
     let raw = bincode::serialize(&tx)?;
     let tx_b64 = BASE64.encode(raw);
-    Ok(crate::models::premarket::BuiltTx { tx_base64: tx_b64, premarket_pda: params.premarket })
+    Ok(crate::models::premarket::BuiltTx {
+        tx_base64: tx_b64,
+        premarket_pda: params.premarket,
+    })
 }
-
-pub async fn build_finish_premarket_tx(
+pub async fn build_finish_premarket_tx_unsigned(
     pool: &PgPool,
     params: BuildFinishTxParams,
 ) -> Result<BuiltTx> {
@@ -591,17 +505,23 @@ pub async fn build_finish_premarket_tx(
     let ix_finish = Instruction { program_id, accounts, data };
     let ix_compute = ComputeBudgetInstruction::set_compute_unit_limit(400_000);
 
-    let blockhash = get_valid_latest_blockhash(&rpc, 50).await.context("get_latest_blockhash failed")?;
+    let blockhash = get_valid_latest_blockhash(&rpc, 50)
+        .await
+        .context("get_latest_blockhash failed")?;
+
     let msg = Message::new(&[ix_compute, ix_finish], Some(&params.user));
     let mut tx = Transaction::new_unsigned(msg);
 
-    tx.try_partial_sign(&[&revelcy, &mint_kp], blockhash)
-        .context("partial sign (revelcy + mint) failed")?;
+    // без подписей, только blockhash
+    tx.message.recent_blockhash = blockhash;
 
     let raw = bincode::serialize(&tx).context("serialize tx failed")?;
     let tx_b64 = BASE64.encode(raw);
 
-    Ok(BuiltTx { tx_base64: tx_b64, premarket_pda: params.premarket })
+    Ok(BuiltTx {
+        tx_base64: tx_b64,
+        premarket_pda: params.premarket,
+    })
 }
 
 pub async fn distribute_tk(
@@ -682,12 +602,12 @@ pub async fn distribute_tk(
 
 }
 
-pub async fn build_kill_premarket_tx(
+pub async fn build_kill_premarket_tx_unsigned(
     pool: &PgPool,
     params: BuildKillTxParams,
 ) -> Result<BuiltTx> {
     //extract params 
-    //build tx
+    //build tx (unsigned)
     //return tx build 
 
     let program_id = program_id_for(params.network);
@@ -725,21 +645,26 @@ pub async fn build_kill_premarket_tx(
     //data.extend_from_slice(&discriminator);
     data.extend_from_slice(&anchor_sighash_global(KILL_METHOD_NAME));
 
-
     let ix = Instruction { program_id, accounts, data };
-    let blockhash = get_valid_latest_blockhash(&client, 50).await.context("get_latest_blockhash failed")?;
+    let blockhash = get_valid_latest_blockhash(&client, 50)
+        .await
+        .context("get_latest_blockhash failed")?;
+
     let msg = Message::new(&[ix], Some(&params.user));
     let mut tx = Transaction::new_unsigned(msg);
-    tx.try_partial_sign(&[&revelcy], blockhash)
-        .context("partial sign (revelcy + mint) failed")?;
+
+    tx.message.recent_blockhash = blockhash;
 
     let raw = bincode::serialize(&tx).context("serialize tx failed")?;
     let tx_b64 = BASE64.encode(raw);
 
-    Ok(BuiltTx { tx_base64: tx_b64, premarket_pda: params.premarket })
+    Ok(BuiltTx {
+        tx_base64: tx_b64,
+        premarket_pda: params.premarket,
+    })
 }
 
-pub async fn build_extend_premarket_tx(
+pub async fn build_extend_premarket_tx_unsigned(
     network: SolanaNetwork,
     user: Pubkey,
     premarket: Pubkey,
@@ -803,19 +728,24 @@ pub async fn build_extend_premarket_tx(
 
     let ix = Instruction { program_id, accounts, data };
     
-    let blockhash = get_valid_latest_blockhash(&client, 50).await.context("get_latest_blockhash failed")?;
+    let blockhash = get_valid_latest_blockhash(&client, 50)
+        .await
+        .context("get_latest_blockhash failed")?;
     let msg = Message::new(&[ix], Some(&user));
     let mut tx = Transaction::new_unsigned(msg);
-    tx.try_partial_sign(&[&revelcy_auth], blockhash)
-        .context("partial sign (revelcy) failed")?;
+
+    tx.message.recent_blockhash = blockhash;
 
     let raw = bincode::serialize(&tx).context("serialize tx failed")?;
     let tx_b64 = BASE64.encode(raw);
 
-    Ok(BuiltTx { tx_base64: tx_b64, premarket_pda: premarket })
+    Ok(BuiltTx {
+        tx_base64: tx_b64,
+        premarket_pda: premarket,
+    })
 }
 
-pub async fn build_claim_tokens_tx(
+pub async fn build_claim_tokens_tx_unsigned(
     params: crate::models::premarket::BuildClaimTokensTxParams,
 ) -> Result<crate::models::premarket::BuiltTx> {
     let program_id = program_id_for(params.network);
@@ -845,16 +775,21 @@ pub async fn build_claim_tokens_tx(
 
     let ix = Instruction { program_id, accounts, data };
     
-    let blockhash = get_valid_latest_blockhash(&client, 50).await.context("get_latest_blockhash failed")?;
+    let blockhash = get_valid_latest_blockhash(&client, 50)
+        .await
+        .context("get_latest_blockhash failed")?;
     let msg = Message::new(&[ix], Some(&params.user));
     let mut tx = Transaction::new_unsigned(msg);
-    tx.try_partial_sign(&[&revelcy_auth], blockhash)
-        .context("partial sign (revelcy) failed")?;
+
+    tx.message.recent_blockhash = blockhash;
 
     let raw = bincode::serialize(&tx).context("serialize tx failed")?;
     let tx_b64 = BASE64.encode(raw);
 
-    Ok(crate::models::premarket::BuiltTx { tx_base64: tx_b64, premarket_pda: params.premarket })
+    Ok(crate::models::premarket::BuiltTx {
+        tx_base64: tx_b64,
+        premarket_pda: params.premarket,
+    })
 }
 
 pub async fn test_build_kill_premarket_tx(
@@ -987,26 +922,26 @@ pub async fn get_premarket_data(
     })
 }
 
-pub async fn update_premarket_data(
+pub async fn update_premarket_data_tx_unsigned(
     _pool: &PgPool,
     params: UpdatePremarketDataParams,
 ) -> Result<BuiltTx> {
     let network = SolanaNetwork::try_from(params.network.as_str())
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network")).unwrap();
+        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))
+        .unwrap();
 
     let program_id = program_id_for(network);
-
-    let client = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
+    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
 
     let revelcy_auth = read_revelcy_auth(network);
-
     let premarket_account = Pubkey::from_str(&params.premarket_account)?;
-
     let system_program = system_program::ID;
+
+    let user_pubkey = Pubkey::from_str(&params.user_pubkey)?;
 
     let accounts = vec![
         AccountMeta::new(revelcy_auth.pubkey(), true),
-        AccountMeta::new(Pubkey::from_str(&params.user_pubkey)?, true),
+        AccountMeta::new(user_pubkey, true),
         AccountMeta::new(premarket_account, false),
         AccountMeta::new_readonly(system_program, false),
     ];
@@ -1024,7 +959,6 @@ pub async fn update_premarket_data(
         pub creator: Option<String>,
     }
 
-
     let args = UpdatePremarketDataArgs {
         end_timestamp: params.end_timestamp,
         end_timestamp_updated: params.end_timestamp_updated,
@@ -1038,14 +972,7 @@ pub async fn update_premarket_data(
     };
 
     let discriminator: [u8; 8] = [
-        20,
-        82,
-        102,
-        101,
-        150,
-        216,
-        162,
-        52
+        20, 82, 102, 101, 150, 216, 162, 52,
     ];
 
     let mut data = Vec::with_capacity(8 + args.try_to_vec().unwrap().len());
@@ -1053,18 +980,26 @@ pub async fn update_premarket_data(
     data.extend(args.try_to_vec().unwrap());
 
     let ix = Instruction { program_id, accounts, data };
-    
-    let blockhash = get_valid_latest_blockhash(&client, 50).await.context("get_latest_blockhash failed")?;
-    let msg = Message::new(&[ix], Some(&Pubkey::from_str(&params.user_pubkey)?));
+
+    let blockhash = get_valid_latest_blockhash(&rpc, 50)
+        .await
+        .context("get_latest_blockhash failed")?;
+
+    let msg = Message::new(&[ix], Some(&user_pubkey));
     let mut tx = Transaction::new_unsigned(msg);
-    tx.try_partial_sign(&[&revelcy_auth], blockhash)
-        .context("partial sign (revelcy + mint) failed")?;
+
+    // без подписи, только свежий blockhash
+    tx.message.recent_blockhash = blockhash;
 
     let raw = bincode::serialize(&tx).context("serialize tx failed")?;
     let tx_b64 = BASE64.encode(raw);
 
-    Ok(BuiltTx { tx_base64: tx_b64, premarket_pda: premarket_account })
+    Ok(BuiltTx {
+        tx_base64: tx_b64,
+        premarket_pda: premarket_account,
+    })
 }
+
 
 // move me to utils
 fn parse_privkey_64(s: &str) -> Result<Vec<u8>> {

@@ -50,20 +50,19 @@ use crate::services::{
 use crate::middleware::jwt::JwtMiddleware;
 
 use crate::services::solana_service::{
-    sign_tx_with_revelcy,
-    build_create_premarket_tx_unsigned, 
-    build_join_premarket_tx, 
-    build_out_premarket_tx, 
-    build_finish_premarket_tx, 
-    build_kill_premarket_tx,
-    build_extend_premarket_tx,
-    build_claim_tokens_tx,
-    test_build_kill_premarket_tx,
+    build_claim_tokens_tx_unsigned,
+    build_create_premarket_tx_unsigned,
+    build_extend_premarket_tx_unsigned,
+    build_finish_premarket_tx_unsigned,
+    build_join_premarket_tx_unsigned,
+    build_kill_premarket_tx_unsigned,
+    build_out_premarket_tx_unsigned,
+    check_tx_service, deploy_tx_service,
     distribute_tk,
     get_premarket_data,
-    update_premarket_data,
-    deploy_tx_service,
-    check_tx_service,
+    sign_tx_with_revelcy,
+    test_build_kill_premarket_tx,
+    update_premarket_data_tx_unsigned
 };
 
 pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
@@ -102,41 +101,82 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
 
 pub async fn sign_create_premarket_transaction(
     req: HttpRequest,
-    // _pool: web::Data<PgPool>,
     payload: web::Json<TxToSignRequest>,
 ) -> Result<HttpResponse, Error> {
     let dto = payload.into_inner();
     let token_opt = req.extensions().get::<String>().cloned();
 
-    let token_data = jwt_service::decode_jwt_with_user_info(&token_opt.unwrap_or_default())
+    // --- JWT validation ---
+    let _token_data = jwt_service::decode_jwt_with_user_info(&token_opt.unwrap_or_default())
         .map_err(|e| {
             eprintln!("failed to decode jwt: {e:?}");
             actix_web::error::ErrorUnauthorized("invalid token")
         })?;
 
+    // --- Parse network ---
     let network = match SolanaNetwork::try_from(dto.network.as_str()) {
         Ok(n) => n,
         Err(_) => return Ok(HttpResponse::BadRequest().body("invalid network")),
     };
 
+    let tx_type = dto.tx_type.as_str();
 
-    if dto.tx_type == "create_premarket" {
-        return match solana_service::sign_tx_with_revelcy(
-            &dto.unsigned_tx,
-            network,
-        ) {
-            Ok(signed_tx) => {
-                Ok(HttpResponse::Ok().json(TxOnlyResponse {
-                    transaction: signed_tx,
-                }))
-            }
-            Err(e) => {
-                eprintln!("sign_and_store_create_premarket_transaction error: {e:?}");
-                Ok(HttpResponse::InternalServerError().body("failed to sign transaction"))
-            }
-        };
+    // --- Validation (for each type we log) ---
+    let is_supported = match tx_type {
+        "create_premarket" => {
+            println!("[VALIDATE] create_premarket");
+            true
+        }
+        "join_premarket" => {
+            println!("[VALIDATE] join_premarket");
+            true
+        }
+        "out_of_premarket" => {
+            println!("[VALIDATE] out_of_premarket");
+            true
+        }
+        "finish_premarket" => {
+            println!("[VALIDATE] finish_premarket");
+            true
+        }
+        "extend_premarket" => {
+            println!("[VALIDATE] extend_premarket");
+            true
+        }
+        "claim_tokens" => {
+            println!("[VALIDATE] claim_tokens");
+            true
+        }
+        "refund_premarket" => {
+            println!("[VALIDATE] refund_premarket");
+            true
+        }
+        _ => {
+            println!("[INVALID TX TYPE] {tx_type}");
+            false
+        }
+    };
+
+    // --- If validation fails -> do nothing ---
+    if !is_supported {
+        return Ok(HttpResponse::BadRequest().body(format!(
+            "invalid tx_type: {}",
+            tx_type
+        )));
     }
-    Ok(HttpResponse::BadRequest().body("invalid tx_type"))
+
+    // --- One unified signing for all supported types ---
+    let sign_result = solana_service::sign_tx_with_revelcy(&dto.unsigned_tx, network);
+
+    match sign_result {
+        Ok(signed_tx) => Ok(HttpResponse::Ok().json(TxOnlyResponse {
+            transaction: signed_tx,
+        })),
+        Err(e) => {
+            eprintln!("sign_transaction error ({tx_type}): {e:?}");
+            Ok(HttpResponse::InternalServerError().body("failed to sign transaction"))
+        }
+    }
 }
 
 pub async fn create_premarket_tx(
@@ -258,7 +298,7 @@ pub async fn join_premarket_tx(
         amount: dto.amount_sol_lamp,
     };
 
-    match build_join_premarket_tx(params).await {
+    match build_join_premarket_tx_unsigned(params).await {
         Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
         Err(e) => {
             eprintln!("build_join_premarket_tx error: {e:?}");
@@ -305,7 +345,7 @@ pub async fn out_premarket_tx(
 
     let params = BuildOutTxParams { network, user, premarket };
 
-    match build_out_premarket_tx(params).await {
+    match build_out_premarket_tx_unsigned(params).await {
         Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
         Err(e) => {
             eprintln!("build_out_premarket_tx error: {e:?}");
@@ -348,7 +388,7 @@ pub async fn finish_premarket_tx(
 
     let params = BuildFinishTxParams { network, user, premarket };
 
-    match build_finish_premarket_tx(pool.get_ref(), params).await {
+    match build_finish_premarket_tx_unsigned(pool.get_ref(), params).await {
         Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
         Err(e) => {
             eprintln!("build_finish_premarket_tx error: {e:?}");
@@ -434,7 +474,7 @@ pub async fn kill_premarket_tx(
 
     let params = BuildKillTxParams { network, user, premarket, users };
 
-    match build_kill_premarket_tx(pool.get_ref(), params).await {
+    match build_kill_premarket_tx_unsigned(pool.get_ref(), params).await {
         Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
         Err(e) => {
             eprintln!("build_kill_premarket_tx error: {e:?}");
@@ -512,7 +552,7 @@ pub async fn claim_tokens_tx(
         token_mint,
     };
 
-    match build_claim_tokens_tx(params).await {
+    match build_claim_tokens_tx_unsigned(params).await {
         Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
         Err(e) => {
             eprintln!("build_claim_tokens_tx error: {e:?}");
@@ -697,7 +737,7 @@ pub async fn extend_premarket_tx(
         return Ok(HttpResponse::BadRequest().body("new_deadline cannot be more than 1 week from now"));
     }
 
-    match build_extend_premarket_tx(network, user, premarket_key, dto.new_deadline).await {
+    match build_extend_premarket_tx_unsigned(network, user, premarket_key, dto.new_deadline).await {
         Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
         Err(e) => {
             eprintln!("extend_premarket error: {e:?}");
@@ -1178,10 +1218,10 @@ pub async fn update_premarket_data_tx(
         creator: dto.creator,
     };
 
-    match update_premarket_data(pool.get_ref(), params).await {
+    match update_premarket_data_tx_unsigned(pool.get_ref(), params).await {
         Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
         Err(e) => {
-            eprintln!("build_kill_premarket_tx error: {e:?}");
+            eprintln!("update_premarket_data error: {e:?}");
             Ok(HttpResponse::InternalServerError().body("failed to build kill tx"))
         }
     }
