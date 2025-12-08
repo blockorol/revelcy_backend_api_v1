@@ -195,6 +195,31 @@ fn anchor_sighash_global(name: &str) -> [u8; 8] {
     out
 }
 
+pub fn sign_tx_with_revelcy(
+    tx_base64: &str,
+    network: SolanaNetwork,
+) -> Result<String> {
+    let revelcy = read_revelcy_auth(network);
+
+    // 1) Декодим вход (уже частично/полностью подписанную пользователем транзу)
+    let raw = BASE64
+        .decode(tx_base64)
+        .context("BASE64 decode(tx_base64) failed")?;
+    let mut tx: Transaction =
+        bincode::deserialize(&raw).context("bincode deserialize(Transaction) failed")?;
+
+    let blockhash = tx.message.recent_blockhash;
+
+    tx.try_partial_sign(&[&revelcy], blockhash)
+        .context("failed to partially sign transaction with revelcyAuth")?;
+
+    let signed_raw =
+        bincode::serialize(&tx).context("bincode serialize(signed Transaction) failed")?;
+    let signed_b64 = BASE64.encode(signed_raw);
+
+    Ok(signed_b64)
+}
+
 
 #[derive(BorshSerialize)]
 struct CreatePremarketArgsBorsh {
@@ -206,6 +231,112 @@ struct CreatePremarketArgsBorsh {
     uri: String,
     amount_in_lamports: u64,
 }
+
+pub async fn build_create_premarket_tx_unsigned(
+    pool: &PgPool,
+    params: BuildPremarketTxParams,
+) -> Result<BuiltTxCreation> {
+    let program_id = program_id_for(params.network);
+    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
+
+    let mint = if let Some(pair) = get_unused_signing_key(pool).await? {
+        let bytes = parse_privkey_64(&pair.priv_key)
+            .context("signing_keys.priv_key parse failed")?;
+        Keypair::from_bytes(&bytes).context("invalid keypair bytes in signing_keys")?
+    } else {
+        Keypair::new()
+    };
+
+    let mint_pub = mint.pubkey().to_string();
+
+    println!("Using mint pubkey: {}", mint_pub);
+
+    delete_signing_key_by_pubkey(pool, &mint_pub).await?;
+
+    let revelcy = read_revelcy_auth(params.network);
+    let revelcy_pub = revelcy.pubkey();
+    let (premarket_pda, _bump) =
+        Pubkey::find_program_address(&[revelcy_pub.as_ref(), mint.pubkey().as_ref()], &program_id);
+
+    let priv_b58 = bs58::encode(mint.to_bytes()).into_string();
+    insert_mint_signing_key(pool, &premarket_pda.to_string(), &mint_pub, &priv_b58)
+        .await
+        .context("failed to insert mint key into signing_keys")?;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .context("failed to get current time")?
+        .as_secs() as i64;
+
+    let one_month_seconds = 30 * 24 * 60 * 60; // 30 days in seconds
+    let max_deadline = now + one_month_seconds;
+
+    if params.deadline > max_deadline {
+        return Err(anyhow!(
+            "deadline cannot be longer than 1 month from now. Current time: {}, Max allowed: {}, Provided: {}",
+            now,
+            max_deadline,
+            params.deadline
+        ));
+    }
+
+    // всё дальнейшее — в одном блоке, чтобы при Err сделать cleanup
+    let result: Result<BuiltTxCreation> = async {
+        let mut data = Vec::with_capacity(8 + 128);
+        data.extend_from_slice(&anchor_sighash_global(CREATE_METHOD_NAME));
+        CreatePremarketArgsBorsh {
+            end_timestamp: params.deadline,
+            goal_sol: params.goal,
+            max_sol: params.max,
+            name: params.name,
+            symbol: params.symbol,
+            uri: params.uri,
+            amount_in_lamports: params.creator_allocate,
+        }
+        .serialize(&mut data)
+        .context("borsh serialize of CreatePremarketArgs failed")?;
+
+        let accounts = vec![
+            AccountMeta::new_readonly(revelcy_pub, true),          // revelcy_auth (signer, но пока без подписи)
+            AccountMeta::new(premarket_pda, false),                // premarket_account (writable)
+            AccountMeta::new_readonly(mint.pubkey(), false),       // mint
+            AccountMeta::new(params.user, true),                   // user (writable, signer)
+            AccountMeta::new_readonly(system_program::ID, false),  // system_program
+        ];
+        let ix = Instruction { program_id, accounts, data };
+
+        let blockhash = get_valid_latest_blockhash(&rpc, 50)
+            .await
+            .context("get_latest_blockhash failed")?;
+
+        let msg = Message::new(&[ix], Some(&params.user));
+        let mut tx = Transaction::new_unsigned(msg);
+
+        tx.message.recent_blockhash = blockhash;
+
+        let raw = bincode::serialize(&tx).context("bincode serialize(Transaction) failed")?;
+        let tx_b64 = BASE64.encode(raw);
+
+        Ok(BuiltTxCreation {
+            mint_address: mint_pub.clone(),
+            tx_base64: tx_b64,
+            premarket_pda,
+        })
+    }
+    .await;
+
+    if let Err(ref e) = result {
+        if let Err(clean_err) = delete_signing_key_by_pubkey(pool, &mint_pub).await {
+            eprintln!(
+                "cleanup: failed to delete signing_key for pub_key {}: {clean_err:?} (root error: {e:?})",
+                mint_pub
+            );
+        }
+    }
+
+    result
+}
+
 
 pub async fn build_create_premarket_tx(
     pool: &PgPool,

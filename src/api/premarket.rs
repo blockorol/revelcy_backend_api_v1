@@ -248,6 +248,13 @@ pub struct PremarketTransactionDTO {
 }
 
 #[derive(Deserialize)]
+pub struct TxToSignRequest {
+    pub network: String,          // "devnet" | "mainnet-beta"
+    pub unsigned_tx: String,      // base64(serialized Transaction)
+    pub tx_type: String,        // "create_premarket" | "join_premarket" | ...
+}
+
+#[derive(Deserialize)]
 pub struct CreatePremarketTxRequest {
     pub network: String,         // "devnet" | "mainnet-beta"
     pub user_pubkey: String,     // base58

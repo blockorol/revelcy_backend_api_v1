@@ -9,6 +9,7 @@ use actix_web::HttpMessage;
 use solana_sdk::pubkey::Pubkey;
 
 use crate::api::premarket::{
+    TxToSignRequest,
     JoinPremarketTxRequest, OutPremarketTxRequest, TxOnlyResponse, FinishPremarketTxRequest,
     CreatePremarketTxRequest, CreatePremarketTxResponse,
     GetListQuery, GetListMainInfoDTO, UpdateCommunityDTO,
@@ -44,13 +45,13 @@ use crate::models::premarket::{
 };
 
 use crate::services::{
-    premarket_service,
-    jwt_service,
+    jwt_service, premarket_service, solana_service
 };
 use crate::middleware::jwt::JwtMiddleware;
 
 use crate::services::solana_service::{
-    build_create_premarket_tx, 
+    sign_tx_with_revelcy,
+    build_create_premarket_tx_unsigned, 
     build_join_premarket_tx, 
     build_out_premarket_tx, 
     build_finish_premarket_tx, 
@@ -95,6 +96,47 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/tx/claim_tokens", web::post().to(claim_tokens_tx))
         
         .route("/tx/test_kill",   web::post().to(test_kill_premarket_tx))
+
+        .route("/tx/sign_create_transaction", web::post().to(sign_create_premarket_transaction))
+}
+
+pub async fn sign_create_premarket_transaction(
+    req: HttpRequest,
+    // _pool: web::Data<PgPool>,
+    payload: web::Json<TxToSignRequest>,
+) -> Result<HttpResponse, Error> {
+    let dto = payload.into_inner();
+    let token_opt = req.extensions().get::<String>().cloned();
+
+    let token_data = jwt_service::decode_jwt_with_user_info(&token_opt.unwrap_or_default())
+        .map_err(|e| {
+            eprintln!("failed to decode jwt: {e:?}");
+            actix_web::error::ErrorUnauthorized("invalid token")
+        })?;
+
+    let network = match SolanaNetwork::try_from(dto.network.as_str()) {
+        Ok(n) => n,
+        Err(_) => return Ok(HttpResponse::BadRequest().body("invalid network")),
+    };
+
+
+    if dto.tx_type == "create_premarket" {
+        return match solana_service::sign_tx_with_revelcy(
+            &dto.unsigned_tx,
+            network,
+        ) {
+            Ok(signed_tx) => {
+                Ok(HttpResponse::Ok().json(TxOnlyResponse {
+                    transaction: signed_tx,
+                }))
+            }
+            Err(e) => {
+                eprintln!("sign_and_store_create_premarket_transaction error: {e:?}");
+                Ok(HttpResponse::InternalServerError().body("failed to sign transaction"))
+            }
+        };
+    }
+    Ok(HttpResponse::BadRequest().body("invalid tx_type"))
 }
 
 pub async fn create_premarket_tx(
@@ -137,6 +179,10 @@ pub async fn create_premarket_tx(
     if dto.goal_sol_lamp == 0 || dto.max_sol_lamp == 0 || dto.max_sol_lamp < dto.goal_sol_lamp {
         return Ok(HttpResponse::BadRequest().body("invalid goal/max values"));
     }
+    
+    if dto.creator_allocate_lamp > dto.goal_sol_lamp {
+        return Ok(HttpResponse::BadRequest().body("creator_allocate_lamp must be less or equal to goal_sol_lamp"));
+    }
 
     let params = BuildPremarketTxParams {
         network,
@@ -150,7 +196,7 @@ pub async fn create_premarket_tx(
         creator_allocate: dto.creator_allocate_lamp,
     };
 
-    match build_create_premarket_tx(pool.get_ref(), params).await {
+    match build_create_premarket_tx_unsigned(pool.get_ref(), params).await {
         Ok(res) => {
             let body = CreatePremarketTxResponse {
                 transaction: res.tx_base64,
