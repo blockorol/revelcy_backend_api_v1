@@ -45,8 +45,7 @@ use crate::models::premarket::{
 };
 
 use crate::services::{
-    premarket_service,
-    jwt_service,
+    jwt_service, premarket_service, solana_service
 };
 use crate::middleware::jwt::JwtMiddleware;
 
@@ -101,44 +100,43 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/tx/sign_create_transaction", web::post().to(sign_create_premarket_transaction))
 }
 
-
 pub async fn sign_create_premarket_transaction(
     req: HttpRequest,
-    pool: web::Data<PgPool>,
+    // _pool: web::Data<PgPool>,
     payload: web::Json<TxToSignRequest>,
 ) -> Result<HttpResponse, Error> {
     let dto = payload.into_inner();
-    let _token = req.extensions().get::<String>().cloned();
+    let token_opt = req.extensions().get::<String>().cloned();
 
-    let token_data = jwt_service::decode_jwt_with_user_info(&_token.unwrap_or_default()).unwrap();
+    let token_data = jwt_service::decode_jwt_with_user_info(&token_opt.unwrap_or_default())
+        .map_err(|e| {
+            eprintln!("failed to decode jwt: {e:?}");
+            actix_web::error::ErrorUnauthorized("invalid token")
+        })?;
 
-    match token_data.current_wallet {
-        Some(pk) => {
-            if pk != dto.user_pubkey {
-                println!("user_pubkey does not match token");
-                return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token"));
-            } else {
-                println!("user_pubkey matches token");
+    let network = match SolanaNetwork::try_from(dto.network.as_str()) {
+        Ok(n) => n,
+        Err(_) => return Ok(HttpResponse::BadRequest().body("invalid network")),
+    };
+
+
+    if dto.tx_type == "create_premarket" {
+        return match solana_service::sign_tx_with_revelcy(
+            &dto.unsigned_tx,
+            network,
+        ) {
+            Ok(signed_tx) => {
+                Ok(HttpResponse::Ok().json(TxOnlyResponse {
+                    transaction: signed_tx,
+                }))
             }
-        }
-        None => return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token")),
-    }
-    if (dto.tx_type == "create_premarket") {
-        match premarket_service::sign_tx_with_revelcy(
-            pool.get_ref(),
-            &dto.transaction,
-            &dto.user_pubkey,
-        )
-        .await
-        {
-            Ok(signed_tx) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: signed_tx })),
             Err(e) => {
                 eprintln!("sign_and_store_create_premarket_transaction error: {e:?}");
                 Ok(HttpResponse::InternalServerError().body("failed to sign transaction"))
             }
-        }
+        };
     }
-    return Ok(HttpResponse::BadRequest().body("invalid tx_type"));
+    Ok(HttpResponse::BadRequest().body("invalid tx_type"))
 }
 
 pub async fn create_premarket_tx(

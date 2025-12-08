@@ -197,7 +197,7 @@ fn anchor_sighash_global(name: &str) -> [u8; 8] {
 
 pub fn sign_tx_with_revelcy(
     tx_base64: &str,
-    network: Network,
+    network: SolanaNetwork,
 ) -> Result<String> {
     let revelcy = read_revelcy_auth(network);
 
