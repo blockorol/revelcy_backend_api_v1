@@ -310,7 +310,7 @@ pub async fn build_create_premarket_tx_unsigned(
         .context("borsh serialize of CreatePremarketArgs failed")?;
 
         let accounts = vec![
-            AccountMeta::new_readonly(revelcy_pub, true),          // revelcy_auth (signer, но пока без подписи)
+            AccountMeta::new(revelcy_pub, true),          // revelcy_auth (signer, но пока без подписи)
             AccountMeta::new(premarket_pda, false),                // premarket_account (writable)
             AccountMeta::new_readonly(mint.pubkey(), false),       // mint
             AccountMeta::new(params.user, true),                   // user (writable, signer)
