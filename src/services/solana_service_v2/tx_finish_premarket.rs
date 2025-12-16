@@ -26,7 +26,6 @@ use super::env::{program_id_for, read_revelcy_auth, rpc_url};
 use super::utils::{anchor_sighash_global, get_valid_latest_blockhash, parse_privkey_64, pda};
 
 use crate::storage::signing_keys::get_mint_signing_keypair_by_premarket;
-use solana_sdk::signature::Keypair;
 
 pub async fn get_mint_kp(pool: &PgPool, premarket: Pubkey) -> Result<Keypair> {
     let pair = get_mint_signing_keypair_by_premarket(pool, &premarket.to_string())

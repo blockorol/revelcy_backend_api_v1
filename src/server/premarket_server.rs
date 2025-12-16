@@ -250,7 +250,7 @@ pub async fn sign_transaction(
             premarket.main_info.is_extended,
             premarket.main_info.state,
             premarket.main_info.deadline_timestamp,
-            parsed.params.new_deadline,
+            parsed.new_deadline,
         )
         .map_err(ApiError::from_field_errors)?;
 

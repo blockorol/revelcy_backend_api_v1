@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use crate::models::premarket::SolanaNetwork;
 use solana_sdk::{
     pubkey::Pubkey,

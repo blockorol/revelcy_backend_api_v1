@@ -3,6 +3,7 @@ use bincode;
 use bs58;
 use sha2::{Digest, Sha256};
 use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
+use solana_sdk::system_program::ID as SYSTEM_PROGRAM_ID;
 use solana_sdk::{
     commitment_config::CommitmentConfig,
     hash::Hash,
@@ -283,7 +284,6 @@ pub async fn distribute_tk(
     let client = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
     let revelcy_auth = read_revelcy_auth(params.network);
     let premarket_account = params.premarket;
-    let system_program = system_program::ID;
     let all_entered_users = params.users;
     let token_mint = params.token_mint;
 
@@ -298,7 +298,7 @@ pub async fn distribute_tk(
         AccountMeta::new(revelcy_auth_ata, false),
         AccountMeta::new(premarket_account, false),
         AccountMeta::new(token_mint, false),
-        AccountMeta::new_readonly(system_program, false),
+        AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
         AccountMeta::new_readonly(token_program_id, false),
         AccountMeta::new_readonly(associated_token_program_id, false),
     ];
@@ -361,14 +361,13 @@ pub async fn build_kill_premarket_tx_unsigned(
     let revelcy_pub = revelcy.pubkey();
     let premarket_account = params.premarket;
     let user = params.user;
-    let system_program = system_program::ID;
     let all_entered_users = params.users;
 
     let mut accounts = vec![
         AccountMeta::new(revelcy_pub, true),
         AccountMeta::new(premarket_account, false),
         AccountMeta::new(user, false),
-        AccountMeta::new_readonly(system_program, false),
+        AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
     ];
 
     for user in all_entered_users {
@@ -422,13 +421,12 @@ pub async fn test_build_kill_premarket_tx(
     let revelcy = read_revelcy_auth(params.network);
     let revelcy_pub = revelcy.pubkey();
     let premarket_account = params.premarket;
-    let system_program = system_program::ID;
     let all_entered_users = params.users;
 
     let mut accounts = vec![
         AccountMeta::new(revelcy_pub, true),
         AccountMeta::new(premarket_account, false),
-        AccountMeta::new_readonly(system_program, false),
+        AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
     ];
 
     for user in all_entered_users {
