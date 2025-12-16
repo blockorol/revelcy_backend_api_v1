@@ -51,10 +51,15 @@ use crate::services::{
 };
 use crate::middleware::jwt::JwtMiddleware;
 
+use crate::services::solana_service_v2::{
+    build_create_premarket_tx_unsigned,
+    parse_create_premarket_tx_from_base64
+};
+
+
 use crate::services::solana_service::{
     parse_create_premarket_tx_from_base64,
     build_claim_tokens_tx_unsigned,
-    build_create_premarket_tx_unsigned,
     build_extend_premarket_tx_unsigned,
     build_finish_premarket_tx_unsigned,
     build_join_premarket_tx_unsigned,
