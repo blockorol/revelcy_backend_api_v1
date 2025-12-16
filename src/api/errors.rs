@@ -36,6 +36,12 @@ pub enum ApiErrorCode {
     PremarketDeadlineNotPassed,
     PremarketExtendTooLate,
 
+    // Premarket-finish validation
+    PremarketNotFound,
+    PremarketFinishWrongState,
+    PremarketFinishTooEarly,
+    PremarketFinishGoalNotReached,
+    PremarketAlreadyFinished,
 
     // Internal Error
     InternalBuildTxFailed,
@@ -265,6 +271,11 @@ impl ResponseError for ApiError {
             | PremarketWrongStateForExtension
             | PremarketDeadlineNotPassed
             | PremarketExtendTooLate
+            | PremarketNotFound
+            | PremarketFinishWrongState
+            | PremarketFinishTooEarly
+            | PremarketFinishGoalNotReached
+            | PremarketAlreadyFinished
             => StatusCode::BAD_REQUEST,
             
             WrongUserPubkeyForUser => StatusCode::FORBIDDEN,

@@ -35,6 +35,10 @@ pub use tx_update_premarket_data::{
     build_update_premarket_data_tx_unsigned,
     update_premarket_data_tx_unsigned,
 };
-pub use tx_extend_premarket::build_extend_premarket_tx_unsigned;
+pub use tx_extend_premarket::{
+    build_extend_premarket_tx_unsigned,
+    parse_extend_premarket_tx_from_base64,
+    ParsedExtendPremarketTx,
+};
 pub use tx_claim_tokens::build_claim_tokens_tx_unsigned;
 

@@ -129,3 +129,51 @@ pub fn validate_extend_premarket(
     if errors.is_empty() { Ok(()) } else { Err(errors) }
 }
 
+pub fn validate_finish_premarket(
+    premarket: &FullPremarketInfo,
+    dynamic: &TokenDynamicInfo,
+) -> Result<(), Vec<FieldError>> {
+    let mut errors = Vec::new();
+    let now = Utc::now().timestamp();
+
+    // 1) state
+    if premarket.main_info.state != PremarketState::Premarket {
+        errors.push(FieldError {
+            field: "premarket",
+            code: ApiErrorCode::PremarketFinishWrongState,
+            message: "premarket is wrong state for finish",
+        });
+    }
+
+    // 2) already finished flag (optional but полезно)
+    if premarket.main_info.finished_timestamp.is_some() {
+        errors.push(FieldError {
+            field: "premarket",
+            code: ApiErrorCode::PremarketAlreadyFinished,
+            message: "premarket is already finished",
+        });
+    }
+
+    // 3) deadline passed
+    if premarket.main_info.deadline_timestamp > now {
+        errors.push(FieldError {
+            field: "premarket",
+            code: ApiErrorCode::PremarketFinishTooEarly,
+            message: "premarket deadline has not yet passed",
+        });
+    }
+
+    // 4) goal reached (по твоей динамике это reserved_sol_lamp)
+    // Важно: проверь, что это реально та метрика, которая должна сравниваться с goal.
+    // Если goal лежит в premarket.main_info.goal.goal_sol_lamp — подставь корректное поле.
+    // let goal = premarket.main_info.goal.goal_sol_lamp;
+    // if dynamic.reserved_sol_lamp < goal {
+    //     errors.push(FieldError {
+    //         field: "premarket",
+    //         code: ApiErrorCode::PremarketFinishGoalNotReached,
+    //         message: "premarket goal not reached",
+    //     });
+    // }
+
+    if errors.is_empty() { Ok(()) } else { Err(errors) }
+}
