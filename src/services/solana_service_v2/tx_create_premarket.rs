@@ -21,8 +21,8 @@ use crate::storage::signing_keys::{
     insert_mint_signing_key,
 };
 
-use super::constants::{
-    CREATE_METHOD_NAME,
+use super::constants::CREATE_METHOD_NAME;
+use super::env::{
     rpc_url,
     read_revelcy_auth,
     program_id_for,
@@ -46,7 +46,6 @@ struct CreatePremarketArgsBorsh {
     pub amount_in_lamports: u64,
 }
 
-// то, что возвращаем наружу
 #[derive(Debug, Clone)]
 pub struct ParsedCreatePremarketTx {
     pub revelcy_auth: Pubkey,

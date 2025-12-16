@@ -19,18 +19,14 @@ use solana_transaction_status::UiTransactionEncoding;
 use crate::api::premarket;
 
 use crate::models::premarket::{
-    BuildFinishTxParams, 
     BuildKillTxParams, 
     BuiltTx, 
-    BuiltTxCreation,
     CheckTxParams,
     GetPremarketDataParams, 
     DistributeTokensParams, 
     PremarketOnchainUser,
     PremarketOnchainData,
-    PremarketState,
     SolanaNetwork, 
-    UpdatePremarketDataParams, 
     DeployTxParams,
 };
 
@@ -62,10 +58,6 @@ impl TryFrom<&str> for SolanaNetwork {
     }
 }
 
-const CREATE_METHOD_NAME: &str = "create_premarket";
-const JOIN_METHOD_NAME: &str = "join_to_premarket";
-const OUT_METHOD_NAME: &str  = "out_of_premarket";
-const FINISH_METHOD_NAME: &str = "finish_premarket";
 const KILL_METHOD_NAME: &str = "kill_premarket";
 const DISTRIBUTE_METHOD_NAME: &str = "distribute_tokens";
 
@@ -259,111 +251,6 @@ fn find_anchor_instruction<'a>(
     Err(anyhow!("no matching anchor instruction"))
 }
 
-fn resolve_account(msg: &Message, account_index: usize) -> Result<Pubkey> {
-    msg.account_keys
-        .get(account_index)
-        .copied()
-        .ok_or_else(|| anyhow!("account index out of bounds"))
-}
-
-
-
-
-#[derive(borsh::BorshSerialize)]
-struct JoinArgsBorsh {
-    amount_in_lamports: u64,
-}
-
-// join → unsigned
-pub async fn build_join_premarket_tx_unsigned(
-    params: crate::models::premarket::BuildJoinTxParams,
-) -> Result<crate::models::premarket::BuiltTx> {
-    let program_id = program_id_for(params.network);
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
-
-    // data = discriminator + borsh(args)
-    let mut data = Vec::with_capacity(8 + 16);
-    data.extend_from_slice(&anchor_sighash_global(JOIN_METHOD_NAME));
-    JoinArgsBorsh { amount_in_lamports: params.amount }
-        .serialize(&mut data)
-        .map_err(|e| anyhow!("borsh serialize failed: {e}"))?;
-
-    let revelcy = read_revelcy_auth(params.network);
-    let revelcy_pub = revelcy.pubkey();
-
-    // IDL:
-    // 1) revelcy_auth (writable, signer)
-    // 2) user         (writable, signer)
-    // 3) premarket_account (writable)
-    // 4) system_program
-    let accounts = vec![
-        AccountMeta::new(revelcy_pub, true),
-        AccountMeta::new(params.user, true),
-        AccountMeta::new(params.premarket, false),
-        AccountMeta::new_readonly(system_program::ID, false),
-    ];
-
-    let ix = Instruction { program_id, accounts, data };
-    let blockhash = get_valid_latest_blockhash(&rpc, 50)
-        .await
-        .context("get_latest_blockhash failed")?;
-
-    let msg = Message::new(&[ix], Some(&params.user));
-    let mut tx = Transaction::new_unsigned(msg);
-
-    // только выставляем blockhash, без подписей
-    tx.message.recent_blockhash = blockhash;
-
-    let raw = bincode::serialize(&tx)?;
-    let tx_b64 = BASE64.encode(raw);
-    Ok(crate::models::premarket::BuiltTx {
-        tx_base64: tx_b64,
-        premarket_pda: params.premarket,
-    })
-}
-
-// out → unsigned
-pub async fn build_out_premarket_tx_unsigned(
-    params: crate::models::premarket::BuildOutTxParams,
-) -> Result<crate::models::premarket::BuiltTx> {
-    let program_id = program_id_for(params.network);
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
-
-    let mut data = Vec::with_capacity(8);
-    data.extend_from_slice(&anchor_sighash_global(OUT_METHOD_NAME));
-
-    let revelcy = read_revelcy_auth(params.network);
-    let revelcy_pub = revelcy.pubkey();
-
-    // IDL:
-    // 1) revelcy_auth (signer)
-    // 2) user         (writable, signer)
-    // 3) premarket_account (writable)
-    // 4) system_program
-    let accounts = vec![
-        AccountMeta::new_readonly(revelcy_pub, true),
-        AccountMeta::new(params.user, true),
-        AccountMeta::new(params.premarket, false),
-        AccountMeta::new_readonly(system_program::ID, false),
-    ];
-
-    let ix = Instruction { program_id, accounts, data };
-    let blockhash = get_valid_latest_blockhash(&rpc, 50)
-        .await
-        .context("get_latest_blockhash failed")?;
-
-    let msg = Message::new(&[ix], Some(&params.user));
-    let mut tx = Transaction::new_unsigned(msg);
-
-    tx.message.recent_blockhash = blockhash;
-
-    let raw = bincode::serialize(&tx)?;
-    let tx_b64 = BASE64.encode(raw);
-    Ok(crate::models::premarket::BuiltTx {
-        tx_base64: tx_b64,
-        premarket_pda: params.premarket,
-    })
-}
 
 pub async fn get_mint_kp(
     pool: &PgPool,
@@ -389,90 +276,6 @@ pub async fn get_mint_kp(
         .context("mint priv_key: invalid keypair bytes")?;
 
     Ok(mint_kp)
-}
-
-pub async fn build_finish_premarket_tx_unsigned(
-    pool: &PgPool,
-    params: BuildFinishTxParams,
-) -> Result<BuiltTx> {
-    let program_id = program_id_for(params.network);
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
-    let (mint_auth, pump_fun_program_id, pumpfun_global, metaplex_program, event_auth,
-         fee_recipient, rent_sysvar, global_volume_accum, fee_program) = constants(params.network);
-
-    // mint key из БД через helper
-    let mint_kp = get_mint_kp(pool, params.premarket).await?;
-    let mint_pub = mint_kp.pubkey();
-
-    // PDAs/ATAs
-    let (bonding_curve, _) = pda(&pump_fun_program_id, &[b"bonding-curve", mint_pub.as_ref()]);
-    let bonding_curve_ata = get_associated_token_address(&bonding_curve, &mint_pub);
-    let (metadata, _) = pda(&metaplex_program, &[b"metadata", metaplex_program.as_ref(), mint_pub.as_ref()]);
-    let revelcy = read_revelcy_auth(params.network);
-    let revelcy_pub = revelcy.pubkey();
-    let associated_user_ata = get_associated_token_address(&revelcy_pub, &mint_pub);
-    let (creator_vault, _) = pda(&pump_fun_program_id, &[b"creator-vault", params.user.as_ref()]);
-    let (user_volume_accum, _) = pda(&pump_fun_program_id, &[b"user_volume_accumulator", revelcy_pub.as_ref()]);
-    let seed1: &[u8] = b"fee_config";
-    let seed2: [u8; 32] = [
-        1, 86, 224, 246, 147, 102, 90, 207,
-        68, 219, 21, 104, 191, 23, 91, 170,
-        81, 137, 203, 151, 245, 210, 255, 59,
-        101, 93, 43, 182, 253, 109, 24, 176,
-    ];
-    let (fee_config, _) = Pubkey::find_program_address(&[seed1, &seed2], &fee_program);
-
-    // только discriminator
-    let mut data = Vec::with_capacity(8);
-    data.extend_from_slice(&anchor_sighash_global(FINISH_METHOD_NAME));
-
-    // IDL порядок (writable/signer строго как описано):
-    let accounts = vec![
-        AccountMeta::new(revelcy_pub, true),                // 1) revelcy_auth (writable, signer)
-        AccountMeta::new(params.premarket, false),          // 2) premarket_account (writable)
-        AccountMeta::new(mint_pub, true),                   // 3) token_mint (writable, signer)
-        AccountMeta::new_readonly(mint_auth, false),        // 4) mint_auth
-        AccountMeta::new(bonding_curve, false),             // 5) bonding_curve (writable)
-        AccountMeta::new(bonding_curve_ata, false),         // 6) bonding_curve_ata (writable)
-        AccountMeta::new(pumpfun_global, false),            // 7) global (writable)
-        AccountMeta::new(metaplex_program, false),          // 8) mpl_token_metadata (writable)
-        AccountMeta::new(metadata, false),                  // 9) metadata (writable)
-        AccountMeta::new(params.user, true),                // 10) user (writable, signer)
-        AccountMeta::new_readonly(system_program::ID, false),          // 11) system_program
-        AccountMeta::new_readonly(token_program_id, false),            // 12) token_program
-        AccountMeta::new_readonly(associated_token_program_id, false), // 13) associated_token_program
-        AccountMeta::new_readonly(rent_sysvar, false),                 // 14) rent
-        AccountMeta::new(event_auth, false),                // 15) event_auth (writable)
-        AccountMeta::new_readonly(pump_fun_program_id, false), // 16) pump_fun_program_id
-        AccountMeta::new(fee_recipient, false),             // 17) fee_recipient (writable)
-        AccountMeta::new(associated_user_ata, false),       // 18) associated_user (writable)
-        AccountMeta::new(creator_vault, false),             // 19) creator_vault (writable)
-        AccountMeta::new(global_volume_accum, false),       // 20) global_volume_accumulator (writable)
-        AccountMeta::new(user_volume_accum, false),         // 21) user_volume_accumulator (writable)
-        AccountMeta::new(fee_config, false),                // 22) fee_config (writable)
-        AccountMeta::new(fee_program, false),               // 23) fee_program (writable)
-    ];
-
-    let ix_finish = Instruction { program_id, accounts, data };
-    let ix_compute = ComputeBudgetInstruction::set_compute_unit_limit(400_000);
-
-    let blockhash = get_valid_latest_blockhash(&rpc, 50)
-        .await
-        .context("get_latest_blockhash failed")?;
-
-    let msg = Message::new(&[ix_compute, ix_finish], Some(&params.user));
-    let mut tx = Transaction::new_unsigned(msg);
-
-    // без подписей, только blockhash
-    tx.message.recent_blockhash = blockhash;
-
-    let raw = bincode::serialize(&tx).context("serialize tx failed")?;
-    let tx_b64 = BASE64.encode(raw);
-
-    Ok(BuiltTx {
-        tx_base64: tx_b64,
-        premarket_pda: params.premarket,
-    })
 }
 
 pub async fn distribute_tk(
@@ -615,134 +418,6 @@ pub async fn build_kill_premarket_tx_unsigned(
     })
 }
 
-pub async fn build_extend_premarket_tx_unsigned(
-    network: SolanaNetwork,
-    user: Pubkey,
-    premarket: Pubkey,
-    new_deadline: i64,
-) -> Result<BuiltTx> {
-
-    let program_id = program_id_for(network);
-    let client = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
-    let revelcy_auth = read_revelcy_auth(network);
-    let system_program = system_program::ID;
-
-    let accounts = vec![
-        AccountMeta::new(revelcy_auth.pubkey(), true),
-        AccountMeta::new(user, true),
-        AccountMeta::new(premarket, false),
-        AccountMeta::new_readonly(system_program, false),
-    ];
-
-    println!("Teeest Premarket Account: {:?}", premarket);
-
-    #[derive(BorshDeserialize, BorshSerialize)]
-    pub struct UpdatePremarketDataArgs {
-        pub end_timestamp: Option<i64>,
-        pub end_timestamp_updated: Option<bool>,
-        pub goal_sol: Option<u64>,
-        pub max_sol: Option<u64>,
-        pub mint: Option<String>,
-        pub name: Option<String>,
-        pub symbol: Option<String>,
-        pub uri: Option<String>,
-        pub creator: Option<String>,
-    }
-
-    let args = UpdatePremarketDataArgs {
-        end_timestamp: Some(new_deadline),
-        end_timestamp_updated: Some(true),
-        goal_sol: None,
-        max_sol: None,
-        mint: None,
-        name: None,
-        symbol: None,
-        uri: None,
-        creator: None,
-    };
-
-    // 8 is the size of the discriminator
-    let discriminator: [u8; 8] = [
-        20,
-        82,
-        102,
-        101,
-        150,
-        216,
-        162,
-        52
-    ];
-
-    let mut data = Vec::with_capacity(8 + args.try_to_vec().unwrap().len());
-    data.extend_from_slice(&discriminator);
-    data.extend(args.try_to_vec().unwrap());
-
-    let ix = Instruction { program_id, accounts, data };
-    
-    let blockhash = get_valid_latest_blockhash(&client, 50)
-        .await
-        .context("get_latest_blockhash failed")?;
-    let msg = Message::new(&[ix], Some(&user));
-    let mut tx = Transaction::new_unsigned(msg);
-
-    tx.message.recent_blockhash = blockhash;
-
-    let raw = bincode::serialize(&tx).context("serialize tx failed")?;
-    let tx_b64 = BASE64.encode(raw);
-
-    Ok(BuiltTx {
-        tx_base64: tx_b64,
-        premarket_pda: premarket,
-    })
-}
-
-pub async fn build_claim_tokens_tx_unsigned(
-    params: crate::models::premarket::BuildClaimTokensTxParams,
-) -> Result<crate::models::premarket::BuiltTx> {
-    let program_id = program_id_for(params.network);
-    let client = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
-    let revelcy_auth = read_revelcy_auth(params.network);
-    let system_program = system_program::ID;
-
-    // Get associated token accounts
-    let revelcy_auth_ata = get_associated_token_address(&revelcy_auth.pubkey(), &params.token_mint);
-    let user_ata = get_associated_token_address(&params.user, &params.token_mint);
-
-    let accounts = vec![
-        AccountMeta::new(revelcy_auth.pubkey(), true),           // 1. revelcy_auth (writable, signer)
-        AccountMeta::new(revelcy_auth_ata, false),               // 2. revelcy_auth_ata (writable)
-        AccountMeta::new(params.user, true),                     // 3. user (writable, signer)
-        AccountMeta::new(user_ata, false),                       // 4. user_ata (writable)
-        AccountMeta::new(params.premarket, false),               // 5. premarket_account (writable)
-        AccountMeta::new_readonly(params.token_mint, false),     // 6. token_mint
-        AccountMeta::new_readonly(system_program, false),        // 7. system_program
-        AccountMeta::new_readonly(token_program_id, false),      // 8. token_program
-        AccountMeta::new_readonly(associated_token_program_id, false), // 9. associated_token_program
-    ];
-
-    const CLAIM_METHOD_NAME: &str = "claim_tokens";
-    let mut data = Vec::with_capacity(8);
-    data.extend_from_slice(&anchor_sighash_global(CLAIM_METHOD_NAME));
-
-    let ix = Instruction { program_id, accounts, data };
-    
-    let blockhash = get_valid_latest_blockhash(&client, 50)
-        .await
-        .context("get_latest_blockhash failed")?;
-    let msg = Message::new(&[ix], Some(&params.user));
-    let mut tx = Transaction::new_unsigned(msg);
-
-    tx.message.recent_blockhash = blockhash;
-
-    let raw = bincode::serialize(&tx).context("serialize tx failed")?;
-    let tx_b64 = BASE64.encode(raw);
-
-    Ok(crate::models::premarket::BuiltTx {
-        tx_base64: tx_b64,
-        premarket_pda: params.premarket,
-    })
-}
-
 pub async fn test_build_kill_premarket_tx(
     _pool: &PgPool,
     params: BuildKillTxParams,
@@ -872,85 +547,6 @@ pub async fn get_premarket_data(
         mint,
     })
 }
-
-pub async fn update_premarket_data_tx_unsigned(
-    _pool: &PgPool,
-    params: UpdatePremarketDataParams,
-) -> Result<BuiltTx> {
-    let network = SolanaNetwork::try_from(params.network.as_str())
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))
-        .unwrap();
-
-    let program_id = program_id_for(network);
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
-
-    let revelcy_auth = read_revelcy_auth(network);
-    let premarket_account = Pubkey::from_str(&params.premarket_account)?;
-    let system_program = system_program::ID;
-
-    let user_pubkey = Pubkey::from_str(&params.user_pubkey)?;
-
-    let accounts = vec![
-        AccountMeta::new(revelcy_auth.pubkey(), true),
-        AccountMeta::new(user_pubkey, true),
-        AccountMeta::new(premarket_account, false),
-        AccountMeta::new_readonly(system_program, false),
-    ];
-
-    #[derive(BorshDeserialize, BorshSerialize)]
-    pub struct UpdatePremarketDataArgs {
-        pub end_timestamp: Option<i64>,
-        pub end_timestamp_updated: Option<bool>,
-        pub goal_sol: Option<u64>,
-        pub max_sol: Option<u64>,
-        pub mint: Option<String>,
-        pub name: Option<String>,
-        pub symbol: Option<String>,
-        pub uri: Option<String>,
-        pub creator: Option<String>,
-    }
-
-    let args = UpdatePremarketDataArgs {
-        end_timestamp: params.end_timestamp,
-        end_timestamp_updated: params.end_timestamp_updated,
-        goal_sol: params.goal_sol,
-        max_sol: params.max_sol,
-        mint: params.mint,
-        name: params.name,
-        symbol: params.symbol,
-        uri: params.uri,
-        creator: params.creator,
-    };
-
-    let discriminator: [u8; 8] = [
-        20, 82, 102, 101, 150, 216, 162, 52,
-    ];
-
-    let mut data = Vec::with_capacity(8 + args.try_to_vec().unwrap().len());
-    data.extend_from_slice(&discriminator);
-    data.extend(args.try_to_vec().unwrap());
-
-    let ix = Instruction { program_id, accounts, data };
-
-    let blockhash = get_valid_latest_blockhash(&rpc, 50)
-        .await
-        .context("get_latest_blockhash failed")?;
-
-    let msg = Message::new(&[ix], Some(&user_pubkey));
-    let mut tx = Transaction::new_unsigned(msg);
-
-    // без подписи, только свежий blockhash
-    tx.message.recent_blockhash = blockhash;
-
-    let raw = bincode::serialize(&tx).context("serialize tx failed")?;
-    let tx_b64 = BASE64.encode(raw);
-
-    Ok(BuiltTx {
-        tx_base64: tx_b64,
-        premarket_pda: premarket_account,
-    })
-}
-
 
 // move me to utils
 fn parse_privkey_64(s: &str) -> Result<Vec<u8>> {
