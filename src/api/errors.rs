@@ -50,7 +50,6 @@ pub enum ApiErrorCode {
     // basic error - about validation
     ValidationError,
     InvalidTxType,
-    MissingPremarket,
     InvalidPremarketPubkey,
 }
 
@@ -134,17 +133,6 @@ impl ApiError {
                 code: ApiErrorCode::InternalSignTxFailed,
                 field: None,
                 message: Some("failed to sign transaction".into()),
-                errors: None,
-            },
-        }
-    }
-    pub fn missing_premarket() -> Self {
-        Self {
-            response: ApiErrorResponse {
-                error: "validation_error",
-                code: ApiErrorCode::MissingPremarket,
-                field: Some("premarket"),
-                message: Some("missing premarket field".into()),
                 errors: None,
             },
         }
@@ -261,11 +249,9 @@ impl ResponseError for ApiError {
             | PremarketCreatorAllocateGreaterThanGoal
             | ValidationError
             | InvalidTxType
-            | MissingPremarket
             | InvalidPremarketPubkey 
             | PremarketAmountZero
             | PremarketJoinAmountTooLarge
-            | MissingPremarket 
             | InvalidTokenMintPubkey
             | PremarketAlreadyExtended
             | PremarketWrongStateForExtension

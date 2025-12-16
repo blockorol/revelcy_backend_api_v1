@@ -13,12 +13,16 @@ use solana_sdk::{
 
 use serde_json;
 
-fn pk(s: &str) -> Pubkey {
+pub fn pda(program: &Pubkey, seeds: &[&[u8]]) -> (Pubkey, u8) {
+    Pubkey::find_program_address(seeds, program)
+}
+
+pub fn pk(s: &str) -> Pubkey {
     Pubkey::from_str(s).expect("invalid pubkey")
 }
 
 #[inline]
-fn assert_len_64(bytes: &[u8], label: &str) {
+pub fn assert_len_64(bytes: &[u8], label: &str) {
     if bytes.len() != 64 {
         panic!("expected 64 bytes for {}, got {}", label, bytes.len());
     }

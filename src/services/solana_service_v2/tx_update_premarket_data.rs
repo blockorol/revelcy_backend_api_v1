@@ -14,7 +14,8 @@ use std::{str::FromStr, time::Duration};
 
 use crate::models::premarket::{BuiltTx, SolanaNetwork, UpdatePremarketDataParams};
 
-use super::constants::{program_id_for, read_revelcy_auth, rpc_url, UPDATE_PREMARKET_DATA_METHOD_NAME};
+use super::constants::UPDATE_PREMARKET_DATA_METHOD_NAME;
+use super::env::{program_id_for, read_revelcy_auth, rpc_url};
 use super::utils::{anchor_sighash_global, get_valid_latest_blockhash};
 
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
@@ -51,9 +52,14 @@ pub async fn build_update_premarket_data_tx_unsigned(
     // discriminator + borsh(args)
     let mut data = Vec::with_capacity(8 + 256);
     data.extend_from_slice(&anchor_sighash_global(UPDATE_PREMARKET_DATA_METHOD_NAME));
-    args.serialize(&mut data).context("borsh serialize UpdatePremarketDataArgs failed")?;
+    args.serialize(&mut data)
+        .context("borsh serialize UpdatePremarketDataArgs failed")?;
 
-    let ix = Instruction { program_id, accounts, data };
+    let ix = Instruction {
+        program_id,
+        accounts,
+        data,
+    };
 
     let blockhash = get_valid_latest_blockhash(&rpc, 50)
         .await
@@ -78,8 +84,8 @@ pub async fn update_premarket_data_tx_unsigned(
     let network = SolanaNetwork::try_from(params.network.as_str())
         .map_err(|e| anyhow::anyhow!("invalid network: {e}"))?;
 
-    let premarket = Pubkey::from_str(&params.premarket_account)
-        .context("invalid premarket_account pubkey")?;
+    let premarket =
+        Pubkey::from_str(&params.premarket_account).context("invalid premarket_account pubkey")?;
     let user = Pubkey::from_str(&params.user_pubkey).context("invalid user_pubkey")?;
 
     let args = UpdatePremarketDataArgs {

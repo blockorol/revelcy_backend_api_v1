@@ -4,13 +4,15 @@ use uuid::Uuid;
 use chrono::Utc;
 use actix_web::{web, Error, HttpResponse, HttpRequest, HttpMessage};
 use actix_web::error::ErrorInternalServerError;
-use crate::api::errors::{ApiError, ApiResult};
+use crate::api::errors::{ApiErrorCode, ApiError, FieldError, ApiResult};
+
 
 use solana_sdk::pubkey::Pubkey;
 use crate::server::premarket_validation::{
     validate_create_premarket,
     validate_join_premarket,
     validate_extend_premarket,
+    validate_finish_premarket,
 };
 use crate::server::auth_validation::validate_base_request;
 
@@ -56,6 +58,7 @@ use crate::services::{
 use crate::middleware::jwt::JwtMiddleware;
 
 use crate::services::solana_service_v2::{
+    get_mint_kp,
     build_create_premarket_tx_unsigned,
     parse_create_premarket_tx_from_base64,
     build_extend_premarket_tx_unsigned,
@@ -228,7 +231,7 @@ pub async fn sign_transaction(
                 }])
             })?;
 
-        if parsed.params.user != ctx.user_pubkey {
+        if parsed.user != ctx.user_pubkey {
             return Err(ApiError::wrong_user_pubkey_for_user());
         }
 

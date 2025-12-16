@@ -1,6 +1,5 @@
 use anyhow::{Context, anyhow, Result};
 use bincode;
-use borsh::{BorshSerialize, BorshDeserialize};
 use bs58;
 use sha2::{Digest, Sha256};
 use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
@@ -10,7 +9,7 @@ use solana_sdk::{
     compute_budget::ComputeBudgetInstruction,
     instruction::{AccountMeta, CompiledInstruction, Instruction},
     message::Message, pubkey::Pubkey,
-    signature::{read_keypair_file, Keypair, Signer, Signature},
+    signature::{read_keypair_file, Keypair, Signer},
     system_program, transaction::Transaction
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
@@ -32,20 +31,13 @@ use crate::models::premarket::{
 
 use crate::api::premarket::CheckTxResponse;
 
-use crate::storage::signing_keys::{
-    get_mint_signing_keypair_by_premarket,
-    insert_mint_signing_key,
-    delete_signing_key_by_pubkey
-};
+use crate::storage::signing_keys::get_mint_signing_keypair_by_premarket;
 use serde_json;
 use sqlx::PgPool;
 
 use spl_associated_token_account::ID as associated_token_program_id;
 use spl_associated_token_account::get_associated_token_address;
 use spl_token::ID as token_program_id;
-
-use crate::storage::signing_keys::get_unused_signing_key;
-
 
 impl TryFrom<&str> for SolanaNetwork {
     type Error = anyhow::Error;
@@ -320,7 +312,7 @@ pub async fn distribute_tk(
         println!("User ATA: {}", user_ata);
     }
 
-    let discriminator: [u8; 8] = [
+    let _discriminator: [u8; 8] = [
         105,
         69,
         130,
@@ -357,7 +349,7 @@ pub async fn distribute_tk(
 }
 
 pub async fn build_kill_premarket_tx_unsigned(
-    pool: &PgPool,
+    _pool: &PgPool,
     params: BuildKillTxParams,
 ) -> Result<BuiltTx> {
     //extract params 
@@ -384,7 +376,7 @@ pub async fn build_kill_premarket_tx_unsigned(
         accounts.push(AccountMeta::new(Pubkey::from_str(&user).unwrap(), false));
     }
 
-    let discriminator: [u8; 8] = [
+    let _discriminator: [u8; 8] = [
         10,
         112,
         216,

@@ -2,19 +2,14 @@ use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bincode;
 use borsh::BorshDeserialize;
-use solana_sdk::{
-    message::Message,
-    pubkey::Pubkey,
-    system_program,
-    transaction::Transaction,
-};
+use solana_sdk::{message::Message, pubkey::Pubkey, system_program, transaction::Transaction};
 
 use crate::models::premarket::SolanaNetwork;
 
-use super::constants::{UPDATE_PREMARKET_DATA_METHOD_NAME};
-use super::env::{program_id_for}; 
+use super::constants::UPDATE_PREMARKET_DATA_METHOD_NAME;
+use super::env::program_id_for;
 
-use super::tx_update_premarket_data::UpdatePremarketDataArgs;
+use super::tx_update_premarket_data::{UpdatePremarketDataArgs, build_update_premarket_data_tx_unsigned};
 use super::utils::{anchor_sighash_global, find_anchor_instruction, resolve_account};
 
 #[derive(Debug, Clone)]
@@ -33,9 +28,7 @@ pub fn parse_extend_premarket_tx_from_base64(
     let expected_sighash = anchor_sighash_global(UPDATE_PREMARKET_DATA_METHOD_NAME);
 
     // 1) base64 → bytes
-    let raw = BASE64
-        .decode(tx_b64)
-        .context("tx_base64 decode failed")?;
+    let raw = BASE64.decode(tx_b64).context("tx_base64 decode failed")?;
 
     // 2) deserialize tx
     let tx: Transaction =
@@ -70,7 +63,9 @@ pub fn parse_extend_premarket_tx_from_base64(
     let sys = resolve_account(msg, ix.accounts[3] as usize)?;
 
     if sys != system_program::ID {
-        return Err(anyhow!("invalid system_program account (expected system_program::ID)"));
+        return Err(anyhow!(
+            "invalid system_program account (expected system_program::ID)"
+        ));
     }
 
     // 6) validate "extend" shape inside update args
@@ -104,4 +99,24 @@ pub fn parse_extend_premarket_tx_from_base64(
         premarket,
         new_deadline,
     })
+}
+
+pub async fn build_extend_premarket_tx_unsigned(
+    network: SolanaNetwork,
+    user: Pubkey,
+    premarket: Pubkey,
+    new_deadline: i64,
+) -> Result<BuiltTx> {
+    let args = UpdatePremarketDataArgs {
+        end_timestamp: Some(new_deadline),
+        end_timestamp_updated: Some(true),
+        goal_sol: None,
+        max_sol: None,
+        mint: None,
+        name: None,
+        symbol: None,
+        uri: None,
+        creator: None,
+    };
+    build_update_premarket_data_tx_unsigned(network, user, premarket, args).await
 }

@@ -16,22 +16,13 @@ use std::time::Duration;
 
 use crate::models::premarket::{BuildPremarketTxParams, BuiltTxCreation, SolanaNetwork};
 use crate::storage::signing_keys::{
-    delete_signing_key_by_pubkey,
-    get_unused_signing_key,
-    insert_mint_signing_key,
+    delete_signing_key_by_pubkey, get_unused_signing_key, insert_mint_signing_key,
 };
 
 use super::constants::CREATE_METHOD_NAME;
-use super::env::{
-    rpc_url,
-    read_revelcy_auth,
-    program_id_for,
-};
+use super::env::{program_id_for, read_revelcy_auth, rpc_url};
 use super::utils::{
-    anchor_sighash_global,
-    find_anchor_instruction,
-    get_valid_latest_blockhash,
-    parse_privkey_64,
+    anchor_sighash_global, find_anchor_instruction, get_valid_latest_blockhash, parse_privkey_64,
     resolve_account,
 };
 
@@ -63,7 +54,8 @@ pub async fn build_create_premarket_tx_unsigned(
     let rpc = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
 
     let mint = if let Some(pair) = get_unused_signing_key(pool).await? {
-        let bytes = parse_privkey_64(&pair.priv_key).context("signing_keys.priv_key parse failed")?;
+        let bytes =
+            parse_privkey_64(&pair.priv_key).context("signing_keys.priv_key parse failed")?;
         Keypair::from_bytes(&bytes).context("invalid keypair bytes in signing_keys")?
     } else {
         Keypair::new()
@@ -106,7 +98,11 @@ pub async fn build_create_premarket_tx_unsigned(
             AccountMeta::new_readonly(system_program::ID, false),
         ];
 
-        let ix = Instruction { program_id, accounts, data };
+        let ix = Instruction {
+            program_id,
+            accounts,
+            data,
+        };
 
         let blockhash = get_valid_latest_blockhash(&rpc, 50)
             .await
@@ -148,7 +144,8 @@ pub fn parse_create_premarket_tx_from_base64(
 
     let raw = BASE64.decode(tx_b64).context("tx_base64 decode failed")?;
 
-    let tx: Transaction = bincode::deserialize(&raw).context("bincode deserialize(Transaction) failed")?;
+    let tx: Transaction =
+        bincode::deserialize(&raw).context("bincode deserialize(Transaction) failed")?;
     let msg: &Message = &tx.message;
 
     let ix = find_anchor_instruction(msg, &program_id, &expected_sighash)

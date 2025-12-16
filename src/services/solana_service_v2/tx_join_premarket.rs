@@ -14,15 +14,10 @@ use std::time::Duration;
 
 use crate::models::premarket::{BuildJoinTxParams, BuiltTx, SolanaNetwork};
 
-use super::constants::{JOIN_METHOD_NAME};
+use super::constants::JOIN_METHOD_NAME;
+use super::env::{program_id_for, read_revelcy_auth, rpc_url};
 use super::utils::{
-    anchor_sighash_global,
-    find_anchor_instruction,
-    get_valid_latest_blockhash,
-    program_id_for,
-    read_revelcy_auth,
-    resolve_account,
-    rpc_url,
+    anchor_sighash_global, find_anchor_instruction, get_valid_latest_blockhash, resolve_account,
 };
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
@@ -46,9 +41,11 @@ pub async fn build_join_premarket_tx_unsigned(params: BuildJoinTxParams) -> Resu
     let mut data = Vec::with_capacity(8 + 16);
     data.extend_from_slice(&anchor_sighash_global(JOIN_METHOD_NAME));
 
-    JoinArgsBorsh { amount_in_lamports: params.amount }
-        .serialize(&mut data)
-        .map_err(|e| anyhow!("borsh serialize JoinArgs failed: {e}"))?;
+    JoinArgsBorsh {
+        amount_in_lamports: params.amount,
+    }
+    .serialize(&mut data)
+    .map_err(|e| anyhow!("borsh serialize JoinArgs failed: {e}"))?;
 
     let revelcy = read_revelcy_auth(params.network);
     let revelcy_pub = revelcy.pubkey();
@@ -65,7 +62,11 @@ pub async fn build_join_premarket_tx_unsigned(params: BuildJoinTxParams) -> Resu
         AccountMeta::new_readonly(system_program::ID, false),
     ];
 
-    let ix = Instruction { program_id, accounts, data };
+    let ix = Instruction {
+        program_id,
+        accounts,
+        data,
+    };
 
     let blockhash = get_valid_latest_blockhash(&rpc, 50)
         .await
@@ -92,7 +93,8 @@ pub fn parse_join_premarket_tx_from_base64(
     let expected_sighash = anchor_sighash_global(JOIN_METHOD_NAME);
 
     let raw = BASE64.decode(tx_b64).context("tx_base64 decode failed")?;
-    let tx: Transaction = bincode::deserialize(&raw).context("bincode deserialize(Transaction) failed")?;
+    let tx: Transaction =
+        bincode::deserialize(&raw).context("bincode deserialize(Transaction) failed")?;
     let msg: &Message = &tx.message;
 
     let ix = find_anchor_instruction(msg, &program_id, &expected_sighash)
@@ -102,8 +104,8 @@ pub fn parse_join_premarket_tx_from_base64(
         return Err(anyhow!("instruction data too short (<8)"));
     }
 
-    let args = JoinArgsBorsh::try_from_slice(&ix.data[8..])
-        .context("borsh decode JoinArgs failed")?;
+    let args =
+        JoinArgsBorsh::try_from_slice(&ix.data[8..]).context("borsh decode JoinArgs failed")?;
 
     // accounts: revelcy_auth, user, premarket, system_program
     if ix.accounts.len() < 3 {
