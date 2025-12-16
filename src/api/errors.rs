@@ -16,12 +16,26 @@ pub enum ApiErrorCode {
     WrongUserPubkeyForUser,
     AuthMissingWallet,
 
-    // Premarket-validation
+    // Premarket creation-validation
     PremarketDeadlineTooEarly,
     PremarketDeadlineTooLate,
     PremarketGoalOrMaxZero,
     PremarketMaxLessThanGoal,
     PremarketCreatorAllocateGreaterThanGoal,
+
+    // Premarket Join-validation
+    PremarketAmountZero,
+    PremarketJoinAmountTooLarge,
+
+    // Premarket Mint-validation
+    InvalidTokenMintPubkey,
+
+    // Premarket extend-validation
+    PremarketAlreadyExtended,
+    PremarketWrongStateForExtension,
+    PremarketDeadlineNotPassed,
+    PremarketExtendTooLate,
+
 
     // Internal Error
     InternalBuildTxFailed,
@@ -71,6 +85,42 @@ pub struct ApiError {
 }
 
 impl ApiError {
+    pub fn invalid_token_mint() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "validation_error",
+                code: ApiErrorCode::InvalidTokenMintPubkey,
+                field: Some("token_mint"),
+                message: Some("invalid token_mint pubkey format".into()),
+                errors: None,
+            },
+        }
+    }
+
+    pub fn premarket_amount_zero() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "validation_error",
+                code: ApiErrorCode::PremarketAmountZero,
+                field: Some("amount_sol_lamp"),
+                message: Some("amount_sol_lamp must be less than 2".into()),
+                errors: None,
+            },
+        }
+    }
+
+    pub fn premarket_amount_too_large() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "validation_error",
+                code: ApiErrorCode::PremarketJoinAmountTooLarge,
+                field: Some("amount_sol_lamp"),
+                message: Some("amount_sol_lamp must be > 0".into()),
+                errors: None,
+            },
+        }
+    }
+
     pub fn internal_sign_tx_failed() -> Self {
         Self {
             response: ApiErrorResponse {
@@ -206,7 +256,16 @@ impl ResponseError for ApiError {
             | ValidationError
             | InvalidTxType
             | MissingPremarket
-            | InvalidPremarketPubkey => StatusCode::BAD_REQUEST,
+            | InvalidPremarketPubkey 
+            | PremarketAmountZero
+            | PremarketJoinAmountTooLarge
+            | MissingPremarket 
+            | InvalidTokenMintPubkey
+            | PremarketAlreadyExtended
+            | PremarketWrongStateForExtension
+            | PremarketDeadlineNotPassed
+            | PremarketExtendTooLate
+            => StatusCode::BAD_REQUEST,
             
             WrongUserPubkeyForUser => StatusCode::FORBIDDEN,
             AuthMissingWallet => StatusCode::UNAUTHORIZED,

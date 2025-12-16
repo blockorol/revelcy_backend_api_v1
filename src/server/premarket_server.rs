@@ -273,147 +273,113 @@ pub async fn create_premarket_tx(
 pub async fn join_premarket_tx(
     req: HttpRequest,
     payload: web::Json<JoinPremarketTxRequest>,
-) -> Result<HttpResponse, actix_web::Error> {
+) -> ApiResult<HttpResponse> {
     let dto = payload.into_inner();
 
-    let network = match SolanaNetwork::try_from(dto.network.as_str()) {
-        Ok(n) => n,
-        Err(_) => return Ok(HttpResponse::BadRequest().body("invalid network")),
-    };
-    let user = match Pubkey::from_str(&dto.user_pubkey) {
-        Ok(p) => p,
-        Err(_) => return Ok(HttpResponse::BadRequest().body("invalid user_pubkey")),
-    };
+    // 1) jwt + network + сверка user_pubkey с токеном
+    let ctx = validate_base_request(
+        &req,
+        dto.network.as_str(),
+        Some(dto.user_pubkey.as_str()),
+    )?;
 
-    let _token = req.extensions().get::<String>().cloned();
-
-    let token_data = jwt_service::decode_jwt_with_user_info(&_token.unwrap_or_default()).unwrap();
-
-    match token_data.current_wallet {
-        Some(pk) => {
-            if pk != dto.user_pubkey {
-                println!("user_pubkey does not match token");
-                return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token"));
-            } else {
-                println!("user_pubkey matches token");
-            }
-        }
-        None => return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token")),
+    // 2) premarket pubkey
+    if dto.premarket_account.trim().is_empty() {
+        return Err(ApiError::missing_premarket());
     }
+    let premarket = Pubkey::from_str(dto.premarket_account.as_str())
+        .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
-    let premarket = match Pubkey::from_str(&dto.premarket_account) {
-        Ok(p) => p,
-        Err(_) => return Ok(HttpResponse::BadRequest().body("invalid premarket_account")),
-    };
-    if dto.amount_sol_lamp == 0 {
-        return Ok(HttpResponse::BadRequest().body("amount_sol_lamp must be > 0"));
-    }
-
+    // 3) params
     let params = BuildJoinTxParams {
-        network,
-        user,
+        network: ctx.network,
+        user: ctx.user_pubkey,
         premarket,
         amount: dto.amount_sol_lamp,
     };
 
-    match build_join_premarket_tx_unsigned(params).await {
-        Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
-        Err(e) => {
+    // 4) validation
+    validate_join_premarket(&params).map_err(ApiError::from_field_errors)?;
+
+    // 5) build tx
+    let res = build_join_premarket_tx_unsigned(params)
+        .await
+        .map_err(|e| {
             eprintln!("build_join_premarket_tx error: {e:?}");
-            Ok(HttpResponse::BadRequest().body(format!("error: {e}")))
-        }
-    }
+            ApiError::internal_build_tx_failed()
+        })?;
+
+    Ok(HttpResponse::Ok().json(TxOnlyResponse {
+        transaction: res.tx_base64,
+    }))
 }
 
 pub async fn out_premarket_tx(
     req: HttpRequest,
     payload: web::Json<OutPremarketTxRequest>,
-) -> Result<HttpResponse, actix_web::Error> {
+) -> ApiResult<HttpResponse> {
     let dto = payload.into_inner();
 
-    let network = match SolanaNetwork::try_from(dto.network.as_str()) {
-        Ok(n) => n,
-        Err(_) => return Ok(HttpResponse::BadRequest().body("invalid network")),
-    };
-    let user = match Pubkey::from_str(&dto.user_pubkey) {
-        Ok(p) => p,
-        Err(_) => return Ok(HttpResponse::BadRequest().body("invalid user_pubkey")),
-    };
+    let ctx = validate_base_request(
+        &req,
+        dto.network.as_str(),
+        Some(dto.user_pubkey.as_str()),
+    )?;
 
-    let _token = req.extensions().get::<String>().cloned();
+    let premarket = Pubkey::from_str(&dto.premarket_account)
+        .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
-    let token_data = jwt_service::decode_jwt_with_user_info(&_token.unwrap_or_default()).unwrap();
-
-    match token_data.current_wallet {
-        Some(pk) => {
-            if pk != dto.user_pubkey {
-                println!("user_pubkey does not match token");
-                return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token"));
-            } else {
-                println!("user_pubkey matches token");
-            }
-        }
-        None => return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token")),
-    }
-
-    let premarket = match Pubkey::from_str(&dto.premarket_account) {
-        Ok(p) => p,
-        Err(_) => return Ok(HttpResponse::BadRequest().body("invalid premarket_account")),
+    let params = BuildOutTxParams {
+        network: ctx.network,
+        user: ctx.user_pubkey,
+        premarket,
     };
 
-    let params = BuildOutTxParams { network, user, premarket };
+    let res = build_out_premarket_tx_unsigned(params).await.map_err(|e| {
+        eprintln!("build_out_premarket_tx error: {e:?}");
+        ApiError::internal_build_tx_failed()
+    })?;
 
-    match build_out_premarket_tx_unsigned(params).await {
-        Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
-        Err(e) => {
-            eprintln!("build_out_premarket_tx error: {e:?}");
-            Ok(HttpResponse::BadRequest().body(format!("error: {e}")))
-        }
-    }
+    Ok(HttpResponse::Ok().json(TxOnlyResponse {
+        transaction: res.tx_base64,
+    }))
 }
 
 pub async fn finish_premarket_tx(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     payload: web::Json<FinishPremarketTxRequest>,
-) -> Result<HttpResponse, actix_web::Error> {
+) -> ApiResult<HttpResponse> {
     let dto = payload.into_inner();
 
-    let network = SolanaNetwork::try_from(dto.network.as_str())
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))?;
-
-    let user = Pubkey::from_str(&dto.user_pubkey)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid user_pubkey"))?;
-
-    let _token = req.extensions().get::<String>().cloned();
-
-    let token_data = jwt_service::decode_jwt_with_user_info(&_token.unwrap_or_default()).unwrap();
-
-    match token_data.current_wallet {
-        Some(pk) => {
-            if pk != dto.user_pubkey {
-                println!("user_pubkey does not match token");
-                return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token"));
-            } else {
-                println!("user_pubkey matches token");
-            }
-        }
-        None => return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token")),
-    }
+    let ctx = validate_base_request(
+        &req,
+        dto.network.as_str(),
+        Some(dto.user_pubkey.as_str()),
+    )?;
 
     let premarket = Pubkey::from_str(&dto.premarket_account)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_account"))?;
+        .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
-    let params = BuildFinishTxParams { network, user, premarket };
+    let params = BuildFinishTxParams {
+        network: ctx.network,
+        user: ctx.user_pubkey,
+        premarket,
+    };
 
-    match build_finish_premarket_tx_unsigned(pool.get_ref(), params).await {
-        Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
-        Err(e) => {
+    let res = build_finish_premarket_tx_unsigned(pool.get_ref(), params)
+        .await
+        .map_err(|e| {
             eprintln!("build_finish_premarket_tx error: {e:?}");
-            Ok(HttpResponse::InternalServerError().body("failed to build finish tx"))
-        }
-    }
+            ApiError::internal_build_tx_failed()
+        })?;
+
+    Ok(HttpResponse::Ok().json(TxOnlyResponse {
+        transaction: res.tx_base64,
+    }))
 }
+
+
 
 pub async fn distribute_tokens(
     pool: web::Data<PgPool>,
@@ -528,55 +494,39 @@ pub async fn test_kill_premarket_tx(
         }
     }
 }
-
 pub async fn claim_tokens_tx(
     req: HttpRequest,
     payload: web::Json<ClaimTokensTxRequest>,
-) -> Result<HttpResponse, actix_web::Error> {
+) -> ApiResult<HttpResponse> {
     let dto = payload.into_inner();
 
-    let network = SolanaNetwork::try_from(dto.network.as_str())
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))?;
-
-    let user = Pubkey::from_str(&dto.user_pubkey)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid user_pubkey"))?;
-
-    let token = req.extensions().get::<String>().cloned();
-
-    let token_data = jwt_service::decode_jwt_with_user_info(&token.unwrap_or_default()).unwrap();
-
-    match token_data.current_wallet {
-        Some(pk) => {
-            if pk != dto.user_pubkey {
-                println!("user_pubkey does not match token");
-                return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token"));
-            } else {
-                println!("user_pubkey matches token");
-            }
-        }
-        None => return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token")),
-    }
+    let ctx = validate_base_request(
+        &req,
+        dto.network.as_str(),
+        Some(dto.user_pubkey.as_str()),
+    )?;
 
     let premarket = Pubkey::from_str(&dto.premarket_account)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_account"))?;
+        .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
     let token_mint = Pubkey::from_str(&dto.token_mint)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid token_mint"))?;
+        .map_err(|_| ApiError::invalid_token_mint())?; // добавим
 
     let params = BuildClaimTokensTxParams {
-        network,
-        user,
+        network: ctx.network,
+        user: ctx.user_pubkey,
         premarket,
         token_mint,
     };
 
-    match build_claim_tokens_tx_unsigned(params).await {
-        Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
-        Err(e) => {
-            eprintln!("build_claim_tokens_tx error: {e:?}");
-            Ok(HttpResponse::InternalServerError().body("failed to build claim tokens tx"))
-        }
-    }
+    let res = build_claim_tokens_tx_unsigned(params).await.map_err(|e| {
+        eprintln!("build_claim_tokens_tx error: {e:?}");
+        ApiError::internal_build_tx_failed()
+    })?;
+
+    Ok(HttpResponse::Ok().json(TxOnlyResponse {
+        transaction: res.tx_base64,
+    }))
 }
 
 pub async fn token_claimed(
@@ -698,70 +648,49 @@ pub async fn extend_premarket_tx(
     req: HttpRequest,
     payload: web::Json<ExtendPremarketTxRequest>,
     pool: web::Data<PgPool>,
-) -> Result<HttpResponse, actix_web::Error> {
+) -> ApiResult<HttpResponse> {
     let dto = payload.into_inner();
 
-    let network = SolanaNetwork::try_from(dto.network.as_str())
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))?;
-
-    let user = Pubkey::from_str(&dto.user_pubkey)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid user_pubkey"))?;
-
-    let token = req.extensions().get::<String>().cloned();
-
-    let token_data = jwt_service::decode_jwt_with_user_info(&token.unwrap_or_default()).unwrap();
-
-    match token_data.current_wallet {
-        Some(pk) => {
-            if pk != dto.user_pubkey {
-                println!("user_pubkey does not match token");
-                return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token"));
-            }
-        }
-        None => return Ok(HttpResponse::Unauthorized().body("user_pubkey does not match token")),
-    }
+    let ctx = validate_base_request(
+        &req,
+        dto.network.as_str(),
+        Some(dto.user_pubkey.as_str()),
+    )?;
 
     let premarket_key = Pubkey::from_str(&dto.premarket_account)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_account"))?;
+        .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
-    let params = GetPremarketDataParams { network, premarket: premarket_key };
     let premarket = premarket_service::get_full_premarket_info(&pool, &dto.premarket_account)
+        .await
+        .map_err(|e| {
+            eprintln!("❌ Failed to get premarket({}) data: {}", dto.premarket_account, e);
+            ApiError::missing_premarket()
+        })?
+        .ok_or_else(ApiError::missing_premarket)?;
+
+    validate_extend_premarket(
+        premarket.main_info.is_extended,
+        premarket.main_info.state,
+        premarket.main_info.deadline_timestamp,
+        dto.new_deadline,
+    )
+    .map_err(ApiError::from_field_errors)?;
+
+    let res = build_extend_premarket_tx_unsigned(
+        ctx.network,
+        ctx.user_pubkey,
+        premarket_key,
+        dto.new_deadline,
+    )
     .await
     .map_err(|e| {
-        eprintln!("❌ Failed to get premarket({}) data: {}", params.premarket.to_string(), e);
-        actix_web::error::ErrorBadRequest("Premarket not found")
-    })?
-    .ok_or_else(|| {
-        eprintln!("❌ Premarket not found ({})", params.premarket.to_string());
-        actix_web::error::ErrorBadRequest("Premarket not found")
+        eprintln!("build_extend_premarket_tx error: {e:?}");
+        ApiError::internal_build_tx_failed()
     })?;
 
-    if premarket.main_info.is_extended {
-        return Ok(HttpResponse::BadRequest().body("Premarket is already extended"));
-    }
-    if premarket.main_info.state != PremarketState::Premarket {
-        return Ok(HttpResponse::BadRequest().body("Premarket is wrong state for extension"));
-    }
-    if premarket.main_info.deadline_timestamp > Utc::now().timestamp() {
-        return Ok(HttpResponse::BadRequest().body("Premarket deadline has not yet passed"));
-    }
-
-    let now = Utc::now().timestamp();
-    
-    let one_week_seconds = 7 * 24 * 60 * 60; // 604800 seconds
-    let max_deadline = now + one_week_seconds;
-    
-    if dto.new_deadline > max_deadline {
-        return Ok(HttpResponse::BadRequest().body("new_deadline cannot be more than 1 week from now"));
-    }
-
-    match build_extend_premarket_tx_unsigned(network, user, premarket_key, dto.new_deadline).await {
-        Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
-        Err(e) => {
-            eprintln!("extend_premarket error: {e:?}");
-            Ok(HttpResponse::InternalServerError().body("failed to extend premarket"))
-        }
-    }
+    Ok(HttpResponse::Ok().json(TxOnlyResponse {
+        transaction: res.tx_base64,
+    }))
 }
 
 pub async fn get_list_main_info(
@@ -1215,7 +1144,6 @@ impl From<TokenState> for PremarketState {
 }
 
 pub async fn update_premarket_data_tx(
-    pool: web::Data<sqlx::PgPool>,
     payload: web::Json<UpdatePremarketDataDTO>,
 ) -> Result<HttpResponse, Error> {
 
@@ -1236,7 +1164,7 @@ pub async fn update_premarket_data_tx(
         creator: dto.creator,
     };
 
-    match update_premarket_data_tx_unsigned(pool.get_ref(), params).await {
+    match update_premarket_data_tx_unsigned(params).await {
         Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
         Err(e) => {
             eprintln!("update_premarket_data error: {e:?}");

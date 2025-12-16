@@ -30,8 +30,6 @@ pub struct UpdatePremarketDataArgs {
     pub creator: Option<String>,
 }
 
-/// Базовый билдер: update_premarket_data → unsigned.
-/// Используется и напрямую, и как база для extend.
 pub async fn build_update_premarket_data_tx_unsigned(
     network: SolanaNetwork,
     user: Pubkey,
@@ -74,7 +72,6 @@ pub async fn build_update_premarket_data_tx_unsigned(
     })
 }
 
-/// Твой старый HTTP DTO → билдер (чтобы текущий API не ломать).
 pub async fn update_premarket_data_tx_unsigned(
     params: UpdatePremarketDataParams,
 ) -> Result<BuiltTx> {
