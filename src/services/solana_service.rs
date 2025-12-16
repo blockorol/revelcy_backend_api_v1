@@ -1,7 +1,6 @@
 use anyhow::{Context, anyhow, Result};
 use bincode;
-use borsh::BorshSerialize;
-use borsh::BorshDeserialize;
+use borsh::{BorshSerialize, BorshDeserialize};
 use bs58;
 use sha2::{Digest, Sha256};
 use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
@@ -9,7 +8,7 @@ use solana_sdk::{
     commitment_config::CommitmentConfig,
     hash::Hash,
     compute_budget::ComputeBudgetInstruction,
-    instruction::{AccountMeta, Instruction},
+    instruction::{AccountMeta, CompiledInstruction, Instruction},
     message::Message, pubkey::Pubkey,
     signature::{read_keypair_file, Keypair, Signer, Signature},
     system_program, transaction::Transaction
@@ -17,7 +16,6 @@ use solana_sdk::{
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use std::{time::Duration, path::Path, str::FromStr};
 use solana_transaction_status::UiTransactionEncoding;
-
 use crate::api::premarket;
 
 use crate::models::premarket::{
@@ -98,7 +96,6 @@ fn program_id_for(network: SolanaNetwork) -> Pubkey {
         }
     }
 }
-
 
 fn read_revelcy_auth(network: SolanaNetwork) -> Keypair {
     let var = match network {
@@ -234,17 +231,16 @@ pub fn sign_tx_with_revelcy(
 }
 
 
-#[derive(BorshSerialize)]
-struct CreatePremarketArgsBorsh {
-    end_timestamp: i64,
-    goal_sol: u64,
-    max_sol: u64,
-    name: String,
-    symbol: String,
-    uri: String,
-    amount_in_lamports: u64,
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct CreatePremarketArgsBorsh {
+    pub end_timestamp: i64,
+    pub goal_sol: u64,
+    pub max_sol: u64,
+    pub name: String,
+    pub symbol: String,
+    pub uri: String,
+    pub amount_in_lamports: u64,
 }
-
 pub async fn build_create_premarket_tx_unsigned(
     pool: &PgPool,
     params: BuildPremarketTxParams,
@@ -275,23 +271,6 @@ pub async fn build_create_premarket_tx_unsigned(
     insert_mint_signing_key(pool, &premarket_pda.to_string(), &mint_pub, &priv_b58)
         .await
         .context("failed to insert mint key into signing_keys")?;
-
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .context("failed to get current time")?
-        .as_secs() as i64;
-
-    let one_month_seconds = 30 * 24 * 60 * 60; // 30 days in seconds
-    let max_deadline = now + one_month_seconds;
-
-    if params.deadline > max_deadline {
-        return Err(anyhow!(
-            "deadline cannot be longer than 1 month from now. Current time: {}, Max allowed: {}, Provided: {}",
-            now,
-            max_deadline,
-            params.deadline
-        ));
-    }
 
     // всё дальнейшее — в одном блоке, чтобы при Err сделать cleanup
     let result: Result<BuiltTxCreation> = async {
@@ -350,6 +329,117 @@ pub async fn build_create_premarket_tx_unsigned(
     result
 }
 
+// то, что возвращаем наружу
+#[derive(Debug, Clone)]
+pub struct ParsedCreatePremarketTx {
+    pub revelcy_auth: Pubkey,
+    pub premarket_pda: Pubkey,
+    pub mint: Pubkey,
+    pub user: Pubkey,
+    pub params: BuildPremarketTxParams,
+}
+
+pub fn parse_create_premarket_tx_from_base64(
+    tx_b64: &str,
+    network: SolanaNetwork,
+) -> Result<ParsedCreatePremarketTx> {
+    // 1) program + sighash
+    let program_id = program_id_for(network);
+    let expected_sighash = anchor_sighash_global(CREATE_METHOD_NAME);
+
+    // 2) base64 → bytes
+    let raw = BASE64
+        .decode(tx_b64)
+        .context("tx_base64 decode failed")?;
+
+    // 3) deserialize tx
+    let tx: Transaction =
+        bincode::deserialize(&raw).context("bincode deserialize(Transaction) failed")?;
+    let msg: &Message = &tx.message;
+
+    // 4) find anchor instruction
+    let ix = find_anchor_instruction(msg, &program_id, &expected_sighash)
+        .context("create_premarket instruction not found")?;
+
+    // 5) decode borsh args
+    if ix.data.len() < 8 {
+        return Err(anyhow!("instruction data too short (<8)"));
+    }
+
+    let args = CreatePremarketArgsBorsh::try_from_slice(&ix.data[8..])
+        .context("borsh decode CreatePremarketArgs failed")?;
+
+    // 6) resolve accounts
+    if ix.accounts.len() < 4 {
+        return Err(anyhow!("instruction accounts too short (<4)"));
+    }
+
+    let revelcy_auth = resolve_account(msg, ix.accounts[0] as usize)?;
+    let premarket_pda = resolve_account(msg, ix.accounts[1] as usize)?;
+    let mint = resolve_account(msg, ix.accounts[2] as usize)?;
+    let user = resolve_account(msg, ix.accounts[3] as usize)?;
+
+    // 7) map → BuildPremarketTxParams
+    let params = BuildPremarketTxParams {
+        network,
+        user,
+        deadline: args.end_timestamp,
+        goal: args.goal_sol,
+        max: args.max_sol,
+        creator_allocate: args.amount_in_lamports,
+        name: args.name,
+        symbol: args.symbol,
+        uri: args.uri,
+    };
+
+    Ok(ParsedCreatePremarketTx {
+        revelcy_auth,
+        premarket_pda,
+        mint,
+        user,
+        params,
+    })
+}
+
+// Ищем именно anchor-инструкцию по program_id и sighash (важно, если несколько ix)
+fn find_anchor_instruction<'a>(
+    msg: &'a Message,
+    program_id: &Pubkey,
+    expected_sighash: &[u8; 8],
+) -> Result<&'a CompiledInstruction> {
+    for ix in &msg.instructions {
+        let pid = *msg
+            .account_keys
+            .get(ix.program_id_index as usize)
+            .ok_or_else(|| anyhow!("program_id_index out of bounds"))?;
+
+        if &pid != program_id {
+            continue;
+        }
+
+        if ix.data.len() < 8 {
+            continue;
+        }
+
+        let sighash: [u8; 8] = ix.data[0..8].try_into().unwrap();
+        if &sighash == expected_sighash {
+            return Ok(ix);
+        }
+    }
+
+    Err(anyhow!("no matching anchor instruction"))
+}
+
+fn resolve_account(msg: &Message, account_index: usize) -> Result<Pubkey> {
+    msg.account_keys
+        .get(account_index)
+        .copied()
+        .ok_or_else(|| anyhow!("account index out of bounds"))
+}
+
+
+
+
 #[derive(borsh::BorshSerialize)]
 struct JoinArgsBorsh {
     amount_in_lamports: u64,
@@ -402,6 +492,7 @@ pub async fn build_join_premarket_tx_unsigned(
         premarket_pda: params.premarket,
     })
 }
+
 // out → unsigned
 pub async fn build_out_premarket_tx_unsigned(
     params: crate::models::premarket::BuildOutTxParams,

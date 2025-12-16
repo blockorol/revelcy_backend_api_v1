@@ -3,7 +3,9 @@ mod file_server;
 mod public_server;
 mod user_server;
 mod premarket_server;
+mod premarket_validation;
 mod proxy;
+mod auth_validation;
 
 pub fn init_servers(cfg: &mut web::ServiceConfig) {
     cfg
