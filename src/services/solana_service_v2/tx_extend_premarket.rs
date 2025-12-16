@@ -4,7 +4,7 @@ use bincode;
 use borsh::BorshDeserialize;
 use solana_sdk::{message::Message, pubkey::Pubkey, system_program, transaction::Transaction};
 
-use crate::models::premarket::SolanaNetwork;
+use crate::models::premarket::{SolanaNetwork, BuiltTx};
 
 use super::constants::UPDATE_PREMARKET_DATA_METHOD_NAME;
 use super::env::program_id_for;

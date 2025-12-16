@@ -53,7 +53,7 @@ use crate::models::premarket::{
 };
 
 use crate::services::{
-    jwt_service, premarket_service, solana_service
+    jwt_service, premarket_service
 };
 use crate::middleware::jwt::JwtMiddleware;
 
@@ -236,7 +236,7 @@ pub async fn sign_transaction(
         }
 
         // extend needs DB state validation
-        let premarket_str = parsed.params.premarket.to_string();
+        let premarket_str = parsed.premarket.to_string();
         let premarket = premarket_service::get_full_premarket_info(&pool, &premarket_str)
             .await
             .map_err(|e| {
@@ -290,11 +290,7 @@ pub async fn sign_transaction(
                 message: "premarket not found",
             }]))?;
 
-        let dynamic = premarket_service::get_dynamic_info(pool.get_ref(), premarket_str)
-            .await
-            .map_err(|e| { eprintln!("get_dynamic_info error: {e:?}"); ApiError::internal_sign_tx_failed() })?;
-
-        validate_finish_premarket(&full, &dynamic)
+        validate_finish_premarket(&full)
             .map_err(ApiError::from_field_errors)?;
 
         // 2) optional: parse tx and ensure correct accounts
@@ -494,16 +490,15 @@ pub async fn finish_premarket_tx(
             message: "premarket not found",
         }]))?;
 
-    // 2) dynamic info (сколько собрано)
-    let dynamic = premarket_service::get_dynamic_info(pool.get_ref(), &dto.premarket_account)
-        .await
-        .map_err(|e| {
-            eprintln!("get_dynamic_info error: {e:?}");
-            ApiError::internal_build_tx_failed()
-        })?;
+    // let dynamic = premarket_service::get_dynamic_info(pool.get_ref(), &dto.premarket_account)
+    //     .await
+    //     .map_err(|e| {
+    //         eprintln!("get_dynamic_info error: {e:?}");
+    //         ApiError::internal_build_tx_failed()
+    //     })?;
 
     // 3) validate finish business rules
-    validate_finish_premarket(&full, &dynamic)
+    validate_finish_premarket(&full)
         .map_err(ApiError::from_field_errors)?;
 
     // 4) build tx

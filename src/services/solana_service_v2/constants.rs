@@ -1,5 +1,8 @@
 use solana_sdk::pubkey::Pubkey;
 use crate::models::premarket::SolanaNetwork;
+use super::utils::{pk};
+
+
 
 pub const CREATE_METHOD_NAME: &str = "create_premarket";
 pub const JOIN_METHOD_NAME: &str = "join_to_premarket";

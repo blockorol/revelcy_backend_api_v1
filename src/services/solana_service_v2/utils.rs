@@ -10,6 +10,7 @@ use solana_sdk::{
     message::Message,
     pubkey::Pubkey,
 };
+use std::str::FromStr;
 
 use serde_json;
 

@@ -29,7 +29,10 @@ pub use tx_out_premarket::{
     ParsedOutPremarketTx,
 };
 
-pub use tx_finish_premarket::build_finish_premarket_tx_unsigned;
+pub use tx_finish_premarket::{
+    build_finish_premarket_tx_unsigned,
+    get_mint_kp
+};
 pub use tx_update_premarket_data::{
     UpdatePremarketDataArgs,
     build_update_premarket_data_tx_unsigned,

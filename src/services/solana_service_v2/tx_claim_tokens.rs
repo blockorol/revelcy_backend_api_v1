@@ -16,7 +16,8 @@ use spl_token::ID as token_program_id;
 
 use crate::models::premarket::{BuildClaimTokensTxParams, BuiltTx};
 
-use super::constants::{program_id_for, read_revelcy_auth, rpc_url, CLAIM_TOKENS_METHOD_NAME};
+use super::constants::CLAIM_TOKENS_METHOD_NAME;
+use super::env::{program_id_for, read_revelcy_auth, rpc_url};
 use super::utils::{anchor_sighash_global, get_valid_latest_blockhash};
 
 pub async fn build_claim_tokens_tx_unsigned(params: BuildClaimTokensTxParams) -> Result<BuiltTx> {

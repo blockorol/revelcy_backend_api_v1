@@ -51,6 +51,7 @@ pub enum ApiErrorCode {
     ValidationError,
     InvalidTxType,
     InvalidPremarketPubkey,
+    MissingPremarket,
 }
 
 /// Описание ошибки конкретного поля.
@@ -149,7 +150,17 @@ impl ApiError {
         }
     }
 
-
+    pub fn missing_premarket() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "validation_error",
+                code: ApiErrorCode::MissingPremarket,
+                field: Some("premarket"),
+                message: Some("missing premarket field".into()),
+                errors: None,
+            },
+        }
+    }
 
     pub fn internal_build_tx_failed() -> Self {
         Self {
@@ -262,6 +273,7 @@ impl ResponseError for ApiError {
             | PremarketFinishTooEarly
             | PremarketFinishGoalNotReached
             | PremarketAlreadyFinished
+            | MissingPremarket
             => StatusCode::BAD_REQUEST,
             
             WrongUserPubkeyForUser => StatusCode::FORBIDDEN,

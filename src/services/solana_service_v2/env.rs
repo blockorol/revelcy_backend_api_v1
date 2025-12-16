@@ -6,6 +6,7 @@ use solana_sdk::{
 use std::path::Path;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bs58;
+use super::utils::{assert_len_64, pk};
 
 pub fn read_revelcy_auth(network: SolanaNetwork) -> Keypair {
     let var = match network {

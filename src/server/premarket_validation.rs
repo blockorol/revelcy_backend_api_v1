@@ -131,7 +131,6 @@ pub fn validate_extend_premarket(
 
 pub fn validate_finish_premarket(
     premarket: &FullPremarketInfo,
-    dynamic: &TokenDynamicInfo,
 ) -> Result<(), Vec<FieldError>> {
     let mut errors = Vec::new();
     let now = Utc::now().timestamp();

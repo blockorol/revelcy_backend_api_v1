@@ -6,6 +6,7 @@ use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     message::Message,
+    signature::{Keypair, Signer},
     pubkey::Pubkey,
     system_program,
     transaction::Transaction,

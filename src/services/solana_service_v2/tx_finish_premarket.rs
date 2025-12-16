@@ -7,6 +7,7 @@ use solana_sdk::{
     compute_budget::ComputeBudgetInstruction,
     instruction::{AccountMeta, Instruction},
     message::Message,
+    signature::{Keypair, Signer},
     pubkey::Pubkey,
     system_program,
     transaction::Transaction,
