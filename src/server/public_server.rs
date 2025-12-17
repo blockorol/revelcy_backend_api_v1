@@ -4,7 +4,7 @@ use crate::api::dto::*;
 use crate::models::user::WalletAddress;
 use crate::services::auth_service;
 use crate::services::jwt_service;
-use crate::services::wallet_service::{get_signatures_for_wallet, get_creation_time};
+// use crate::services::wallet_service::{get_signatures_for_wallet, get_creation_time};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;

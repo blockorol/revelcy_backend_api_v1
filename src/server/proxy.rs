@@ -1,7 +1,6 @@
 use actix_web::{web, HttpResponse, Scope, HttpRequest};
 use actix_web::http::header;
 use futures_util::TryStreamExt as _;
-use log::info;
 use awc::Client;
 
 pub fn proxy_scope() -> Scope {

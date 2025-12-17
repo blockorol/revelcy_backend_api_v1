@@ -6,8 +6,6 @@ use actix_web::{
 use futures_util::future::{ready, LocalBoxFuture, Ready};
 use std::rc::Rc;
 
-use uuid::Uuid;
-
 pub struct JwtMiddleware;
 
 impl<S, B> Transform<S, ServiceRequest> for JwtMiddleware
