@@ -8,12 +8,10 @@ use actix_web::error::ErrorInternalServerError;
 use uuid::Uuid;
 use chrono::Utc;
 use actix_web::error::ErrorBadRequest;
-use crate::config::{get_pyth_subdomain, get_pyth_secret_token};
 
 use solana_client::nonblocking::rpc_client::RpcClient; // CHANGED
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
 use crate::models::premarket::PythResponse;
 
 

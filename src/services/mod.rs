@@ -5,4 +5,5 @@ pub mod file_service;
 pub mod wallet_service;
 pub mod premarket_service;
 pub mod solana_service;
+pub mod solana_service_v2;
 
