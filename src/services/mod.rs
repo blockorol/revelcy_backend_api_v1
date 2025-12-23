@@ -6,4 +6,5 @@ pub mod wallet_service;
 pub mod premarket_service;
 pub mod solana_service;
 pub mod solana_service_v2;
+pub mod background_finaliser;
 

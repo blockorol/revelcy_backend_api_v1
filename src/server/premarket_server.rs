@@ -39,6 +39,11 @@ use crate::services::{
     jwt_service, premarket_service
 };
 use crate::middleware::jwt::JwtMiddleware;
+use crate::services::background_finaliser::{
+    background_finalize_action, 
+    UpdateFn
+};
+use std::pin::Pin;
 
 use crate::services::solana_service_v2::{
     send_signed_tx_base64,
@@ -110,7 +115,11 @@ pub async fn sign_and_send_transaction(
     let dto = payload.into_inner();
     let ctx = validate_base_request(&req, dto.network.as_str(), None)?;
 
-    let tx_type = dto.tx_type.as_str();
+    let tx_type: &str = dto.tx_type.as_str();
+    let mut extra_signers: Option<Vec<solana_sdk::signature::Keypair>> = None;
+    let mut update_method: UpdateFn = Box::new(|| Box::pin(async {
+        eprintln!("PANIC!!!! no update method set for tx_type: {}", tx_type);
+    }));
 
     // ─────────────────────────────────────────────────────────────
     // 0) validate tx_type
@@ -156,10 +165,19 @@ pub async fn sign_and_send_transaction(
         }
 
         validate_create_premarket(&parsed.params).map_err(ApiError::from_field_errors)?;
+        /*  
+        let premarket: PremarketInfoServiceModel = /* собрать из parsed + dto */;
+        let community: CommunityInfoServiceModel = /* собрать */;
 
-        // TODO (later):
-        // - optionally, BEFORE signing, run simulation (sigVerify=false) and if failed => ValidationError
-        // - ApiErrorCode: ValidationError (field: unsigned_tx) or introduce something like TxSimulationFailed
+        let pool2 = pool.clone();
+        update_method = Box::new(move || {
+            Box::pin(async move {
+                if let Err(e) = premarket_service::create_full_premarket_info(pool2.get_ref(), premarket, community).await {
+                    eprintln!("failed to create_full_premarket_info: {:#}", e);
+                }
+            })
+        });
+        */
     }
 
     if tx_type == "join_premarket" {
@@ -288,39 +306,14 @@ pub async fn sign_and_send_transaction(
             ApiError::internal_sign_tx_failed()
         })?;
 
-        let extra_signers = vec![mint_kp];
-        let signed = sign_tx_with_revelcy(&dto.unsigned_tx, ctx.network, Some(&extra_signers))
-            .map_err(|e| { eprintln!("sign_transaction error (finish): {e:?}"); ApiError::internal_sign_tx_failed() })?;
-
-        // TODO (later):
-        // - send signed tx to blockchain
-        //   on fail => ApiError::internal_send_tx_failed() (лучше отдельный код)
-        // - on success => finish handler:
-        //   cache_update_finish(premarket_pub, sig, ...)
-        // - return signature or transaction depending on API
-        
-        let res = send_signed_tx_base64(ctx.network, &signed).await.map_err(|e| {
-            eprintln!("send_signed_tx_base64 error ({tx_type}): {e:?}");
-            ApiError::internal_send_tx_failed()
-        })?;
-
-        wait_for_confirmed(
-            ctx.network,
-            &res,
-            Duration::from_secs(60),
-            Duration::from_secs(0.3),
-        ).await.map_err(|e| {
-            eprintln!("wait_for_confirmed error ({tx_type}): {e:?}");
-            ApiError::internal_confirm_tx_failed()
-        })?;
-
-    Ok(HttpResponse::Ok().json(SentTxResponse { signature: res.to_string(), status: TransactionStatus::Confirmed }))
+        let extra = vec![mint_kp];
+        extra_signers =  Some(&extra);
     }
 
     // ─────────────────────────────────────────────────────────────
     // 2) Default Revelcy sign (no extra signers)
     // ─────────────────────────────────────────────────────────────
-    let signed = sign_tx_with_revelcy(&dto.unsigned_tx, ctx.network, None).map_err(|e| {
+    let signed = sign_tx_with_revelcy(&dto.unsigned_tx, ctx.network, extra_signers).map_err(|e| {
         eprintln!("sign_transaction error ({tx_type}): {e:?}");
         ApiError::internal_sign_tx_failed()
     })?;
@@ -339,6 +332,21 @@ pub async fn sign_and_send_transaction(
         eprintln!("wait_for_confirmed error ({tx_type}): {e:?}");
         ApiError::internal_confirm_tx_failed()
     })?;
+
+    background_finalize_action(
+        ctx.network,
+        res,
+        Duration::from_secs(600), // timeout
+        Duration::from_secs(1),   // poll_every
+        move || {
+            let pool = pool.clone();
+            async move {
+                if let Err(err) = premarketCreated(pool, data).await {
+                    eprintln!("failed to add PM to DB: {:#}", err);
+                }
+            }
+        },
+    );
 
 
     // TODO (later):
