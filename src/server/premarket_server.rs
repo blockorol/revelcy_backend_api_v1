@@ -18,7 +18,7 @@ use crate::server::auth_validation::validate_base_request;
 
 use crate::api::premarket::{
     TxToSignRequest,
-    JoinPremarketTxRequest, OutPremarketTxRequest, TxOnlyResponse, FinishPremarketTxRequest,
+    JoinPremarketTxRequest, OutPremarketTxRequest, TxOnlyResponse, SentTxResponse, FinishPremarketTxRequest,
     CreatePremarketTxRequest, CreatePremarketTxResponse,
     GetListQuery, GetListMainInfoDTO, UpdateCommunityDTO,
     FinishedPremarketDTO,
@@ -58,6 +58,7 @@ use crate::services::{
 use crate::middleware::jwt::JwtMiddleware;
 
 use crate::services::solana_service_v2::{
+    send_signed_tx_base64,
     get_mint_kp,
     build_create_premarket_tx_unsigned,
     parse_create_premarket_tx_from_base64,
@@ -117,7 +118,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/tx/sign_create_transaction", web::post().to(sign_transaction))
 }
 
-pub async fn sign_transaction(
+pub async fn sign_and_send_transaction(
     req: HttpRequest,
     pool: web::Data<sqlx::PgPool>,
     payload: web::Json<TxToSignRequest>,
@@ -273,7 +274,6 @@ pub async fn sign_transaction(
         //   message: "invalid claim_tokens transaction",
         // }]));
     }
-
 
     if tx_type == "finish_premarket" {
         let premarket_str = dto.premarket.as_deref().ok_or_else(ApiError::missing_premarket)?;

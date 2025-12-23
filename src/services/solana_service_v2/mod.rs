@@ -9,6 +9,13 @@ pub mod tx_finish_premarket;
 pub mod tx_update_premarket_data;
 pub mod tx_extend_premarket;
 pub mod tx_claim_tokens;
+pub mod solana_methods;
+
+pub use solana_methods::{
+    send_signed_tx_base64,
+    wait_for_finalized,
+    wait_for_confirmed,
+};
 
 
 pub use tx_create_premarket::{
