@@ -1,11 +1,15 @@
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use bincode::deserialize;
 use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
+use solana_client::rpc_client::SerializableTransaction;
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel};
 use solana_sdk::signature::Signature;
+use solana_sdk::transaction::Transaction;
 use std::str::FromStr;
 use tokio::time::{sleep, Duration, Instant};
+
 
 pub async fn send_signed_tx_base64(
     network: SolanaNetwork,
@@ -17,10 +21,13 @@ pub async fn send_signed_tx_base64(
         .decode(signed_tx_base64.trim())
         .context("invalid base64 for signed tx")?;
 
+    let transaction: Transaction = deserialize(&raw)
+        .context("failed to deserialize Transaction")?;
+
     let sig_str = rpc
-        .send_raw_transaction_with_config(
-            &raw,
-            RpcSendTransactionConfig {
+        .send_transaction_with_config(
+            &transaction,
+            SerializableTransaction {
                 skip_preflight: false,
                 preflight_commitment: Some(CommitmentLevel::Processed),
                 max_retries: Some(5),

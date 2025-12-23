@@ -17,24 +17,7 @@ use crate::server::premarket_validation::{
 use crate::server::auth_validation::validate_base_request;
 
 use crate::api::premarket::{
-    TxToSignRequest,
-    JoinPremarketTxRequest, OutPremarketTxRequest, TxOnlyResponse, SentTxResponse, FinishPremarketTxRequest,
-    CreatePremarketTxRequest, CreatePremarketTxResponse,
-    GetListQuery, GetListMainInfoDTO, UpdateCommunityDTO,
-    FinishedPremarketDTO,
-    PremarketTransactionDTO, HolderInfoDTO, UserJoinedToPremarketDTO,
-    GetDynamicInfoQuery, TokenDynamicInfoDTO, CreatePremarketDTO, BlockchainInfoDTO,
-    CommunityInfoDTO, CommunityLinkDTO, GetMainInfoDTO, GetMainInfoQuery, TokenLinksDTO, TokenState,
-    DistributeTokensRequest,
-    KillPremarketTxRequest,
-    ExtendPremarketTxRequest,
-    ExtendedPremarketDTO,
-    UpdatePremarketDataDTO,
-    DeployTxDTO,
-    CheckTxDTO,
-    GetHolderEntryPriceQuery, HolderEntryPriceDTO,
-    ClaimTokensTxRequest,
-    TokenClaimedDTO, TokenClaimedResponse,
+    BlockchainInfoDTO, CheckTxDTO, ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketDTO, CreatePremarketTxRequest, CreatePremarketTxResponse, DeployTxDTO, DistributeTokensRequest, ExtendPremarketTxRequest, ExtendedPremarketDTO, FinishPremarketTxRequest, FinishedPremarketDTO, GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO, GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO, HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest, PremarketTransactionDTO, SentTxResponse, TokenClaimedDTO, TokenClaimedResponse, TokenDynamicInfoDTO, TokenLinksDTO, TokenState, TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateCommunityDTO, UpdatePremarketDataDTO, UserJoinedToPremarketDTO
 };
 use crate::models::premarket::{
     BuildFinishTxParams, 
@@ -59,6 +42,7 @@ use crate::middleware::jwt::JwtMiddleware;
 
 use crate::services::solana_service_v2::{
     send_signed_tx_base64,
+    wait_for_confirmed,
     get_mint_kp,
     build_create_premarket_tx_unsigned,
     parse_create_premarket_tx_from_base64,
@@ -115,7 +99,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         
         .route("/tx/test_kill",   web::post().to(test_kill_premarket_tx))
 
-        .route("/tx/sign_create_transaction", web::post().to(sign_transaction))
+        .route("/tx/sign_create_transaction", web::post().to(sign_and_send_transaction))
 }
 
 pub async fn sign_and_send_transaction(
@@ -314,8 +298,23 @@ pub async fn sign_and_send_transaction(
         // - on success => finish handler:
         //   cache_update_finish(premarket_pub, sig, ...)
         // - return signature or transaction depending on API
+        
+        let res = send_signed_tx_base64(ctx.network, &signed).await.map_err(|e| {
+            eprintln!("send_signed_tx_base64 error ({tx_type}): {e:?}");
+            ApiError::internal_send_tx_failed()
+        })?;
 
-        return Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: signed }));
+        wait_for_confirmed(
+            ctx.network,
+            &res,
+            Duration::from_secs(60),
+            Duration::from_secs(0.3),
+        ).await.map_err(|e| {
+            eprintln!("wait_for_confirmed error ({tx_type}): {e:?}");
+            ApiError::internal_confirm_tx_failed()
+        })?;
+
+    Ok(HttpResponse::Ok().json(SentTxResponse { signature: res.to_string(), status: TransactionStatus::Confirmed }))
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -326,17 +325,31 @@ pub async fn sign_and_send_transaction(
         ApiError::internal_sign_tx_failed()
     })?;
 
+    let res = send_signed_tx_base64(ctx.network, &signed).await.map_err(|e| {
+        eprintln!("send_signed_tx_base64 error ({tx_type}): {e:?}");
+        ApiError::internal_send_tx_failed()
+    })?;
+
+    wait_for_confirmed(
+        ctx.network,
+        &res,
+        Duration::from_secs(60),
+        Duration::from_secs(0.3),
+    ).await.map_err(|e| {
+        eprintln!("wait_for_confirmed error ({tx_type}): {e:?}");
+        ApiError::internal_confirm_tx_failed()
+    })?;
+
+
     // TODO (later):
-    // - send signed tx to blockchain (per tx_type may choose RPC / options)
     // - if send ok: call tx-type cache handlers:
     //   create_premarket: cache_update_create(...)
     //   join_premarket:   cache_update_join(...)
     //   out_of_premarket: cache_update_out(...)
     //   extend_premarket: cache_update_extend(...)
     //   claim_tokens:     cache_update_claim(...)
-    // - decide response: you may want to return signature instead of transaction
 
-    Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: signed }))
+    Ok(HttpResponse::Ok().json(SentTxResponse { signature: res.to_string(), status: TransactionStatus::Confirmed }))
 }
 
 pub async fn create_premarket_tx(
