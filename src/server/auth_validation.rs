@@ -1,16 +1,22 @@
 // src/server/auth_validation.rs
 
 use actix_web::{HttpRequest, HttpMessage};
-use solana_sdk::pubkey::Pubkey;
+use solana_sdk::pubkey::{self, Pubkey};
+use uuid::Uuid;
 
 use crate::api::errors::ApiError;
 use crate::services::jwt_service;
 use crate::models::premarket::SolanaNetwork;
 
+#[derive(Serialize, Deserialize)]
+pub struct UserContextData {
+    pub internal_id: Uuid,
+    pub current_pubkey: Pubkey, // current pubkey with action from context. should be on of the user address
+}
+
 pub struct BaseRequestContext {
     pub network: SolanaNetwork,
-    pub user_pubkey: Pubkey,
-    pub token_data: jwt_service::TokenWithUserInfo,
+    pub user: UserContextData,
 }
 
 pub fn validate_base_request(
@@ -28,13 +34,19 @@ pub fn validate_base_request(
         .unwrap_or_default();
 
     let token_data = jwt_service::decode_jwt_with_user_info(&token)
-        .map_err(|_| ApiError::auth_missing_wallet())?;
+        .map_err(|_| ApiError::auth_invalid_token())?;
+    // todo: add expired token validation!
 
     // ─── NETWORK ────────────────────────────────────────────
     let network = SolanaNetwork::try_from(network_str)
         .map_err(|_| ApiError::invalid_network())?;
 
     // ─── USER PUBKEY ────────────────────────────────────────
+    // to do: change this validation to check by user_id (from token), is wallet from the users or not
+    // 403 - wallet not from the list
+    // 401 - no wallet in the request
+    // 400 - invalid format user_pubkey_str
+
     let user_pubkey = match (user_pubkey_str, token_data.current_wallet.as_deref()) {
         (Some(req_pk), Some(token_pk)) => {
             if req_pk != token_pk {
@@ -58,9 +70,13 @@ pub fn validate_base_request(
         }
     };
 
+    let user_context_data = UserContextData {
+        internal_id: token_data.user_id,
+        current_pubkey: user_pubkey, 
+    };
+
     Ok(BaseRequestContext {
         network,
-        user_pubkey,
-        token_data,
+        user: user_context_data,
     })
 }

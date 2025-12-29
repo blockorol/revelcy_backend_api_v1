@@ -7,4 +7,5 @@ pub mod premarket_service;
 pub mod solana_service;
 pub mod solana_service_v2;
 pub mod background_finaliser;
+pub mod ipfs_service;
 
