@@ -1,7 +1,7 @@
 use chrono::Utc;
 
 use crate::api::errors::{ApiErrorCode, FieldError};
-use crate::models::premarket::{PremarketInfoServiceModel, BuildPremarketTxParams, BuildJoinTxParams, PremarketState, FullPremarketInfo, TokenDynamicInfo, };
+use crate::models::premarket::{PremarketInfoServiceModel, BuildPremarketTxParams, BuildJoinTxParams, PremarketState, FullPremarketInfo};
 
 const MAX_JOIN_SOL_LAMPORTS: u64 = 2 * solana_sdk::native_token::LAMPORTS_PER_SOL;
 
@@ -178,8 +178,8 @@ pub fn validate_finish_premarket(
 }
 
 pub fn validate_refund_premarket(
-    main_info: PremarketInfoServiceModel
-) {
+    main_info: &PremarketInfoServiceModel
+)  -> Result<(), Vec<FieldError>> {
     let mut errors = Vec::new();
     let now = Utc::now().timestamp();
 

@@ -1,7 +1,9 @@
+# syntax=docker/dockerfile:1.7
+
 # =====================================================================================
 # ========== Stage 0: Base image for building Rust + musl + static OpenSSL ============
 # =====================================================================================
-FROM rust:1.87 as base
+FROM rust:1.87 AS base
 WORKDIR /app
 ENV SQLX_OFFLINE=true
 
@@ -51,24 +53,34 @@ RUN go install github.com/pressly/goose/v3/cmd/goose@latest
 
 
 # =====================================================================================
-# ========== Stage 2: Build Rust project with dependency caching ======================
+# ========== Stage 2: Build Rust project with compiled dependency cache ===============
 # =====================================================================================
-FROM base as builder
+FROM base AS builder
 WORKDIR /app
 
-# ---- Step 1: Copy only Cargo manifests (to enable dependency caching) ---------------
-# If you have a workspace, ALSO copy Cargo.toml for each crate here.
+# 1) Только манифесты
 COPY Cargo.toml Cargo.lock ./
 
-# ---- Step 2: Download all dependencies without building the project ----------------
-# This step is cached until Cargo.toml/Cargo.lock changes.
-RUN cargo fetch --target x86_64-unknown-linux-musl
+# 2) "Заглушка" для компиляции зависимостей
+#    (собираем минимальный crate, чтобы rustc скомпилил deps в /app/target)
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
 
-# ---- Step 3: Copy project sources ---------------------------------------------------
+# 3) Компилим deps (и сохраняем кэш registry/git + target между билдами)
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --target x86_64-unknown-linux-musl --bin revelcy-backend-api
+
+# 4) Теперь копируем реальные исходники
+#    (важно: после этого меняется слой при правках кода)
+RUN rm -rf src
 COPY . .
 
-# ---- Step 4: Build final binary (static musl build) ---------------------------------
-RUN cargo build --release --target x86_64-unknown-linux-musl --bin revelcy-backend-api
+# 5) Финальная сборка — deps уже в кеше, пересоберётся в основном твой код
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --target x86_64-unknown-linux-musl --bin revelcy-backend-api
 
 
 

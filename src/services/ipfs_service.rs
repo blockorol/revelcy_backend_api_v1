@@ -1,6 +1,7 @@
 use actix_web::error::ErrorBadRequest;
-use actix_web::Error;
 use serde::Deserialize;
+use crate::models::premarket::{TokenInfo, TokenLinks};
+
 
 #[derive(Debug, Deserialize)]
 struct IpfsMetadata {
@@ -70,6 +71,7 @@ pub async fn get_ipfs_token_info(
         .await
         .map_err(|e| ErrorBadRequest(format!("invalid metadata json: {e}")))?;
 
+    let external_url = meta.external_url.clone();
     // 4) links
     let links = meta
         .properties
@@ -77,26 +79,25 @@ pub async fn get_ipfs_token_info(
         .map(|l| TokenLinks {
             telegram: l.telegram,
             twitter: l.twitter,
-            web_site: l.web_site.or(l.website).or(meta.external_url),
+            web_site: l.web_site.or(l.website).or(external_url.clone()),
         })
         .unwrap_or(TokenLinks {
             telegram: None,
             twitter: None,
-            web_site: meta.external_url,
+            web_site: external_url,
         });
 
     // 5) image_url (also can be ipfs://)
     let image_url = meta
         .image
-        .map(|img| ipfs_to_gateway_url(img.as_str()))
-        .unwrap_or_default();
+        .map(|img| ipfs_to_gateway_url(img.as_str()));
 
     Ok(TokenInfo {
         address: "".to_string(), // empty, because it's not from IPFS
         name: meta.name.unwrap_or_default(),
         description: meta.description.unwrap_or_default(),
         symbol: meta.symbol.unwrap_or_default(),
-        image_url,
+        image_url: image_url,
         data_uri: uri.clone(),
         links,
     })

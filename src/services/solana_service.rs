@@ -1,20 +1,22 @@
 use anyhow::{Context, anyhow, Result};
 use bincode;
 use bs58;
-use sha2::Sha256;
+use std::str::FromStr;
+use sha2::{Digest, Sha256};
 use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
+use solana_sdk::signer::Signer;
 use solana_sdk::system_program::ID as SYSTEM_PROGRAM_ID;
 use solana_sdk::{
+    compute_budget::ComputeBudgetInstruction,
     commitment_config::CommitmentConfig,
     hash::Hash,
-    compute_budget::sign_tx_with_revelcy,
     instruction::{AccountMeta, Instruction},
     message::Message, pubkey::Pubkey,
     signature::{read_keypair_file, Keypair},
     transaction::Transaction
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use std::{time::Duration, path::Path, str::FromStr};
+use std::{time::Duration, path::Path};
 use solana_transaction_status::UiTransactionEncoding;
 
 use crate::models::premarket::{
@@ -443,7 +445,7 @@ pub async fn get_valid_latest_blockhash(
 }
 
 pub async fn check_tx_service(
-    pool: &PgPool,
+    _pool: &PgPool,
     params: CheckTxParams,
 ) -> Result<CheckTxResponse, actix_web::Error> {
     let network = SolanaNetwork::try_from(params.network.as_str())
@@ -469,7 +471,7 @@ pub async fn check_tx_service(
                 .await;
             match tx_result {
                 Ok(tx) => {
-                    if let Some(meta) = &tx.transaction.meta {
+                    if let Some(_meta) = &tx.transaction.meta {
                         let encoded_transaction = &tx.transaction.transaction;
                         match encoded_transaction {
                             solana_transaction_status::EncodedTransaction::Json(ui_transaction) => {

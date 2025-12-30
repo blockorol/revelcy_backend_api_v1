@@ -12,7 +12,6 @@ use crate::storage::models::{
 use crate::storage::premarket_repo;
 use actix_web::error::ErrorBadRequest;
 use actix_web::error::ErrorInternalServerError;
-use anyhow::Ok;
 use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
