@@ -1,7 +1,7 @@
 use chrono::Utc;
 
 use crate::api::errors::{ApiErrorCode, FieldError};
-use crate::models::premarket::{BuildPremarketTxParams, BuildJoinTxParams, PremarketState, FullPremarketInfo, TokenDynamicInfo, };
+use crate::models::premarket::{PremarketInfoServiceModel, BuildPremarketTxParams, BuildJoinTxParams, PremarketState, FullPremarketInfo};
 
 const MAX_JOIN_SOL_LAMPORTS: u64 = 2 * solana_sdk::native_token::LAMPORTS_PER_SOL;
 
@@ -171,6 +171,54 @@ pub fn validate_finish_premarket(
     //         field: "premarket",
     //         code: ApiErrorCode::PremarketFinishGoalNotReached,
     //         message: "premarket goal not reached",
+    //     });
+    // }
+
+    if errors.is_empty() { Ok(()) } else { Err(errors) }
+}
+
+pub fn validate_refund_premarket(
+    main_info: &PremarketInfoServiceModel
+)  -> Result<(), Vec<FieldError>> {
+    let mut errors = Vec::new();
+    let now = Utc::now().timestamp();
+
+    // 1) state
+    if main_info.state != PremarketState::Premarket {
+        errors.push(FieldError {
+            field: "premarket",
+            code: ApiErrorCode::PremarketFinishWrongState,
+            message: "premarket is wrong state for finish",
+        });
+    }
+
+    // 2) already finished flag (optional but полезно)
+    if main_info.finished_timestamp.is_some() {
+        errors.push(FieldError {
+            field: "premarket",
+            code: ApiErrorCode::PremarketAlreadyFinished,
+            message: "premarket is already finished",
+        });
+    }
+
+    // 3) deadline passed
+    if main_info.deadline_timestamp > now {
+        errors.push(FieldError {
+            field: "premarket",
+            code: ApiErrorCode::PremarketFinishTooEarly,
+            message: "premarket deadline has not yet passed",
+        });
+    }
+
+    // 4) goal reached
+    // Важно: проверь, что это реально та метрика, которая должна сравниваться с goal.
+    // Если goal лежит в premarket.main_info.goal.goal_sol_lamp — подставь корректное поле.
+    // let goal = premarket.main_info.goal.goal_sol_lamp;
+    // if dynamic.reserved_sol_lamp >= goal {
+    //     errors.push(FieldError {
+    //         field: "premarket",
+    //         code: ApiErrorCode::PremarketFinishGoalNotReached,
+    //         message: "premarket goal is reached",
     //     });
     // }
 

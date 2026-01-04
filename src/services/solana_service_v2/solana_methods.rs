@@ -1,8 +1,9 @@
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bincode::deserialize;
+use crate::models::premarket::SolanaNetwork;
+use crate::services::solana_service_v2::env::rpc_url;
 use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
-use solana_client::rpc_client::SerializableTransaction;
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel};
 use solana_sdk::signature::Signature;
@@ -24,10 +25,10 @@ pub async fn send_signed_tx_base64(
     let transaction: Transaction = deserialize(&raw)
         .context("failed to deserialize Transaction")?;
 
-    let sig_str = rpc
+    let sig = rpc
         .send_transaction_with_config(
             &transaction,
-            SerializableTransaction {
+            RpcSendTransactionConfig {
                 skip_preflight: false,
                 preflight_commitment: Some(CommitmentLevel::Processed),
                 max_retries: Some(5),
@@ -36,9 +37,8 @@ pub async fn send_signed_tx_base64(
             },
         )
         .await
-        .context("send_raw_transaction failed")?;
+        .context("send_transaction_with_config failed")?;
 
-    let sig = Signature::from_str(&sig_str).context("rpc returned invalid signature string")?;
     Ok(sig)
 }
 
@@ -62,10 +62,9 @@ pub async fn wait_for_finalized(
             .context("get_signature_status_with_commitment failed")?;
 
         if let Some(status) = st {
-            if let Some(err) = status.err {
+            if let Err(err) = status {
                 return Err(anyhow!("transaction failed: {} err={:?}", sig, err));
             }
-
             return Ok(());
         }
 
@@ -90,9 +89,8 @@ pub async fn wait_for_confirmed(
             .get_signature_status_with_commitment(sig, CommitmentConfig::confirmed())
             .await
             .context("get_signature_status_with_commitment(confirmed) failed")?;
-
         if let Some(status) = st {
-            if let Some(err) = status.err {
+            if let Err(err) = status {
                 return Err(anyhow!("tx failed before confirmed: {} err={:?}", sig, err));
             }
             return Ok(());

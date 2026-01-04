@@ -1,6 +1,8 @@
 target
 .git
-.dockerignore
-Dockerfile
-README.md
-**/*.bk
+node_modules
+dist
+build
+**/*.log
+.env
+.env.*

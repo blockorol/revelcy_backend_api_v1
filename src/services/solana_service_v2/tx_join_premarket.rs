@@ -7,7 +7,7 @@ use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     message::Message,
     pubkey::Pubkey,
-    signature::{Keypair, Signer},
+    signature::Signer,
     system_program,
     transaction::Transaction,
 };

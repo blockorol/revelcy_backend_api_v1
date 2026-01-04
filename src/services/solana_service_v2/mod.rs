@@ -6,6 +6,7 @@ pub mod tx_create_premarket;
 pub mod tx_join_premarket;
 pub mod tx_out_premarket;
 pub mod tx_finish_premarket;
+pub mod tx_kill_premarket;
 pub mod tx_update_premarket_data;
 pub mod tx_extend_premarket;
 pub mod tx_claim_tokens;
@@ -40,6 +41,7 @@ pub use tx_finish_premarket::{
     build_finish_premarket_tx_unsigned,
     get_mint_kp
 };
+pub use tx_kill_premarket::build_kill_premarket_tx_unsigned;
 pub use tx_update_premarket_data::{
     UpdatePremarketDataArgs,
     build_update_premarket_data_tx_unsigned,
