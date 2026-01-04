@@ -19,7 +19,6 @@ RUN apt-get update && \
       gcc \
       cmake \
       git \
-      perl \
       zlib1g-dev
 
 # ---- Add musl target for static linking ---------------------------------------------
@@ -43,6 +42,7 @@ ENV OPENSSL_LIB_DIR=$OPENSSL_DIR/lib
 ENV OPENSSL_INCLUDE_DIR=$OPENSSL_DIR/include
 ENV OPENSSL_STATIC=1
 
+
 # =====================================================================================
 # ========== Stage 1: Build goose migration tool (Go) =================================
 # =====================================================================================
@@ -53,35 +53,34 @@ RUN go install github.com/pressly/goose/v3/cmd/goose@latest
 
 
 # =====================================================================================
-# ========== Stage 2: Build Rust project with compiled dependency cache ===============
+# ========== Stage 2: Build Rust project with caches ==================================
 # =====================================================================================
 FROM base AS builder
 WORKDIR /app
 
-# 1) Только манифесты
+# 1) Manifests first for cache hits
 COPY Cargo.toml Cargo.lock ./
 
-# 2) "Заглушка" для компиляции зависимостей
-#    (собираем минимальный crate, чтобы rustc скомпилил deps в /app/target)
+# 2) Stub ONLY for the main api bin (other bins are missing at this point)
 RUN mkdir -p src && echo "fn main() {}" > src/main.rs
 
-# 3) Компилим deps (и сохраняем кэш registry/git + target между билдами)
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target \
+# 3) Warm up dependency cache - build ONLY the API bin
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/app/target,sharing=locked \
     cargo build --release --target x86_64-unknown-linux-musl --bin revelcy-backend-api
 
-# 4) Теперь копируем реальные исходники
-#    (важно: после этого меняется слой при правках кода)
+# 4) Copy real sources
 RUN rm -rf src
 COPY . .
 
-# 5) Финальная сборка — deps уже в кеше, пересоберётся в основном твой код
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target \
-    cargo build --release --target x86_64-unknown-linux-musl --bin revelcy-backend-api
-
+# 5) Final build + export binary into non-cached path
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/app/target,sharing=locked \
+    cargo build --release --target x86_64-unknown-linux-musl --bin revelcy-backend-api && \
+    mkdir -p /app/out && \
+    cp /app/target/x86_64-unknown-linux-musl/release/revelcy-backend-api /app/out/revelcy-backend-api
 
 
 # =====================================================================================
@@ -92,10 +91,9 @@ FROM alpine:3.20
 # ---- Install PostgreSQL client to allow pg_isready ----------------------------------
 RUN apk add --no-cache postgresql-client
 
-# ---- Copy compiled Rust binary -------------------------------------------------------
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/revelcy-backend-api /usr/local/bin/app
 
-# ---- Copy goose migration tool -------------------------------------------------------
+# ---- Copy compiled Rust binary -------------------------------------------------------
+COPY --from=builder /app/out/revelcy-backend-api /usr/local/bin/app
 COPY --from=goose /go/bin/goose /usr/local/bin/goose
 
 # ---- Copy migrations and entrypoint -------------------------------------------------

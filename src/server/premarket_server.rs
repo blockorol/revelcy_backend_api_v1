@@ -103,17 +103,22 @@ pub async fn sign_and_send_transaction(
     let dto = payload.into_inner();
     let ctx = validate_base_request(&req, dto.network.as_str(), None)?;
 
-    let tx_type: &str = dto.tx_type.as_str();
+    let tx_type = dto.tx_type.clone();
+    let tx_type_for_default = tx_type.clone();
+
     let mut extra_signers: Option<Vec<solana_sdk::signature::Keypair>> = None;
-    let mut update_method: UpdateFn = Box::new(|| Box::pin(async {
-        eprintln!("PANIC!!!! no method to update DB info for tx_type: {}", tx_type);
-    }));
+    let mut update_method: UpdateFn = Box::new(move || {
+        let tx_type = tx_type_for_default.clone();
+        Box::pin(async move {
+            eprintln!("PANIC!!!! no method to update DB info for tx_type: {}", tx_type);
+        })
+    });
 
     // ─────────────────────────────────────────────────────────────
     // 0) validate tx_type
     // ─────────────────────────────────────────────────────────────
     let is_supported = matches!(
-        tx_type,
+        tx_type.as_str(),
         "create_premarket"
             | "join_premarket"
             | "out_of_premarket"
@@ -153,6 +158,8 @@ pub async fn sign_and_send_transaction(
         }
 
         validate_create_premarket(&parsed.params).map_err(ApiError::from_field_errors)?;
+        let uri = parsed.params.uri.clone();
+
 
         let info_from_ipfs = ipfs_service::get_ipfs_token_info(&parsed.params.uri).await.map_err(|e| {
                 eprintln!("parse create_premarket tx error: failed to upload from IPFS: {e:?}");
@@ -170,7 +177,7 @@ pub async fn sign_and_send_transaction(
                 description: info_from_ipfs.description,
                 symbol: parsed.params.symbol,
                 image_url: info_from_ipfs.image_url,
-                data_uri: parsed.params.uri,
+                data_uri: uri.clone(),
                 links: info_from_ipfs.links
             }, 
             creator: UserInfoShort{
@@ -195,16 +202,20 @@ pub async fn sign_and_send_transaction(
         };
 
         let pool2 = pool.clone();
-        update_method = Box::new(move || {
+        update_method = Box::new(move || { 
+            let pool2 = pool2.clone();
             Box::pin(async move {
-                premarket_service::create_full_premarket_info(pool2.get_ref(), premarket, community).await.map_err(|e| {
+                premarket_service::create_full_premarket_info(
+                    pool2.get_ref(),
+                    premarket,
+                    community
+                ).await.map_err(|e| {
                     eprintln!("Failed to update DB: create_full_premarket_info (mint:{:#}, pda:{:#}, uri:{:#}): {:#}", 
                         parsed.mint, 
                         parsed.premarket_pda,
-                        parsed.params.uri,
+                        uri,
                         e
                     );
-                    return Err(e)
                 });
             })
         });
@@ -241,23 +252,25 @@ pub async fn sign_and_send_transaction(
         };
         println!("holder created");
 
-
         let pool2 = pool.clone();
-        update_method = Box::new(move || { Box::pin(async move {
+        let premarket_str = parsed.premarket.to_string();
+        update_method = Box::new(move || { 
+            let pool2 = pool2.clone();
+            let premarket_str = premarket_str.clone();
+            Box::pin(async move {
             premarket_service::add_holder(
-                pool2.as_ref(),
-                &parsed.premarket.to_string(),
+                pool2.get_ref(),
+                &premarket_str,
                 holder
             ).await.map_err(|e| {
                 eprintln!(
                     "Failed to update DB: add_holder to premarket_pubkey {} for {}({}), with {}: {}",
-                    parsed.premarket.to_string(),
+                    premarket_str,
                     ctx.user.internal_id.to_string(),
                     ctx.user.current_pubkey.to_string(),
                     parsed.params.amount,
                     e
                 );
-                return Err(e);
             });
         })});
     }
@@ -280,22 +293,24 @@ pub async fn sign_and_send_transaction(
 
         // TODO (later):
         // - optionally check in DB that user actually joined and can out
-
         let pool2 = pool.clone();
-        update_method = Box::new(move || { Box::pin(async move {
+        let premarket_str = parsed.premarket.to_string();
+        update_method = Box::new(move || {
+            let pool2 = pool2.clone();
+            let premarket_str = premarket_str.clone();
+            Box::pin(async move {
             premarket_service::remove_holder(
-                pool2.as_ref(),
-                &parsed.premarket.to_string(),
+                pool2.get_ref(),
+                &premarket_str,
                 &ctx.user.current_pubkey.to_string(),
             ).await.map_err(|e| {
                 println!(
                     "Failed to update DB: remove_holder from premarket {} for user {} ({}): {}",
-                    parsed.premarket.to_string(),
+                    premarket_str,
                     ctx.user.internal_id.to_string(),
                     ctx.user.current_pubkey.to_string(),
                     e
                 );
-                return Err(e);
             });
         })});
     }
@@ -317,7 +332,7 @@ pub async fn sign_and_send_transaction(
         }
 
         // extend needs DB state validation
-        let premarket_str = parsed.premarket.to_string();
+        let premarket_str: String = parsed.premarket.to_string().clone();
         let premarket = premarket_service::get_full_premarket_info(&pool, &premarket_str)
             .await
             .map_err(|e| {
@@ -334,33 +349,35 @@ pub async fn sign_and_send_transaction(
             parsed.new_deadline,
         )
         .map_err(ApiError::from_field_errors)?;
-
         let pool2 = pool.clone();
         let premarket_pubkey = parsed.premarket.to_string();
-        update_method = Box::new(move || { Box::pin(async move {
+        update_method = Box::new(move || { 
+            let pool2 = pool2.clone();
+            let premarket_str = premarket_str.clone();
+            let new_deadline = parsed.new_deadline.clone();
+            Box::pin(async move {
             // Update database with new deadline
             premarket_service::update_premarket_deadline(
                 pool2.get_ref(),
                 &premarket_pubkey,
-                parsed.new_deadline,
+                new_deadline,
             ).await.map_err(|e| {
                 eprintln!(
                     "Failed to update DB: update_deadline for premarket '{}' deadline: {} by user {} ({}): {}",
-                    parsed.premarket.to_string(),
-                    parsed.new_deadline,
+                    premarket_pubkey,
+                    new_deadline,
                     ctx.user.internal_id.to_string(), 
                     ctx.user.current_pubkey.to_string(), 
                     e,
                 );
-                return Err(e);
             });
         })});
     }
 
     if tx_type == "claim_tokens" {
         // todo: get tx info!!!
-        let premarket_str = dto.premarket.as_deref().ok_or_else(ApiError::missing_premarket)?;
-        let premarket_pubkey = Pubkey::from_str(premarket_str)
+        let premarket_str: String = dto.premarket.clone().ok_or_else(ApiError::missing_premarket)?;
+        let premarket_pubkey = Pubkey::from_str(&premarket_str)
             .map_err(|_| ApiError::invalid_premarket_pubkey())?;
         // TODO: как только у тебя будет parse_claim_tokens_tx_from_base64:
         // - parse unsigned tx
@@ -375,12 +392,16 @@ pub async fn sign_and_send_transaction(
         //   message: "invalid claim_tokens transaction",
         // }]));
         let pool2 = pool.clone();
-        let user_wallet = ctx.user.current_pubkey;
-        update_method = Box::new(move || { Box::pin(async move {
+        let user_wallet_str = ctx.user.current_pubkey.to_string();
+        update_method = Box::new(move || {
+            let pool2 = pool2.clone();
+            let premarket_str = premarket_str.clone();
+            Box::pin(async move {
+            let user_wallet_str = user_wallet_str.clone();
             premarket_service::user_claimed_token(
                 pool2.get_ref(),
                 &premarket_pubkey,
-                &user_wallet.to_string(),
+                &user_wallet_str,
             ).await
             .map_err(|e| {
                 eprintln!(
@@ -390,21 +411,21 @@ pub async fn sign_and_send_transaction(
                     ctx.user.current_pubkey.to_string(), 
                     e,
                 );
-                return Err(e);
             });
         })});
     }
 
     if tx_type == "finish_premarket" {
         // todo: get premarket_pub from tx!!!! 
-        let premarket_str = dto.premarket.as_deref().ok_or_else(ApiError::missing_premarket)?;
-        let premarket_pub = Pubkey::from_str(premarket_str)
+        let premarket_str: String = dto.premarket.clone().ok_or_else(ApiError::missing_premarket)?;
+        let premarket_pubkey = Pubkey::from_str(&premarket_str)
             .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
+
         // 1) DB validation (same as build)
-        let full = premarket_service::get_full_premarket_info(pool.get_ref(), premarket_str)
+        let full = premarket_service::get_full_premarket_info(pool.get_ref(), &premarket_str)
             .await
-            .map_err(|e| { eprintln!("get_full_premarket_info error: {e:?}"); ApiError::internal_sign_tx_failed() })?
+            .map_err(|e| { eprintln!("get_full_premarket_info error: {e:?}"); ApiError::internal_sign_tx_failed_goal() })?
             .ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
                 field: "premarket",
                 code: ApiErrorCode::PremarketNotFound,
@@ -420,18 +441,20 @@ pub async fn sign_and_send_transaction(
         //   - check parsed.premarket == premarket_pub
 
         // 3) load mint key + sign
-        let mint_kp = get_mint_kp(pool.get_ref(), premarket_pub).await.map_err(|e| {
+        let mint_kp = get_mint_kp(pool.get_ref(), premarket_pubkey).await.map_err(|e| {
             eprintln!("mint_kp load error: {e:?}");
             ApiError::internal_sign_tx_failed()
         })?;
 
         let extra = vec![mint_kp];
         extra_signers =  Some(extra);
-
         let pool2 = pool.clone();
-        update_method = Box::new(move || { Box::pin(async move {
+        update_method = Box::new(move || { 
+            let pool2 = pool2.clone();
+            let premarket_str = premarket_str.clone();
+            Box::pin(async move {
             premarket_service::set_premarket_state(
-                &pool,
+                pool2.get_ref(),
                 &premarket_str,
                 PremarketState::Finished,
                 Some(Utc::now().timestamp()), // to do: change me to time from tx
@@ -443,7 +466,6 @@ pub async fn sign_and_send_transaction(
                     ctx.user.current_pubkey.to_string(),
                     e,
                 );
-                return Err(e);
             });
         })});
     }
@@ -451,12 +473,12 @@ pub async fn sign_and_send_transaction(
     // tx/kill
     if tx_type == "refund_premarket" { 
         // todo: get premarket_pub from tx!!!! 
-        let premarket_str = dto.premarket.as_deref().ok_or_else(ApiError::missing_premarket)?;
-        let premarket_pub = Pubkey::from_str(premarket_str)
+        let premarket_str: String = dto.premarket.clone().ok_or_else(ApiError::missing_premarket)?;
+        let premarket_pubkey = Pubkey::from_str(&premarket_str)
             .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
         // 1) DB validation (same as build)
-        let full = premarket_service::get_full_premarket_info(pool.get_ref(), premarket_str)
+        let full = premarket_service::get_full_premarket_info(&pool, &premarket_str)
             .await
             .map_err(|e| { eprintln!("get_full_premarket_info error: {e:?}"); ApiError::internal_sign_tx_failed() })?
             .ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
@@ -474,9 +496,12 @@ pub async fn sign_and_send_transaction(
         //   - check parsed.premarket 
 
         let pool2 = pool.clone();
-        update_method = Box::new(move || { Box::pin(async move {
+        update_method = Box::new(move || { 
+            let pool2 = pool2.clone();
+            let premarket_str = premarket_str.clone();
+            Box::pin(async move {
             premarket_service::set_premarket_state(
-                &pool,
+                pool2.get_ref(),
                 &premarket_str,
                 PremarketState::Canceled,
                 Some(Utc::now().timestamp()), // to do: change me to time from tx
@@ -488,7 +513,6 @@ pub async fn sign_and_send_transaction(
                     ctx.user.current_pubkey.to_string(),
                     e,
                 );
-                return Err(e);
             });
         })});
     }

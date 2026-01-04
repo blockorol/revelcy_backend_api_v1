@@ -152,7 +152,7 @@ impl ApiError {
         }
     }
     
-    pub fn internal_sign_tx_failed() -> Self {
+    pub fn internal_sign_tx_failed_goal() -> Self {
         Self {
             response: ApiErrorResponse {
                 error: "internal_error",
