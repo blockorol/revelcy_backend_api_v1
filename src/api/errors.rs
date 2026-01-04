@@ -127,6 +127,29 @@ impl ApiError {
         }
     }
 
+    pub fn internal_send_tx_failed() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "internal_error",
+                code: ApiErrorCode::InternalSignTxFailed,
+                field: None,
+                message: Some("failed to send transaction to blockchain".into()),
+                errors: None,
+            },
+        }
+    }
+        pub fn internal_confirm_tx_failed() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "internal_error",
+                code: ApiErrorCode::InternalSignTxFailed,
+                field: None,
+                message: Some("failed to send transaction to blockchain: not confirmed".into()),
+                errors: None,
+            },
+        }
+    }
+
     pub fn internal_sign_tx_failed() -> Self {
         Self {
             response: ApiErrorResponse {
