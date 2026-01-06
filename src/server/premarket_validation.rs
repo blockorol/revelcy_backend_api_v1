@@ -133,7 +133,7 @@ pub fn validate_finish_premarket(
     premarket: &FullPremarketInfo,
 ) -> Result<(), Vec<FieldError>> {
     let mut errors = Vec::new();
-    let now = Utc::now().timestamp();
+    // let now = Utc::now().timestamp();
 
     // 1) state
     if premarket.main_info.state != PremarketState::Premarket {
