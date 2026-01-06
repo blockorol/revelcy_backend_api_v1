@@ -2,6 +2,8 @@ use actix_web::error::ErrorBadRequest;
 use serde::Deserialize;
 use crate::models::premarket::{TokenInfo, TokenLinks};
 
+const REVELCY_SUFFIX: &str = "Premarket done with Revelcy; initial buy distributed to the community. More: beta.revelcy.com";
+
 
 #[derive(Debug, Deserialize)]
 struct IpfsMetadata {
@@ -91,11 +93,18 @@ pub async fn get_ipfs_token_info(
     let image_url = meta
         .image
         .map(|img| ipfs_to_gateway_url(img.as_str()));
+    let raw_description = meta.description.unwrap_or_default();
+
+    let description = raw_description
+        .trim_end()
+        .strip_suffix(REVELCY_SUFFIX)
+        .map(|s| s.trim_end().to_string())
+        .unwrap_or(raw_description);
 
     Ok(TokenInfo {
         address: "".to_string(), // empty, because it's not from IPFS
         name: meta.name.unwrap_or_default(),
-        description: meta.description.unwrap_or_default(),
+        description: description,
         symbol: meta.symbol.unwrap_or_default(),
         image_url: image_url,
         data_uri: uri.clone(),
