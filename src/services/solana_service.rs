@@ -1,25 +1,26 @@
 use anyhow::{Context, anyhow, Result};
 use bincode;
 use bs58;
+use std::str::FromStr;
 use sha2::{Digest, Sha256};
 use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
+use solana_sdk::signer::Signer;
 use solana_sdk::system_program::ID as SYSTEM_PROGRAM_ID;
 use solana_sdk::{
+    compute_budget::ComputeBudgetInstruction,
     commitment_config::CommitmentConfig,
     hash::Hash,
-    compute_budget::ComputeBudgetInstruction,
-    instruction::{AccountMeta, CompiledInstruction, Instruction},
+    instruction::{AccountMeta, Instruction},
     message::Message, pubkey::Pubkey,
-    signature::{read_keypair_file, Keypair, Signer},
+    signature::{read_keypair_file, Keypair},
     transaction::Transaction
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use std::{time::Duration, path::Path, str::FromStr};
+use std::{time::Duration, path::Path};
 use solana_transaction_status::UiTransactionEncoding;
 
 use crate::models::premarket::{
     BuildKillTxParams, 
-    BuiltTx, 
     CheckTxParams,
     GetPremarketDataParams, 
     DistributeTokensParams, 
@@ -31,7 +32,6 @@ use crate::models::premarket::{
 
 use crate::api::premarket::CheckTxResponse;
 
-use crate::storage::signing_keys::get_mint_signing_keypair_by_premarket;
 use serde_json;
 use sqlx::PgPool;
 
@@ -52,8 +52,6 @@ impl TryFrom<&str> for SolanaNetwork {
 
 const KILL_METHOD_NAME: &str = "kill_premarket";
 const DISTRIBUTE_METHOD_NAME: &str = "distribute_tokens";
-
-fn pk(s: &str) -> Pubkey { Pubkey::from_str(s).expect("invalid pubkey") }
 
 fn rpc_url(network: SolanaNetwork) -> String {
     match network {
@@ -116,48 +114,6 @@ fn read_revelcy_auth(network: SolanaNetwork) -> Keypair {
     Keypair::from_bytes(&bytes).expect("invalid keypair bytes (base58)")
 }
 
-fn pda(program: &Pubkey, seeds: &[&[u8]]) -> (Pubkey, u8) {
-    Pubkey::find_program_address(seeds, program)
-}
-
-fn constants(network: SolanaNetwork) -> (
-    Pubkey, // MINT_AUTH
-    Pubkey, // PUMP_FUN_PROGRAM_ID
-    Pubkey, // PUMPFUN_GLOBAL
-    Pubkey, // METAPLEX_PROGRAM
-    Pubkey, // PUMPFUN_EVENT_AUTH
-    Pubkey, // FEE_RECIPIENT
-    Pubkey, // RENT
-    Pubkey, // GLOBAL_VOLUME_ACCUMULATOR
-    Pubkey, // FEE_PROGRAM
-) {
-    match network {
-        SolanaNetwork::Devnet => (
-            pk("TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM"),
-            pk("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"),
-            pk("4wTV1YmiEkRvAtNtsSGPtUrqRYQMe5SKy2uB4Jjaxnjf"),
-            pk("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
-            pk("Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1"),
-            pk("68yFSZxzLWJXkxxRGydZ63C6mHx1NLEDWmwN9Lb5yySg"),
-            pk("SysvarRent111111111111111111111111111111111"),
-            pk("Hq2wp8uJ9jCPsYgNHex8RtqdvMPfVGoYwjvF1ATiwn2Y"),
-            pk("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ"), // FEE_PROGRAM (placeholder)
-        ),
-        SolanaNetwork::MainnetBeta => (
-            pk("TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM"),
-            pk("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"),
-            pk("4wTV1YmiEkRvAtNtsSGPtUrqRYQMe5SKy2uB4Jjaxnjf"),
-            pk("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
-            pk("Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1"),
-            pk("9rPYyANsfQZw3DnDmKE3YCQF5E8oD89UXoHn9JFEhJUz"),
-            pk("SysvarRent111111111111111111111111111111111"),
-            pk("Hq2wp8uJ9jCPsYgNHex8RtqdvMPfVGoYwjvF1ATiwn2Y"),
-            pk("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ"), // FEE_PROGRAM (placeholder)
-        ),
-    }
-}
-
-
 #[inline]
 fn assert_len_64(bytes: &[u8], label: &str) {
     if bytes.len() != 64 {
@@ -175,6 +131,7 @@ fn anchor_sighash_global(name: &str) -> [u8; 8] {
     out
 }
 
+// todo: move to service v2
 pub fn sign_tx_with_revelcy(
     tx_base64: &str,
     network: SolanaNetwork,
@@ -213,62 +170,6 @@ pub fn sign_tx_with_revelcy(
     Ok(signed_b64)
 }
 
-
-// Ищем именно anchor-инструкцию по program_id и sighash (важно, если несколько ix)
-fn find_anchor_instruction<'a>(
-    msg: &'a Message,
-    program_id: &Pubkey,
-    expected_sighash: &[u8; 8],
-) -> Result<&'a CompiledInstruction> {
-    for ix in &msg.instructions {
-        let pid = *msg
-            .account_keys
-            .get(ix.program_id_index as usize)
-            .ok_or_else(|| anyhow!("program_id_index out of bounds"))?;
-
-        if &pid != program_id {
-            continue;
-        }
-
-        if ix.data.len() < 8 {
-            continue;
-        }
-
-        let sighash: [u8; 8] = ix.data[0..8].try_into().unwrap();
-        if &sighash == expected_sighash {
-            return Ok(ix);
-        }
-    }
-
-    Err(anyhow!("no matching anchor instruction"))
-}
-
-
-pub async fn get_mint_kp(
-    pool: &PgPool,
-    premarket: Pubkey,
-) -> Result<Keypair> {
-    // mint key из БД
-    let pair = get_mint_signing_keypair_by_premarket(pool, &premarket.to_string())
-        .await
-        .context("signing_keys: mint key not found for this premarket")?
-        .ok_or_else(|| anyhow!("mint key not found for premarket {}", premarket))?;
-
-    let mint_bytes = parse_privkey_64(&pair.priv_key)
-        .context("mint priv_key parse failed")?;
-
-    if mint_bytes.len() != 64 {
-        return Err(anyhow!(
-            "mint priv_key must be 64 bytes, got {}",
-            mint_bytes.len()
-        ));
-    }
-
-    let mint_kp = Keypair::from_bytes(&mint_bytes)
-        .context("mint priv_key: invalid keypair bytes")?;
-
-    Ok(mint_kp)
-}
 
 pub async fn distribute_tk(
     _pool: &PgPool,
@@ -345,67 +246,6 @@ pub async fn distribute_tk(
 
     Ok(1)
 
-}
-
-pub async fn build_kill_premarket_tx_unsigned(
-    _pool: &PgPool,
-    params: BuildKillTxParams,
-) -> Result<BuiltTx> {
-    //extract params 
-    //build tx (unsigned)
-    //return tx build 
-
-    let program_id = program_id_for(params.network);
-    let client = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
-    let revelcy = read_revelcy_auth(params.network);
-    let revelcy_pub = revelcy.pubkey();
-    let premarket_account = params.premarket;
-    let user = params.user;
-    let all_entered_users = params.users;
-
-    let mut accounts = vec![
-        AccountMeta::new(revelcy_pub, true),
-        AccountMeta::new(premarket_account, false),
-        AccountMeta::new(user, false),
-        AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-    ];
-
-    for user in all_entered_users {
-        accounts.push(AccountMeta::new(Pubkey::from_str(&user).unwrap(), false));
-    }
-
-    let _discriminator: [u8; 8] = [
-        10,
-        112,
-        216,
-        238,
-        253,
-        26,
-        122,
-        160
-    ];
-
-    let mut data = Vec::with_capacity(8);
-    //data.extend_from_slice(&discriminator);
-    data.extend_from_slice(&anchor_sighash_global(KILL_METHOD_NAME));
-
-    let ix = Instruction { program_id, accounts, data };
-    let blockhash = get_valid_latest_blockhash(&client, 50)
-        .await
-        .context("get_latest_blockhash failed")?;
-
-    let msg = Message::new(&[ix], Some(&params.user));
-    let mut tx = Transaction::new_unsigned(msg);
-
-    tx.message.recent_blockhash = blockhash;
-
-    let raw = bincode::serialize(&tx).context("serialize tx failed")?;
-    let tx_b64 = BASE64.encode(raw);
-
-    Ok(BuiltTx {
-        tx_base64: tx_b64,
-        premarket_pda: params.premarket,
-    })
 }
 
 pub async fn test_build_kill_premarket_tx(
@@ -537,48 +377,6 @@ pub async fn get_premarket_data(
     })
 }
 
-// move me to utils
-fn parse_privkey_64(s: &str) -> Result<Vec<u8>> {
-    let s = s.trim();
-
-    // JSON-массив: "[1,2,3,...,64]"
-    if s.starts_with('[') && s.ends_with(']') {
-        let v: Vec<u8> = serde_json::from_str(s).context("invalid JSON priv_key")?;
-        anyhow::ensure!(v.len() == 64, "json priv_key must be 64 bytes, got {}", v.len());
-        return Ok(v);
-    }
-
-    // CSV: "1,2,3,...,64"
-    if s.contains(',') && !s.contains(':') && !s.contains('[') && !s.contains(']') {
-        let v: Result<Vec<u8>, _> = s.split(',')
-            .map(|x| x.trim().parse::<u8>())
-            .collect();
-        let v = v.context("invalid CSV priv_key (non-numeric token)")?;
-        anyhow::ensure!(v.len() == 64, "csv priv_key must be 64 bytes, got {}", v.len());
-        return Ok(v);
-    }
-
-    // base64 c префиксом
-    if let Some(b64) = s.strip_prefix("base64:") {
-        let v = BASE64.decode(b64).context("invalid base64 priv_key")?;
-        anyhow::ensure!(v.len() == 64, "base64 priv_key must be 64 bytes, got {}", v.len());
-        return Ok(v);
-    }
-
-    // «сырой» base64 (эвристика)
-    if s.contains('=') || s.contains('/') || s.contains('+') {
-        if let Ok(v) = BASE64.decode(s) {
-            anyhow::ensure!(v.len() == 64, "base64 priv_key must be 64 bytes, got {}", v.len());
-            return Ok(v);
-        }
-    }
-
-    // fallback: base58
-    let v = bs58::decode(s).into_vec().context("invalid base58 priv_key")?;
-    anyhow::ensure!(v.len() == 64, "base58 priv_key must be 64 bytes, got {}", v.len());
-    Ok(v)
-}
-
 // !!!now user is CONST i need to change it later!!!
 pub async fn deploy_tx_service(
     _pool: &PgPool,
@@ -647,7 +445,7 @@ pub async fn get_valid_latest_blockhash(
 }
 
 pub async fn check_tx_service(
-    pool: &PgPool,
+    _pool: &PgPool,
     params: CheckTxParams,
 ) -> Result<CheckTxResponse, actix_web::Error> {
     let network = SolanaNetwork::try_from(params.network.as_str())
@@ -673,7 +471,7 @@ pub async fn check_tx_service(
                 .await;
             match tx_result {
                 Ok(tx) => {
-                    if let Some(meta) = &tx.transaction.meta {
+                    if let Some(_meta) = &tx.transaction.meta {
                         let encoded_transaction = &tx.transaction.transaction;
                         match encoded_transaction {
                             solana_transaction_status::EncodedTransaction::Json(ui_transaction) => {

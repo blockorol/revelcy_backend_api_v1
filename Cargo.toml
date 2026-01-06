@@ -1,8 +1,4 @@
 [[bin]]
-name = "migrate"
-path = "src/bin/migrate.rs"
-
-[[bin]]
 name = "revelcy-backend-api"
 path = "src/main.rs"
 

@@ -233,6 +233,22 @@ pub struct TxOnlyResponse {
     pub transaction: String,
 }
 
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TransactionStatus {
+    Pending,
+    Confirmed,
+    Finalized,
+    Failed,
+}
+
+#[derive(serde::Serialize)]
+pub struct SentTxResponse  {
+    pub signature: String,
+    pub status: TransactionStatus,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct PremarketTransactionDTO {
     #[serde(rename = "premarket_pub_key")]

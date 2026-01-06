@@ -1,49 +1,54 @@
+use crate::models::premarket::{
+    CommunityInfoServiceModel, CommunityLink, FullPremarketInfo, HolderInfo,
+    JoinConfirmationStatusDTO, LinkType, OutConfirmationStatusDTO, PremarketGoal,
+    PremarketInfoServiceModel, PremarketListResult, PremarketOnchainData, PremarketOnchainUser,
+    PremarketState, TokenDynamicInfo, TokenInfo, TokenLinks, TxConfirmationStatusDTO,
+    UserInfoShort,
+};
 
-use crate::models::premarket::{PremarketState, PremarketListResult, TokenDynamicInfo, HolderInfo, LinkType, CommunityLink, CommunityInfoServiceModel, FullPremarketInfo, PremarketInfoServiceModel, TokenInfo, TokenLinks, PremarketGoal, UserInfoShort, JoinConfirmationStatusDTO, OutConfirmationStatusDTO, TxConfirmationStatusDTO, PremarketOnchainUser, PremarketOnchainData};
-
-use crate::storage::models::{HolderDbModel, CommunityInfoDbModel, CommunityLinkDbModel, PremarketInfoDbModel};
+use crate::storage::models::{
+    CommunityInfoDbModel, CommunityLinkDbModel, HolderDbModel, PremarketInfoDbModel,
+};
 use crate::storage::premarket_repo;
-use sqlx::PgPool;
-use actix_web::error::ErrorInternalServerError;
-use uuid::Uuid;
-use chrono::Utc;
 use actix_web::error::ErrorBadRequest;
+use actix_web::error::ErrorInternalServerError;
+use chrono::Utc;
+use sqlx::PgPool;
+use uuid::Uuid;
 
-use solana_client::nonblocking::rpc_client::RpcClient; // CHANGED
+use crate::models::premarket::PythResponse;
+use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
-use crate::models::premarket::PythResponse;
-
 
 pub async fn get_full_premarket_info(
     pool: &PgPool,
     bc_address: &str,
 ) -> Result<Option<FullPremarketInfo>, actix_web::Error> {
-
     match premarket_repo::get_premarket_info_by_bc_address(pool, bc_address).await {
         Ok(Some((pm_db, cm_db, links_db))) => {
             let premarket_info = PremarketInfoServiceModel {
                 id: Some(pm_db.id),
                 blockchain_address: pm_db.bc_address,
-                creator: UserInfoShort{
+                creator: UserInfoShort {
                     id: Some(pm_db.creator_id),
-                    blockchain_address: pm_db.creator_address
+                    blockchain_address: pm_db.creator_address,
                 },
-                token_info: TokenInfo{
+                token_info: TokenInfo {
                     address: pm_db.mint_address,
                     name: pm_db.name,
                     description: pm_db.description,
                     symbol: pm_db.symbol,
                     image_url: pm_db.image_url,
                     data_uri: pm_db.data_uri,
-                    links: TokenLinks{
+                    links: TokenLinks {
                         telegram: pm_db.telegram,
-                        twitter: pm_db.twitter, 
-                        web_site: pm_db.web_site
-                    }
+                        twitter: pm_db.twitter,
+                        web_site: pm_db.web_site,
+                    },
                 },
                 state: pm_db.state.into(),
-                goal: PremarketGoal{
+                goal: PremarketGoal {
                     solana_lamp: pm_db.premarket_goal_sol_lamp,
                 },
                 is_extended: pm_db.is_extended,
@@ -51,7 +56,7 @@ pub async fn get_full_premarket_info(
                 created_timestamp: pm_db.premarket_created,
                 finished_timestamp: pm_db.premarket_finished,
             };
-            
+
             let links = if links_db.is_empty() {
                 None
             } else {
@@ -74,7 +79,7 @@ pub async fn get_full_premarket_info(
             let community_info = CommunityInfoServiceModel {
                 description: cm_db.description,
                 token_banner_url: cm_db.token_banner_url,
-                links: links
+                links: links,
             };
 
             Ok(Some(FullPremarketInfo {
@@ -108,36 +113,34 @@ pub async fn get_list(
 
     let items = rows
         .into_iter()
-        .map(|pm_db| {
-            PremarketInfoServiceModel {
-                id: Some(pm_db.id),
-                blockchain_address: pm_db.bc_address,
-                creator: UserInfoShort {
-                    id: Some(pm_db.creator_id),
-                    blockchain_address: pm_db.creator_address,
+        .map(|pm_db| PremarketInfoServiceModel {
+            id: Some(pm_db.id),
+            blockchain_address: pm_db.bc_address,
+            creator: UserInfoShort {
+                id: Some(pm_db.creator_id),
+                blockchain_address: pm_db.creator_address,
+            },
+            token_info: TokenInfo {
+                address: pm_db.mint_address,
+                name: pm_db.name,
+                description: pm_db.description,
+                symbol: pm_db.symbol,
+                image_url: pm_db.image_url,
+                data_uri: pm_db.data_uri,
+                links: TokenLinks {
+                    telegram: pm_db.telegram,
+                    twitter: pm_db.twitter,
+                    web_site: pm_db.web_site,
                 },
-                token_info: TokenInfo {
-                    address: pm_db.mint_address,
-                    name: pm_db.name,
-                    description: pm_db.description,
-                    symbol: pm_db.symbol,
-                    image_url: pm_db.image_url,
-                    data_uri: pm_db.data_uri,
-                    links: TokenLinks {
-                        telegram: pm_db.telegram,
-                        twitter: pm_db.twitter,
-                        web_site: pm_db.web_site,
-                    },
-                },
-                state: pm_db.state.into(),
-                goal: PremarketGoal {
-                    solana_lamp: pm_db.premarket_goal_sol_lamp,
-                },
-                is_extended: pm_db.is_extended,
-                deadline_timestamp: pm_db.premarket_deadline,
-                created_timestamp: pm_db.premarket_created,
-                finished_timestamp: pm_db.premarket_finished,
-            }
+            },
+            state: pm_db.state.into(),
+            goal: PremarketGoal {
+                solana_lamp: pm_db.premarket_goal_sol_lamp,
+            },
+            is_extended: pm_db.is_extended,
+            deadline_timestamp: pm_db.premarket_deadline,
+            created_timestamp: pm_db.premarket_created,
+            finished_timestamp: pm_db.premarket_finished,
         })
         .collect();
 
@@ -145,7 +148,6 @@ pub async fn get_list(
         items,
         total: Some(total),
     }))
-
 }
 
 pub async fn create_full_premarket_info(
@@ -227,10 +229,10 @@ pub async fn update_community_info(
 
     premarket_repo::update_community_info(
         pool,
-        bc_address,                                // было &bc_address
+        bc_address, // было &bc_address
         &community.description,
-        community.token_banner_url.as_deref(),     // Option<String> -> Option<&str>
-        link_db,                                   // было &link_db
+        community.token_banner_url.as_deref(), // Option<String> -> Option<&str>
+        link_db,                               // было &link_db
     )
     .await
     .map_err(ErrorInternalServerError)
@@ -241,11 +243,13 @@ pub async fn get_dynamic_info(
     premarket_pubkey: &str,
 ) -> Result<TokenDynamicInfo, actix_web::Error> {
     let holder_limit = 300;
-    let holder_data = premarket_repo::get_holders_by_premarket_address(pool, premarket_pubkey, holder_limit)
-        .await
-        .map_err(ErrorInternalServerError)?;
+    let holder_data =
+        premarket_repo::get_holders_by_premarket_address(pool, premarket_pubkey, holder_limit)
+            .await
+            .map_err(ErrorInternalServerError)?;
 
-    let holder_service_list: Vec<HolderInfo> = holder_data.holders
+    let holder_service_list: Vec<HolderInfo> = holder_data
+        .holders
         .into_iter()
         .map(|h| HolderInfo {
             id: h.holder_id,
@@ -259,12 +263,16 @@ pub async fn get_dynamic_info(
         .collect();
 
     println!("reserved_sol_lamp: {}", holder_data.reserved_sol_lamp);
-    println!("reserved_sol_24h_before_lamp: {}", holder_data.reserved_sol_24h_before_lamp);
-    
+    println!(
+        "reserved_sol_24h_before_lamp: {}",
+        holder_data.reserved_sol_24h_before_lamp
+    );
+
     let current_price_lamp = get_price_by_market_cap(holder_data.reserved_sol_lamp as u64).await;
     println!("current_price_lamp: {}", current_price_lamp);
-    
-    let price_24h_ago_lamp = get_price_by_market_cap(holder_data.reserved_sol_24h_before_lamp as u64).await;
+
+    let price_24h_ago_lamp =
+        get_price_by_market_cap(holder_data.reserved_sol_24h_before_lamp as u64).await;
     println!("price_24h_ago_lamp: {}", price_24h_ago_lamp);
 
     let change_24h = if price_24h_ago_lamp > 0.0 && price_24h_ago_lamp != current_price_lamp {
@@ -289,20 +297,21 @@ pub async fn set_premarket_state(
     premarket_pubkey: &str,
     new_state: PremarketState,
     premarket_finished: Option<i64>,
-) -> Result<(), actix_web::Error>  {
+) -> Result<(), actix_web::Error> {
     let affected = premarket_repo::update_premarket_state(
         pool,
         premarket_pubkey,
         &new_state.to_string(),
-        premarket_finished
+        premarket_finished,
     )
     .await
     .map_err(actix_web::error::ErrorInternalServerError)?;
 
     if affected == 0 {
-        return Err(actix_web::error::ErrorNotFound(
-            format!("premarket '{}' not found", premarket_pubkey),
-        ));
+        return Err(actix_web::error::ErrorNotFound(format!(
+            "premarket '{}' not found",
+            premarket_pubkey
+        )));
     }
 
     Ok(())
@@ -317,21 +326,17 @@ pub async fn add_holder(
         id: uuid::Uuid::new_v4(),
         premarket_info_id: Uuid::nil(),
         holder_wallet: holder.wallet_address,
-        holder_id:holder.id,
-        join_timestamp:holder.join_timestamp,
+        holder_id: holder.id,
+        join_timestamp: holder.join_timestamp,
         amount_lamport: holder.amount_sol_lamp as i64,
         out_timestamp: None,
         claimed: false,
-        avatar_url: None, 
-        username: None
+        avatar_url: None,
+        username: None,
     };
-    premarket_repo::insert_holder(
-        pool,
-        premarket_pubkey,
-        &holder
-    )
-    .await
-    .map_err(actix_web::error::ErrorInternalServerError)
+    premarket_repo::insert_holder(pool, premarket_pubkey, &holder)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)
 }
 
 pub async fn remove_holder(
@@ -339,10 +344,15 @@ pub async fn remove_holder(
     premarket_pubkey: &str,
     wallet_address: &str,
 ) -> Result<(), actix_web::Error> {
-    premarket_repo::soft_delete_holder(pool, premarket_pubkey, wallet_address, Utc::now().timestamp())
-        .await
-        .map(|_| ()) // игнорируем u64, возвращаем ()
-        .map_err(actix_web::error::ErrorInternalServerError)
+    premarket_repo::soft_delete_holder(
+        pool,
+        premarket_pubkey,
+        wallet_address,
+        Utc::now().timestamp(),
+    )
+    .await
+    .map(|_| ()) // игнорируем u64, возвращаем ()
+    .map_err(actix_web::error::ErrorInternalServerError)
 }
 
 pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
@@ -351,7 +361,7 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
         Err(_) => {
             println!("PYTH_MAINNET_URL environment variable not set");
             return 0.0;
-        },
+        }
     };
 
     let current_sol_price = match reqwest::get(&url).await {
@@ -378,7 +388,7 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
                     0.0
                 }
             }
-        },
+        }
         Err(e) => {
             println!("Pyth HTTP request error: {:?}", e);
             0.0
@@ -386,9 +396,10 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
     };
     println!("Final current_sol_price: {}", current_sol_price);
 
-    let real_sol_amount: f64 = real_lamp_amount as f64/1_000_000_000.0;
+    let real_sol_amount: f64 = real_lamp_amount as f64 / 1_000_000_000.0;
 
-    let real_token_bought_amount: u64 = ((1_073_000_000.0 * real_sol_amount)/(30.0 + real_sol_amount)) as u64;
+    let real_token_bought_amount: u64 =
+        ((1_073_000_000.0 * real_sol_amount) / (30.0 + real_sol_amount)) as u64;
     println!("Real token bought amount: {}", real_token_bought_amount);
     let real_token_amount: u64 = 793_100_000 - real_token_bought_amount;
 
@@ -409,18 +420,26 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
 
 pub async fn get_tx_confirmation_status(
     client: &RpcClient,
-    tx_id: &str
+    tx_id: &str,
 ) -> Result<TxConfirmationStatusDTO, actix_web::Error> {
     let tx_signature = match solana_sdk::signature::Signature::from_str(tx_id) {
         Ok(sig) => sig,
-        Err(_) => return Err(actix_web::error::ErrorBadRequest("Invalid transaction signature format")),
+        Err(_) => {
+            return Err(actix_web::error::ErrorBadRequest(
+                "Invalid transaction signature format",
+            ))
+        }
     };
 
     let status = client
         .get_signature_status(&tx_signature)
         .await
-        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Failed to get transaction status: {}", e)))?;
-
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to get transaction status: {}",
+                e
+            ))
+        })?;
 
     match status {
         Some(status) if status.is_ok() => Ok(TxConfirmationStatusDTO::Confirmed),
@@ -433,14 +452,16 @@ pub async fn check_user_joined(
     client: &RpcClient,
     user: &str,
     premarket_account: &str,
-) -> Result<JoinConfirmationStatusDTO, actix_web::Error>  {
-    let user_pubkey = Pubkey::from_str(user).map_err(|_| actix_web::error::ErrorBadRequest("Invalid user public key"))?;
-    let premarket_pubkey = Pubkey::from_str(premarket_account).map_err(|_| actix_web::error::ErrorBadRequest("Invalid premarket account public key"))?;
+) -> Result<JoinConfirmationStatusDTO, actix_web::Error> {
+    let user_pubkey = Pubkey::from_str(user)
+        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid user public key"))?;
+    let premarket_pubkey = Pubkey::from_str(premarket_account)
+        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid premarket account public key"))?;
 
     let is_holder = get_premarket_data(client, &premarket_pubkey)
         .await
         .map(|data| data.users.iter().any(|user| user.wallet == user_pubkey))
-        .unwrap_or(false); 
+        .unwrap_or(false);
 
     Ok(if is_holder {
         JoinConfirmationStatusDTO::JoinSuccess
@@ -453,14 +474,16 @@ pub async fn check_user_out(
     client: &RpcClient,
     user: &str,
     premarket_account: &str,
-) -> Result<OutConfirmationStatusDTO, actix_web::Error>  {
-    let user_pubkey = Pubkey::from_str(user).map_err(|_| actix_web::error::ErrorBadRequest("Invalid user public key"))?;
-    let premarket_pubkey = Pubkey::from_str(premarket_account).map_err(|_| actix_web::error::ErrorBadRequest("Invalid premarket account public key"))?;
+) -> Result<OutConfirmationStatusDTO, actix_web::Error> {
+    let user_pubkey = Pubkey::from_str(user)
+        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid user public key"))?;
+    let premarket_pubkey = Pubkey::from_str(premarket_account)
+        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid premarket account public key"))?;
 
     let is_holder = get_premarket_data(client, &premarket_pubkey)
         .await
         .map(|data| data.users.iter().any(|user| user.wallet == user_pubkey))
-        .unwrap_or(false); 
+        .unwrap_or(false);
 
     Ok(if is_holder {
         OutConfirmationStatusDTO::OutFailed
@@ -470,8 +493,8 @@ pub async fn check_user_out(
 }
 
 pub async fn get_premarket_data(
-    client: &RpcClient, 
-    premarket_account: &Pubkey
+    client: &RpcClient,
+    premarket_account: &Pubkey,
 ) -> Result<PremarketOnchainData, actix_web::Error> {
     let account = client
         .get_account(premarket_account)
@@ -480,7 +503,9 @@ pub async fn get_premarket_data(
 
     // Minimum length: 8 discriminator + 4 length + (could be zero users) + 8+1+8+8+32 for tail fields
     if account.data.len() < 8 + 4 + 8 + 1 + 8 + 8 + 32 {
-        return Err(ErrorBadRequest("Account data too short for premarket layout"));
+        return Err(ErrorBadRequest(
+            "Account data too short for premarket layout",
+        ));
     }
 
     // Skip discriminator
@@ -491,21 +516,24 @@ pub async fn get_premarket_data(
     let users_len = u32::from_le_bytes(users_len_bytes) as usize;
 
     // Each user entry: 32 (pubkey) + 8 (lamports) + 1 (claimed)
-    let users_section_len = users_len.checked_mul(41)
+    let users_section_len = users_len
+        .checked_mul(41)
         .ok_or_else(|| ErrorBadRequest("Users length overflow"))?;
 
     let needed_len = 4 + users_section_len + (8 + 1 + 8 + 8 + 32); // vec length + users + tail fields (end_timestamp + extended_premarket + goal + max + mint)
     if data.len() < needed_len {
-        return Err(ErrorBadRequest("Account data too short for declared users length"));
+        return Err(ErrorBadRequest(
+            "Account data too short for declared users length",
+        ));
     }
 
     let mut users = Vec::with_capacity(users_len);
     let mut offset = 4;
     for _ in 0..users_len {
-        let pk_slice = &data[offset..offset+32];
+        let pk_slice = &data[offset..offset + 32];
         let wallet = Pubkey::new_from_array(pk_slice.try_into().unwrap());
-        let lamports = u64::from_le_bytes(data[offset+32..offset+40].try_into().unwrap());
-        let claimed = data[offset+40] != 0;
+        let lamports = u64::from_le_bytes(data[offset + 32..offset + 40].try_into().unwrap());
+        let claimed = data[offset + 40] != 0;
         users.push(PremarketOnchainUser {
             wallet,
             contributed_lamports: lamports,
@@ -515,19 +543,19 @@ pub async fn get_premarket_data(
     }
 
     // Tail fields
-    let end_timestamp = i64::from_le_bytes(data[offset..offset+8].try_into().unwrap());
+    let end_timestamp = i64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
     offset += 8;
 
     let extended_premarket = data[offset] != 0;
     offset += 1;
 
-    let goal_lamports = u64::from_le_bytes(data[offset..offset+8].try_into().unwrap());
+    let goal_lamports = u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
     offset += 8;
 
-    let max_lamports = u64::from_le_bytes(data[offset..offset+8].try_into().unwrap());
+    let max_lamports = u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
     offset += 8;
 
-    let mint = Pubkey::new_from_array(data[offset..offset+32].try_into().unwrap());
+    let mint = Pubkey::new_from_array(data[offset..offset + 32].try_into().unwrap());
 
     Ok(PremarketOnchainData {
         users,
@@ -545,20 +573,23 @@ pub async fn get_holder_entry_price(
     holder_wallet: &str,
 ) -> Result<Option<f64>, actix_web::Error> {
     // Get the holder's join timestamp
-    let join_timestamp = match premarket_repo::get_holder_join_timestamp(pool, premarket_pubkey, holder_wallet).await {
+    let join_timestamp = match premarket_repo::get_holder_join_timestamp(
+        pool,
+        premarket_pubkey,
+        holder_wallet,
+    )
+    .await
+    {
         Ok(Some(ts)) => ts,
         Ok(None) => return Ok(None),
         Err(e) => return Err(ErrorInternalServerError(e)),
     };
 
     // Get the total lamports collected before this holder joined
-    let lamports_before_join = premarket_repo::get_lamports_before_timestamp(
-        pool,
-        premarket_pubkey,
-        join_timestamp,
-    )
-    .await
-    .map_err(ErrorInternalServerError)?;
+    let lamports_before_join =
+        premarket_repo::get_lamports_before_timestamp(pool, premarket_pubkey, join_timestamp)
+            .await
+            .map_err(ErrorInternalServerError)?;
 
     // Use the same price calculation as get_price_by_market_cap
     let url = match std::env::var("PYTH_MAINNET_URL") {
@@ -566,7 +597,7 @@ pub async fn get_holder_entry_price(
         Err(_) => {
             println!("PYTH_MAINNET_URL environment variable not set");
             return Ok(Some(0.0));
-        },
+        }
     };
 
     let current_sol_price = match reqwest::get(&url).await {
@@ -590,7 +621,7 @@ pub async fn get_holder_entry_price(
                     0.0
                 }
             }
-        },
+        }
         Err(e) => {
             println!("Pyth HTTP request error: {:?}", e);
             0.0
@@ -600,7 +631,8 @@ pub async fn get_holder_entry_price(
     let real_lamp_amount = lamports_before_join as u64;
     let real_sol_amount: f64 = real_lamp_amount as f64 / 1_000_000_000.0;
 
-    let real_token_bought_amount: u64 = ((1_073_000_000.0 * real_sol_amount) / (30.0 + real_sol_amount)) as u64;
+    let real_token_bought_amount: u64 =
+        ((1_073_000_000.0 * real_sol_amount) / (30.0 + real_sol_amount)) as u64;
     let real_token_amount: u64 = 793_100_000 - real_token_bought_amount;
 
     let virtual_lamp_amount: f64 = real_sol_amount + 30.0;
@@ -618,18 +650,39 @@ pub async fn update_premarket_deadline(
     premarket_pubkey: &str,
     new_deadline: i64,
 ) -> Result<(), actix_web::Error> {
-    let affected = premarket_repo::update_premarket_deadline(
-        pool,
-        premarket_pubkey,
-        new_deadline,
-    )
-    .await
-    .map_err(ErrorInternalServerError)?;
+    let affected = premarket_repo::update_premarket_deadline(pool, premarket_pubkey, new_deadline)
+        .await
+        .map_err(ErrorInternalServerError)?;
 
     if affected == 0 {
-        return Err(actix_web::error::ErrorNotFound(
-            format!("premarket '{}' not found", premarket_pubkey),
-        ));
+        return Err(actix_web::error::ErrorNotFound(format!(
+            "premarket '{}' not found",
+            premarket_pubkey
+        )));
+    }
+
+    Ok(())
+}
+
+pub async fn user_claimed_token(
+    pool: &PgPool,
+    premarket_pubkey: &Pubkey,
+    user_wallet: &str,
+) -> Result<(), actix_web::Error> {
+    let affected = premarket_repo::update_holder_claimed_status(
+                pool,
+                &premarket_pubkey.to_string(),
+                user_wallet,
+                true,
+            )
+            .await
+            .map_err(ErrorInternalServerError)?;
+    
+    if affected == 0 {
+        return Err(actix_web::error::ErrorNotFound(format!(
+            "premarket '{}' or holder '{}' not found",
+            premarket_pubkey, user_wallet
+        )));
     }
 
     Ok(())
@@ -667,9 +720,7 @@ pub async fn check_and_update_claimed_status(
 
             println!(
                 "✅ Updated claimed status for user {} in premarket {}: affected {} rows",
-                user_wallet,
-                premarket_pubkey,
-                affected
+                user_wallet, premarket_pubkey, affected
             );
 
             Ok((true, affected > 0))
@@ -684,9 +735,10 @@ pub async fn check_and_update_claimed_status(
         }
         None => {
             // User not found in premarket
-            Err(actix_web::error::ErrorNotFound(
-                format!("User {} not found in premarket {}", user_wallet, premarket_pubkey),
-            ))
+            Err(actix_web::error::ErrorNotFound(format!(
+                "User {} not found in premarket {}",
+                user_wallet, premarket_pubkey
+            )))
         }
     }
 }

@@ -15,6 +15,7 @@ pub enum ApiErrorCode {
     InvalidUserPubkey,
     WrongUserPubkeyForUser,
     AuthMissingWallet,
+    AuthInvalidToken,
 
     // Premarket creation-validation
     PremarketDeadlineTooEarly,
@@ -127,6 +128,42 @@ impl ApiError {
         }
     }
 
+    pub fn internal_send_tx_failed() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "internal_error",
+                code: ApiErrorCode::InternalSignTxFailed,
+                field: None,
+                message: Some("failed to send transaction to blockchain".into()),
+                errors: None,
+            },
+        }
+    }
+
+    pub fn internal_confirm_tx_failed() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "internal_error",
+                code: ApiErrorCode::InternalSignTxFailed,
+                field: None,
+                message: Some("failed to send transaction to blockchain: not confirmed".into()),
+                errors: None,
+            },
+        }
+    }
+    
+    pub fn internal_sign_tx_failed_goal() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "internal_error",
+                code: ApiErrorCode::InternalSignTxFailed,
+                field: None,
+                message: Some("goal value does not fit into i64".into()),
+                errors: None,
+            },
+        }
+    }
+
     pub fn internal_sign_tx_failed() -> Self {
         Self {
             response: ApiErrorResponse {
@@ -214,6 +251,17 @@ impl ApiError {
     }
 
     /// 401
+    pub fn auth_invalid_token() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "unauthorized",
+                code: ApiErrorCode::AuthMissingWallet,
+                field: Some("token"),
+                message: Some("jwt token is not valid".into()),
+                errors: None,
+            },
+        }
+    }
     pub fn auth_missing_wallet() -> Self {
         Self {
             response: ApiErrorResponse {
@@ -252,6 +300,7 @@ impl ResponseError for ApiError {
         use ApiErrorCode::*;
         match self.response.code {
             InvalidNetwork
+            | AuthInvalidToken
             | InvalidUserPubkey
             | PremarketDeadlineTooEarly
             | PremarketDeadlineTooLate
