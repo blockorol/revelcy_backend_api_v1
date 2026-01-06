@@ -65,9 +65,9 @@ COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src && echo "fn main() {}" > src/main.rs
 
 # 3) Warm up dependency cache - build ONLY the API bin
-RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
-    --mount=type=cache,target=/app/target,sharing=locked \
+RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=cargo-git,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,id=cargo-target-musl,target=/app/target,sharing=locked \
     cargo build --release --target x86_64-unknown-linux-musl --bin revelcy-backend-api
 
 # 4) Copy real sources
@@ -75,9 +75,9 @@ RUN rm -rf src
 COPY . .
 
 # 5) Final build + export binary into non-cached path
-RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
-    --mount=type=cache,target=/app/target,sharing=locked \
+RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=cargo-git,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,id=cargo-target-musl,target=/app/target,sharing=locked \
     cargo build --release --target x86_64-unknown-linux-musl --bin revelcy-backend-api && \
     mkdir -p /app/out && \
     cp /app/target/x86_64-unknown-linux-musl/release/revelcy-backend-api /app/out/revelcy-backend-api
