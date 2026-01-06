@@ -154,13 +154,14 @@ pub fn validate_finish_premarket(
     }
 
     // 3) deadline passed
-    if premarket.main_info.deadline_timestamp > now {
-        errors.push(FieldError {
-            field: "premarket",
-            code: ApiErrorCode::PremarketFinishTooEarly,
-            message: "premarket deadline has not yet passed",
-        });
-    }
+    // we skip it for the puppy PM
+    // if premarket.main_info.deadline_timestamp > now {
+    //     errors.push(FieldError {
+    //         field: "premarket",
+    //         code: ApiErrorCode::PremarketFinishTooEarly,
+    //         message: "premarket deadline has not yet passed",
+    //     });
+    // }
 
     // 4) goal reached (по твоей динамике это reserved_sol_lamp)
     // Важно: проверь, что это реально та метрика, которая должна сравниваться с goal.
