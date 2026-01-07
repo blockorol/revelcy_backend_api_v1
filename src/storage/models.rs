@@ -39,6 +39,7 @@ pub struct PremarketInfoDbModel {
     pub creator_id: Uuid,
     pub creator_address: String,
     pub bc_address: String,
+    pub short_url_name: Option<String>,
     pub data_uri: String,
     pub mint_address: String,
     pub name: String,
@@ -54,6 +55,7 @@ pub struct PremarketInfoDbModel {
     pub premarket_goal_sol_lamp: i64,
     pub premarket_deadline: i64,
     pub is_extended: bool,
+    pub is_hided: bool,
     pub premarket_created: i64,
     pub premarket_finished: Option<i64>,
 

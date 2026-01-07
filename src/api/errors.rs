@@ -16,6 +16,7 @@ pub enum ApiErrorCode {
     WrongUserPubkeyForUser,
     AuthMissingWallet,
     AuthInvalidToken,
+    ForbiddenAction,
 
     // Premarket creation-validation
     PremarketDeadlineTooEarly,
@@ -47,6 +48,8 @@ pub enum ApiErrorCode {
     // Internal Error
     InternalBuildTxFailed,
     InternalSignTxFailed,
+    InternalUpdateFailed,
+    InternalUnknownError,
 
     // basic error - about validation
     ValidationError,
@@ -123,6 +126,18 @@ impl ApiError {
                 code: ApiErrorCode::PremarketJoinAmountTooLarge,
                 field: Some("amount_sol_lamp"),
                 message: Some("amount_sol_lamp must be > 0".into()),
+                errors: None,
+            },
+        }
+    }
+
+    pub fn internal_update_db_error() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "internal_error",
+                code: ApiErrorCode::InternalUpdateFailed,
+                field: None,
+                message: Some("failed to update internal state".into()),
                 errors: None,
             },
         }
@@ -274,6 +289,43 @@ impl ApiError {
         }
     }
 
+
+    pub fn invalid_auth_token() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "invalid token",
+                code: ApiErrorCode::AuthInvalidToken,
+                field: None,
+                message: Some("token is invalid".into()),
+                errors: None,
+            },
+        }
+    }
+
+    pub fn forbidden() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "forbidden",
+                code: ApiErrorCode::ForbiddenAction,
+                field: None,
+                message: Some("this action is forbidden".into()),
+                errors: None,
+            },
+        }
+    }
+
+    pub fn internal_server_error() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "internal_error",
+                code: ApiErrorCode::InternalUpdateFailed,
+                field: None,
+                message: Some("internal server error".into()),
+                errors: None,
+            },
+        }
+    }
+
     /// validation error with 1 format (Vec<FieldError> → один ответ).
     pub fn from_field_errors(errors: Vec<FieldError>) -> Self {
         Self {
@@ -325,10 +377,13 @@ impl ResponseError for ApiError {
             | MissingPremarket
             => StatusCode::BAD_REQUEST,
             
-            WrongUserPubkeyForUser => StatusCode::FORBIDDEN,
+            WrongUserPubkeyForUser 
+            | ForbiddenAction => StatusCode::FORBIDDEN,
             AuthMissingWallet => StatusCode::UNAUTHORIZED,
 
             InternalBuildTxFailed
+            | InternalUpdateFailed
+            | InternalUnknownError
             | InternalSignTxFailed => StatusCode::INTERNAL_SERVER_ERROR,
 
         }
