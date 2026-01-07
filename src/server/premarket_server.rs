@@ -1146,7 +1146,7 @@ pub async fn get_main_info(
         }
     };
 
-    if (premarket_info.main_info.is_hided && key_type == PremarketLookupKeyType::BcAddress) {
+    if premarket_info.main_info.is_hided && key_type == PremarketLookupKeyType::BcAddress {
         let ctx: super::auth_validation::BaseRequestContext = match validate_base_request(&req, query.network.as_str(), None) {
             Ok(v) => v,
             Err(_) => return Err(ApiError::invalid_auth_token()),
