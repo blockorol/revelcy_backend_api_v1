@@ -23,7 +23,8 @@ use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct GetMainInfoQuery {
-    pub premarket_id: String,
+    pub premarket_id: Option<String>,
+    pub premarket_name: Option<String>,
     pub network: String,
 }
 
@@ -31,18 +32,20 @@ pub struct GetMainInfoQuery {
 pub struct GetMainInfoDTO {
     pub blockchain_info: BlockchainInfoDTO,
     pub community_info: CommunityInfoDTO,
-    pub availability: AvailabilityInfoDTO,
+    pub availability_info: AvailabilityInfoDTO,
 }
 
 #[derive(Deserialize)]
 pub struct GetListQuery {
+    pub network: String,
     pub cursor: u32,
     pub limit: u32,
 }
 
+#[derive(Serialize)]
 pub struct ShortPremarketInfoDTO {
     pub blockchain_info: BlockchainInfoDTO,
-    pub availability: AvailabilityInfoDTO,
+    pub availability_info: AvailabilityInfoDTO,
 }
 
 #[derive(Serialize)]
@@ -90,7 +93,7 @@ pub struct TokenLinksDTO {
     pub web_site: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 pub struct UpdateAvailabilityInfoDTO {
     pub premarket_pubkey: String,
     pub token_short_url_name: Option<String>,

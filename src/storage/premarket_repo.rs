@@ -22,6 +22,55 @@ pub async fn get_premarket_id_by_bc_address(
         Ok(None)
     }
 }
+pub async fn get_premarket_info_by_name(
+    pool: &PgPool,
+    premarket_name: &str,
+) -> Result<Option<(PremarketInfoDbModel, CommunityInfoDbModel, Vec<CommunityLinkDbModel>)>> {
+    let premarket = sqlx::query_as::<_, PremarketInfoDbModel>(
+        r#"
+        SELECT *
+        FROM premarket_info
+        WHERE short_url_name = $1
+        LIMIT 1
+        "#
+    )
+    .bind(premarket_name)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(pm) = &premarket {
+        let community = sqlx::query_as::<_, CommunityInfoDbModel>(
+            r#"SELECT * FROM community_info WHERE id = $1"#
+        )
+        .bind(pm.id)
+        .fetch_optional(pool)
+        .await?;
+
+        let (community, links_db) = if let Some(cm) = community {
+            let links = sqlx::query_as::<_, CommunityLinkDbModel>(
+                r#"SELECT * FROM community_links WHERE community_info_id = $1"#
+            )
+            .bind(cm.id)
+            .fetch_all(pool)
+            .await?;
+
+            (cm, links)
+        } else {
+            (
+                CommunityInfoDbModel {
+                    id: pm.id,
+                    description: "".to_string(),
+                    token_banner_url: None,
+                },
+                vec![],
+            )
+        };
+
+        Ok(Some((pm.clone(), community, links_db)))
+    } else {
+        Ok(None)
+    }
+}
 
 pub async fn get_premarket_info_by_bc_address(
     pool: &PgPool,

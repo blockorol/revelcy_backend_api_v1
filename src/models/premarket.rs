@@ -5,6 +5,13 @@ use solana_sdk::pubkey::Pubkey;
 
 use crate::api::premarket::{LinkTypeDTO, TokenDynamicInfoDTO, HolderInfoDTO};
 
+#[derive(Clone, Copy, Debug)]
+pub enum PremarketLookupKeyType {
+    BcAddress,
+    Name,
+}
+
+
 
 #[derive(Debug, Clone)]
 pub struct BuildJoinTxParams {

@@ -70,6 +70,7 @@ pub fn validate_base_request(
     let user_context_data = UserContextData {
         internal_id: token_data.user_id,
         wallets: vec![user_pubkey], 
+        current_pubkey: user_pubkey,
     };
 
     Ok(BaseRequestContext {

@@ -22,6 +22,7 @@ use crate::api::premarket::{
     AvailabilityInfoDTO, BlockchainInfoDTO, CheckTxDTO, ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketDTO, CreatePremarketTxRequest, CreatePremarketTxResponse, DeployTxDTO, DistributeTokensRequest, ExtendPremarketTxRequest, ExtendedPremarketDTO, FinishPremarketTxRequest, FinishedPremarketDTO, GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO, GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO, HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest, PremarketTransactionDTO, SentTxResponse, ShortPremarketInfoDTO, TokenClaimedDTO, TokenClaimedResponse, TokenDynamicInfoDTO, TokenLinksDTO, TokenState, TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateAvailabilityInfoDTO, UpdateCommunityDTO, UpdatePremarketDataDTO, UserJoinedToPremarketDTO
 };
 use crate::models::premarket::{
+    PremarketLookupKeyType,
     BuildFinishTxParams, 
     BuildJoinTxParams, 
     BuildKillTxParams, 
@@ -336,7 +337,7 @@ pub async fn sign_and_send_transaction(
 
         // extend needs DB state validation
         let premarket_str: String = parsed.premarket.to_string().clone();
-        let premarket = premarket_service::get_full_premarket_info(&pool, &premarket_str)
+        let premarket = premarket_service::get_full_premarket_info(&pool, &premarket_str, PremarketLookupKeyType::BcAddress)
             .await
             .map_err(|e| {
                 eprintln!("get_full_premarket_info error: {e:?}");
@@ -426,7 +427,7 @@ pub async fn sign_and_send_transaction(
 
 
         // 1) DB validation (same as build)
-        let full = premarket_service::get_full_premarket_info(pool.get_ref(), &premarket_str)
+        let full = premarket_service::get_full_premarket_info(pool.get_ref(), &premarket_str, PremarketLookupKeyType::BcAddress)
             .await
             .map_err(|e| { eprintln!("get_full_premarket_info error: {e:?}"); ApiError::internal_sign_tx_failed_goal() })?
             .ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
@@ -481,7 +482,7 @@ pub async fn sign_and_send_transaction(
             .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
         // 1) DB validation (same as build)
-        let full = premarket_service::get_full_premarket_info(&pool, &premarket_str)
+        let full = premarket_service::get_full_premarket_info(&pool, &premarket_str, PremarketLookupKeyType::BcAddress)
             .await
             .map_err(|e| { eprintln!("get_full_premarket_info error: {e:?}"); ApiError::internal_sign_tx_failed() })?
             .ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
@@ -694,7 +695,7 @@ pub async fn finish_premarket_tx(
         .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
     // 1) load premarket from DB
-    let full = premarket_service::get_full_premarket_info(pool.get_ref(), &dto.premarket_account)
+    let full = premarket_service::get_full_premarket_info(pool.get_ref(), &dto.premarket_account, PremarketLookupKeyType::BcAddress)
         .await
         .map_err(|e| {
             eprintln!("get_full_premarket_info error: {e:?}");
@@ -1015,7 +1016,7 @@ pub async fn extend_premarket_tx(
     let premarket_key = Pubkey::from_str(&dto.premarket_account)
         .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
-    let premarket = premarket_service::get_full_premarket_info(&pool, &dto.premarket_account)
+    let premarket = premarket_service::get_full_premarket_info(&pool, &dto.premarket_account, PremarketLookupKeyType::BcAddress)
         .await
         .map_err(|e| {
             eprintln!("❌ Failed to get premarket({}) data: {}", dto.premarket_account, e);
@@ -1101,7 +1102,7 @@ pub async fn get_list_main_info(
                     PremarketState::Finished  => TokenState::Finished,
                 },
             },
-            availability: AvailabilityInfoDTO {
+            availability_info: AvailabilityInfoDTO {
                 token_short_url_name: premarket_info.short_url_name.clone(),
                 is_hided: premarket_info.is_hided,
             },
@@ -1118,27 +1119,37 @@ pub async fn get_main_info(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     query: web::Query<GetMainInfoQuery>,
-) -> HttpResponse {
-    let premarket_id_str = query.premarket_id.trim();
+) -> ApiResult<HttpResponse> {
+    let id_opt = query.premarket_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let name_opt = query.premarket_name.as_deref().map(str::trim).filter(|s| !s.is_empty());
 
-    let pubkey = match Pubkey::from_str(premarket_id_str) {
-        Ok(pk) => pk,
-        Err(_) => return HttpResponse::BadRequest().body("Invalid premarket_id (not a valid pubkey)"),
+    let (key, key_type): (String, PremarketLookupKeyType) = if let Some(id) = id_opt {
+        let pk = Pubkey::from_str(id).map_err(|_| ApiError::invalid_premarket_pubkey())?;
+        (pk.to_string(), PremarketLookupKeyType::BcAddress)
+    } else if let Some(name) = name_opt {
+        (name.to_string(), PremarketLookupKeyType::Name)
+    } else {
+        return Err(ApiError::from_field_errors(vec![FieldError{
+            field: "premarket_id|premarket_name",
+            code: ApiErrorCode::ValidationError,
+            message: "either premarket_id or premarket_name is required",
+        }]));
     };
 
-    let premarket_info = match premarket_service::get_full_premarket_info(&pool, &pubkey.to_string()).await {
+
+    let premarket_info = match premarket_service::get_full_premarket_info(&pool, &key, key_type).await {
         Ok(Some(info)) => info,
-        Ok(None) => return HttpResponse::NotFound().body("Premarket info not found"),
+        Ok(None) => return Err(ApiError::invalid_premarket_pubkey()),
         Err(err) => {
             eprintln!("Error fetching premarket info: {:?}", err);
-            return HttpResponse::InternalServerError().finish();
+            return Err(ApiError::internal_server_error());
         }
     };
 
     if premarket_info.main_info.is_hided {
         let ctx: super::auth_validation::BaseRequestContext = match validate_base_request(&req, query.network.as_str(), None) {
             Ok(v) => v,
-            Err(_) => return HttpResponse::Unauthorized().finish(),
+            Err(_) => return Err(ApiError::invalid_auth_token()),
         };
 
         let creator_id_ok = premarket_info.main_info.creator.id == Some(ctx.user.internal_id);
@@ -1147,14 +1158,18 @@ pub async fn get_main_info(
             Ok(pk) => pk,
             Err(e) => {
                 eprintln!("Invalid creator blockchain_address in DB: {:?}", e);
-                return HttpResponse::InternalServerError().finish();
+                return Err(ApiError::internal_server_error())
             }
         };
 
         let creator_wallet_ok = creator_pubkey == ctx.user.current_pubkey;
 
         if (!creator_id_ok) || (!creator_wallet_ok) {
-            return HttpResponse::Unauthorized().finish();
+            return Err(ApiError::from_field_errors(vec![FieldError{
+                field: "premarket_id|premarket_name",
+                code: ApiErrorCode::PremarketNotFound,
+                message: "premarket not found",
+            }]));
         }
     }
 
@@ -1201,7 +1216,7 @@ pub async fn get_main_info(
         token_banner_url: premarket_info.community.token_banner_url,
         links: dto_links,
     };
-    let availability = AvailabilityInfoDTO {
+    let availability_info = AvailabilityInfoDTO {
         token_short_url_name: premarket_info.main_info.short_url_name.clone(),
         is_hided: premarket_info.main_info.is_hided,
     };
@@ -1209,10 +1224,10 @@ pub async fn get_main_info(
     let response = GetMainInfoDTO {
         blockchain_info,
         community_info,
-        availability,
+        availability_info,
     };
-
-    HttpResponse::Ok().json(response)
+    
+    Ok(HttpResponse::Ok().json(response))
 }
 
 pub async fn get_dynamic_info(
@@ -1366,6 +1381,7 @@ pub async fn created_premarket(
     }
     Ok(HttpResponse::Ok().body("Saved"))
 }
+
 pub async fn update_availability(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -1381,18 +1397,16 @@ pub async fn update_availability(
         .to_string();
 
     // 2) load premarket
-    let pm = premarket_service::get_full_premarket_info(&pool, &premarket_pubkey)
+    let pm = premarket_service::get_full_premarket_info(&pool, &premarket_pubkey, PremarketLookupKeyType::BcAddress)
         .await
-        .map_err(|_| ApiError::internal_db_failed())?
+        .map_err(|_| ApiError::internal_update_db_error())?
         .ok_or_else(ApiError::missing_premarket)?;
 
     // 3) check creator
-    let is_creator_id = pm.main_info.creator.id == Some(ctx.user.internal_id);
-    let is_creator_wallet = pm.main_info.creator.blockchain_address == ctx.user.current_pubkey.to_string();
-
-    if !is_creator_id || !is_creator_wallet {
+    if !(pm.main_info.creator.id == Some(ctx.user.internal_id)) {
         return Err(ApiError::forbidden());
     }
+
 
     // 4) normalize inputs
 
@@ -1404,7 +1418,9 @@ pub async fn update_availability(
         dto.token_short_url_name,
     )
     .await
-    .map_err(ApiError::internal_update_db_error)?;
+    .map_err(|_| ApiError::internal_update_db_error())?;
+    println!("Update availability Done");
+
 
     Ok(HttpResponse::Ok().finish())
 }

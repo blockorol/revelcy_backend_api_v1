@@ -13,6 +13,7 @@ pub struct User {
 #[derive(Serialize, Deserialize)]
 pub struct UserContextData {
     pub internal_id: Uuid,
+    pub current_pubkey: Pubkey,
     pub wallets: Vec<Pubkey>,
 }
 

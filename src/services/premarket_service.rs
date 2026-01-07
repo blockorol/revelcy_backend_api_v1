@@ -1,4 +1,5 @@
 use crate::models::premarket::{
+    PremarketLookupKeyType,
     CommunityInfoServiceModel, CommunityLink, FullPremarketInfo, HolderInfo,
     JoinConfirmationStatusDTO, LinkType, OutConfirmationStatusDTO, PremarketGoal,
     PremarketInfoServiceModel, PremarketListResult, PremarketOnchainData, PremarketOnchainUser,
@@ -8,8 +9,8 @@ use crate::models::premarket::{
 use crate::models::user::UserContextData;
 
 use crate::storage::models::{
-    CommunityInfoDbModel, CommunityLinkDbModel, HolderDbModel, PremarketInfoDbModel,
-};
+    CommunityInfoDbModel, CommunityLinkDbModel, HolderDbModel, PremarketInfoDbModel
+}; // todo: по хорошему убрать это. сервисный уровень не должен знать про модели БД. он рабоатет с моделями сервиса, и каст должен идти в репозитории
 use crate::storage::premarket_repo;
 use actix_web::error::ErrorBadRequest;
 use actix_web::error::ErrorInternalServerError;
@@ -24,9 +25,19 @@ use std::str::FromStr;
 
 pub async fn get_full_premarket_info(
     pool: &PgPool,
-    bc_address: &str,
+    key: &str,
+    key_type: PremarketLookupKeyType,
 ) -> Result<Option<FullPremarketInfo>, actix_web::Error> {
-    match premarket_repo::get_premarket_info_by_bc_address(pool, bc_address).await {
+    let data = match key_type {
+        PremarketLookupKeyType::BcAddress => {
+            premarket_repo::get_premarket_info_by_bc_address(pool, key).await
+        }
+        PremarketLookupKeyType::Name => {
+            premarket_repo::get_premarket_info_by_name(pool, key).await
+        }
+    };
+
+    match data {
         Ok(Some((pm_db, cm_db, links_db))) => {
             let premarket_info = PremarketInfoServiceModel {
                 id: Some(pm_db.id),
@@ -82,7 +93,7 @@ pub async fn get_full_premarket_info(
             let community_info = CommunityInfoServiceModel {
                 description: cm_db.description,
                 token_banner_url: cm_db.token_banner_url,
-                links: links,
+                links,
             };
 
             Ok(Some(FullPremarketInfo {
@@ -288,18 +299,10 @@ pub async fn get_dynamic_info(
         })
         .collect();
 
-    println!("reserved_sol_lamp: {}", holder_data.reserved_sol_lamp);
-    println!(
-        "reserved_sol_24h_before_lamp: {}",
-        holder_data.reserved_sol_24h_before_lamp
-    );
-
     let current_price_lamp = get_price_by_market_cap(holder_data.reserved_sol_lamp as u64).await;
-    println!("current_price_lamp: {}", current_price_lamp);
 
     let price_24h_ago_lamp =
         get_price_by_market_cap(holder_data.reserved_sol_24h_before_lamp as u64).await;
-    println!("price_24h_ago_lamp: {}", price_24h_ago_lamp);
 
     let change_24h = if price_24h_ago_lamp > 0.0 && price_24h_ago_lamp != current_price_lamp {
         ((current_price_lamp - price_24h_ago_lamp) / price_24h_ago_lamp) * 100.0
@@ -392,7 +395,6 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
 
     let current_sol_price = match reqwest::get(&url).await {
         Ok(response) => {
-            println!("Pyth API response status: {}", response.status());
             match response.json::<PythResponse>().await {
                 Ok(pyth_response) => {
                     //println!("Pyth API response: {:?}", pyth_response);
@@ -402,7 +404,6 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
                         let expo = parsed_data.price.expo;
                         let price_value: f64 = price_str.parse().unwrap_or(0.0);
                         let price = price_value * 10_f64.powi(expo);
-                        //println!("Extracted SOL price from Pyth: {}", price);
                         price
                     } else {
                         println!("No parsed data found in Pyth response");
@@ -420,7 +421,6 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
             0.0
         }
     };
-    println!("Final current_sol_price: {}", current_sol_price);
 
     let real_sol_amount: f64 = real_lamp_amount as f64 / 1_000_000_000.0;
 
@@ -435,12 +435,7 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
     let price = virtual_lamp_amount / virtual_token_amount as f64 * current_sol_price;
     let final_price = (price * 1_000_000_000.0).round() / 1_000_000_000.0;
 
-    println!("Real sol amount: {}", real_sol_amount);
-    println!("Real token amount: {}", real_token_amount);
-    println!("Virtual sol amount: {}", virtual_lamp_amount);
-    println!("Virtual token amount: {}", virtual_token_amount);
-    println!("Price: {}", price);
-    println!("Final price: {}", final_price);
+    println!("Real sol: {}, token: {}, Virtual sol: {}, token: {} => price {}, Final price: {}", real_sol_amount, real_token_amount, virtual_lamp_amount, virtual_token_amount, price, final_price  );
     final_price
 }
 
