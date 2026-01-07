@@ -76,6 +76,7 @@ pub async fn get_premarket_info_by_bc_address(
 
 pub async fn get_list(
     pool: &PgPool,
+    user_id_opt: Option<Uuid>,
     cursor: i64,
     limit: i64,
 ) -> Result<Option<(Vec<PremarketInfoDbModel>, i64)>> {
@@ -83,8 +84,18 @@ pub async fn get_list(
     let offset = cursor.max(0);
 
     let total: i64 = sqlx::query_scalar::<_, i64>(
-        r#"SELECT COUNT(*) FROM premarket_info"#,
+        r#"
+        SELECT COUNT(*)
+        FROM premarket_info
+        WHERE
+          is_hided = FALSE
+          OR (
+            $1::uuid IS NOT NULL
+            AND creator_id = $1::uuid
+          )
+        "#,
     )
+    .bind(user_id_opt)
     .fetch_one(pool)
     .await?;
 
@@ -92,10 +103,17 @@ pub async fn get_list(
         r#"
         SELECT *
         FROM premarket_info
+        WHERE
+          is_hided = FALSE
+          OR (
+            $1::uuid IS NOT NULL
+            AND creator_id = $1::uuid
+          )
         ORDER BY premarket_created DESC, id DESC
-        LIMIT $1 OFFSET $2
-        "#
+        LIMIT $2 OFFSET $3
+        "#,
     )
+    .bind(user_id_opt)
     .bind(limit)
     .bind(offset)
     .fetch_all(pool)
@@ -132,13 +150,15 @@ pub async fn create_premarket_and_community(
             premarket_deadline,
             premarket_created,
             state,
-            mint_address
+            mint_address,
+            is_hided,
+            short_url_name
         )
         VALUES (
             $1, $2, $3, $4, $5,
             $6, $7, $8, $9, $10,
             $11, $12, $13, $14, $15,
-            $16, $17
+            $16, $17, $18, $19
         )
         RETURNING *
         "#
@@ -160,6 +180,8 @@ pub async fn create_premarket_and_community(
     .bind(premarket.premarket_created)
     .bind(&premarket.state)
     .bind(&premarket.mint_address)
+    .bind(&premarket.is_hided)
+    .bind(&premarket.short_url_name)
     .fetch_one(&mut tx)
     .await?;
 
@@ -200,6 +222,33 @@ pub async fn create_premarket_and_community(
         return Err(e.into());
     }
     Ok(())
+}
+
+pub async fn update_availability_info(
+    pool: &PgPool,
+    bc_address: &str,
+    is_hided: Option<bool>,
+    short_url_name: Option<String>,
+) -> Result<()> {
+    let id_option = get_premarket_id_by_bc_address(pool, bc_address).await?;
+    let premarket_info_id = id_option.ok_or(sqlx::Error::RowNotFound)?;
+
+    let result = sqlx::query(
+        r#"
+        UPDATE premarket_info
+            SET
+                is_hided = COALESCE($1, is_hided),
+                short_url_name = COALESCE($2, short_url_name)
+            WHERE id = $3
+        "#,
+    )
+    .bind(is_hided)
+    .bind(short_url_name)
+    .bind(premarket_info_id)
+    .execute(pool)
+    .await?;
+
+    return Ok(());
 }
 
 pub async fn update_community_info(

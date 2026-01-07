@@ -19,7 +19,7 @@ use crate::server::premarket_validation::{
 use crate::server::auth_validation::validate_base_request;
 
 use crate::api::premarket::{
-    BlockchainInfoDTO, CheckTxDTO, ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketDTO, CreatePremarketTxRequest, CreatePremarketTxResponse, DeployTxDTO, DistributeTokensRequest, ExtendPremarketTxRequest, ExtendedPremarketDTO, FinishPremarketTxRequest, FinishedPremarketDTO, GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO, GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO, HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest, PremarketTransactionDTO, SentTxResponse, TokenClaimedDTO, TokenClaimedResponse, TokenDynamicInfoDTO, TokenLinksDTO, TokenState, TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateCommunityDTO, UpdatePremarketDataDTO, UserJoinedToPremarketDTO
+    AvailabilityInfoDTO, BlockchainInfoDTO, CheckTxDTO, ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketDTO, CreatePremarketTxRequest, CreatePremarketTxResponse, DeployTxDTO, DistributeTokensRequest, ExtendPremarketTxRequest, ExtendedPremarketDTO, FinishPremarketTxRequest, FinishedPremarketDTO, GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO, GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO, HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest, PremarketTransactionDTO, SentTxResponse, ShortPremarketInfoDTO, TokenClaimedDTO, TokenClaimedResponse, TokenDynamicInfoDTO, TokenLinksDTO, TokenState, TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateAvailabilityInfoDTO, UpdateCommunityDTO, UpdatePremarketDataDTO, UserJoinedToPremarketDTO
 };
 use crate::models::premarket::{
     BuildFinishTxParams, 
@@ -68,6 +68,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/get_dynamic_info", web::get().to(get_dynamic_info))
         .route("/get_holder_entry_price", web::get().to(get_holder_entry_price))
         .route("/update_community", web::post().to(update_community_info))
+        .route("/update_availability", web::post().to(update_availability))
 
         .route("/created", web::post().to(created_premarket))
         .route("/user_joined", web::post().to(user_joined))
@@ -193,6 +194,8 @@ pub async fn sign_and_send_transaction(
             blockchain_address: parsed.premarket_pda.to_string(),
             finished_timestamp: None,
             is_extended: false,
+            is_hided: false,
+            short_url_name: None,
         };
         // community should be updated on the next step
         let community = CommunityInfoServiceModel{
@@ -1046,6 +1049,7 @@ pub async fn extend_premarket_tx(
 }
 
 pub async fn get_list_main_info(
+    req: HttpRequest,
     pool: web::Data<PgPool>,
     query: web::Query<GetListQuery>,
 ) -> Result<HttpResponse, Error> {
@@ -1054,61 +1058,67 @@ pub async fn get_list_main_info(
     if limit <= 0 { limit = 50; }
     if limit > 200 { limit = 200; }
 
-    let list_opt = premarket_service::get_list(pool.get_ref(), cursor, limit)
+
+    let user_opt = validate_base_request(&req, query.network.as_str(), None)
+        .ok()
+        .map(|ctx| ctx.user); // <-- берём только user
+
+    let list = premarket_service::get_list(pool.get_ref(), cursor, limit, user_opt)
         .await
-        .map_err(ErrorInternalServerError)?;
+        .map_err(ErrorInternalServerError)?
+        .unwrap_or(PremarketListResult { items: vec![], total: Some(0) });
 
-    let list = list_opt.unwrap_or(PremarketListResult {
-        items: Vec::new(),
-        total: Some(0),
-    });
 
-    let premarkets_vec: Vec<BlockchainInfoDTO> = list.items
+    let premarkets_vec: Vec<ShortPremarketInfoDTO> = list.items
         .into_iter()
-        .map(|premarket_info| BlockchainInfoDTO {
-            id: premarket_info.id.map(|id| id.to_string()),
-            ipfs_uri: premarket_info.token_info.data_uri.clone(),
-            creator_id: premarket_info.creator.id
-                .map(|id| id.to_string())
-                .unwrap_or_default(),
-            creator_address: premarket_info.creator.blockchain_address.clone(),
-            premarket_address: premarket_info.blockchain_address.clone(),
-            name: premarket_info.token_info.name.clone(),
-            description: premarket_info.token_info.description.clone(),
-            symbol: premarket_info.token_info.symbol.clone(),
-            image_url: premarket_info.token_info.image_url.clone(),
-            links: TokenLinksDTO {
-                telegram: premarket_info.token_info.links.telegram.clone(),
-                twitter:  premarket_info.token_info.links.twitter.clone(),
-                web_site: premarket_info.token_info.links.web_site.clone(),
+        .map(|premarket_info| ShortPremarketInfoDTO {
+            blockchain_info: BlockchainInfoDTO {
+                id: premarket_info.id.map(|id| id.to_string()),
+                ipfs_uri: premarket_info.token_info.data_uri.clone(),
+                creator_id: premarket_info.creator.id
+                    .map(|id| id.to_string())
+                    .unwrap_or_default(),
+                creator_address: premarket_info.creator.blockchain_address.clone(),
+                premarket_address: premarket_info.blockchain_address.clone(),
+                name: premarket_info.token_info.name.clone(),
+                description: premarket_info.token_info.description.clone(),
+                symbol: premarket_info.token_info.symbol.clone(),
+                image_url: premarket_info.token_info.image_url.clone(),
+                links: TokenLinksDTO {
+                    telegram: premarket_info.token_info.links.telegram.clone(),
+                    twitter:  premarket_info.token_info.links.twitter.clone(),
+                    web_site: premarket_info.token_info.links.web_site.clone(),
+                },
+                premarket_is_extended: Some(premarket_info.is_extended),
+                premarket_goal_sol_lamp: premarket_info.goal.solana_lamp.to_string(),
+                premarket_deadline: premarket_info.deadline_timestamp,
+                premarket_created:  premarket_info.created_timestamp,
+                premarket_finished: premarket_info.finished_timestamp,
+                mint_address: premarket_info.token_info.address.clone(),
+                state: match premarket_info.state {
+                    PremarketState::Premarket => TokenState::Premarket,
+                    PremarketState::Canceled  => TokenState::Canceled,
+                    PremarketState::Finished  => TokenState::Finished,
+                },
             },
-            premarket_is_extended: Some(premarket_info.is_extended),
-            premarket_goal_sol_lamp: premarket_info.goal.solana_lamp.to_string(),
-            premarket_deadline: premarket_info.deadline_timestamp,
-            premarket_created:  premarket_info.created_timestamp,
-            premarket_finished: premarket_info.finished_timestamp,
-            mint_address: premarket_info.token_info.address.clone(),
-            state: match premarket_info.state {
-                PremarketState::Premarket => TokenState::Premarket,
-                PremarketState::Canceled  => TokenState::Canceled,
-                PremarketState::Finished  => TokenState::Finished,
+            availability: AvailabilityInfoDTO {
+                token_short_url_name: premarket_info.short_url_name.clone(),
+                is_hided: premarket_info.is_hided,
             },
         })
         .collect();
 
-    let resp = GetListMainInfoDTO {
-        premarkets: Some(premarkets_vec), 
-        total: list.total,                
-    };
-
-    Ok(HttpResponse::Ok().json(resp))
+    Ok(HttpResponse::Ok().json(GetListMainInfoDTO {
+        premarkets: Some(premarkets_vec),
+        total: list.total,
+    }))
 }
 
 pub async fn get_main_info(
+    req: HttpRequest,
     pool: web::Data<PgPool>,
     query: web::Query<GetMainInfoQuery>,
 ) -> HttpResponse {
-    println!("received request to get token info");
     let premarket_id_str = query.premarket_id.trim();
 
     let pubkey = match Pubkey::from_str(premarket_id_str) {
@@ -1124,6 +1134,29 @@ pub async fn get_main_info(
             return HttpResponse::InternalServerError().finish();
         }
     };
+
+    if premarket_info.main_info.is_hided {
+        let ctx: super::auth_validation::BaseRequestContext = match validate_base_request(&req, query.network.as_str(), None) {
+            Ok(v) => v,
+            Err(_) => return HttpResponse::Unauthorized().finish(),
+        };
+
+        let creator_id_ok = premarket_info.main_info.creator.id == Some(ctx.user.internal_id);
+
+        let creator_pubkey = match Pubkey::from_str(premarket_info.main_info.creator.blockchain_address.as_str()) {
+            Ok(pk) => pk,
+            Err(e) => {
+                eprintln!("Invalid creator blockchain_address in DB: {:?}", e);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+
+        let creator_wallet_ok = creator_pubkey == ctx.user.current_pubkey;
+
+        if (!creator_id_ok) || (!creator_wallet_ok) {
+            return HttpResponse::Unauthorized().finish();
+        }
+    }
 
     let blockchain_info = BlockchainInfoDTO {
         id: premarket_info.main_info.id.map(|id| id.to_string()),
@@ -1168,10 +1201,15 @@ pub async fn get_main_info(
         token_banner_url: premarket_info.community.token_banner_url,
         links: dto_links,
     };
+    let availability = AvailabilityInfoDTO {
+        token_short_url_name: premarket_info.main_info.short_url_name.clone(),
+        is_hided: premarket_info.main_info.is_hided,
+    };
 
     let response = GetMainInfoDTO {
         blockchain_info,
         community_info,
+        availability,
     };
 
     HttpResponse::Ok().json(response)
@@ -1299,6 +1337,8 @@ pub async fn created_premarket(
         blockchain_address: info.premarket_address,
         finished_timestamp: None,
         is_extended: false,
+        is_hided: false,
+        short_url_name: None,
     };
 
 
@@ -1326,6 +1366,49 @@ pub async fn created_premarket(
     }
     Ok(HttpResponse::Ok().body("Saved"))
 }
+pub async fn update_availability(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    payload: web::Json<UpdateAvailabilityInfoDTO>,
+) -> ApiResult<HttpResponse> {
+    let dto = payload.into_inner();
+
+    let ctx = validate_base_request(&req, &dto.network, None)?; // network тут не важен, только auth
+
+    // 1) validate pubkey
+    let premarket_pubkey = Pubkey::from_str(&dto.premarket_pubkey)
+        .map_err(|_| ApiError::invalid_premarket_pubkey())?
+        .to_string();
+
+    // 2) load premarket
+    let pm = premarket_service::get_full_premarket_info(&pool, &premarket_pubkey)
+        .await
+        .map_err(|_| ApiError::internal_db_failed())?
+        .ok_or_else(ApiError::missing_premarket)?;
+
+    // 3) check creator
+    let is_creator_id = pm.main_info.creator.id == Some(ctx.user.internal_id);
+    let is_creator_wallet = pm.main_info.creator.blockchain_address == ctx.user.current_pubkey.to_string();
+
+    if !is_creator_id || !is_creator_wallet {
+        return Err(ApiError::forbidden());
+    }
+
+    // 4) normalize inputs
+
+    // 5) save
+    premarket_service::update_availability_info(
+        pool.get_ref(),
+        &premarket_pubkey,
+        dto.is_hided,
+        dto.token_short_url_name,
+    )
+    .await
+    .map_err(ApiError::internal_update_db_error)?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
 
 pub async fn update_community_info(
     pool: web::Data<PgPool>,

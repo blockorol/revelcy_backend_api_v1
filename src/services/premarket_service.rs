@@ -5,6 +5,7 @@ use crate::models::premarket::{
     PremarketState, TokenDynamicInfo, TokenInfo, TokenLinks, TxConfirmationStatusDTO,
     UserInfoShort,
 };
+use crate::models::user::UserContextData;
 
 use crate::storage::models::{
     CommunityInfoDbModel, CommunityLinkDbModel, HolderDbModel, PremarketInfoDbModel,
@@ -30,6 +31,7 @@ pub async fn get_full_premarket_info(
             let premarket_info = PremarketInfoServiceModel {
                 id: Some(pm_db.id),
                 blockchain_address: pm_db.bc_address,
+                short_url_name: pm_db.short_url_name,
                 creator: UserInfoShort {
                     id: Some(pm_db.creator_id),
                     blockchain_address: pm_db.creator_address,
@@ -52,6 +54,7 @@ pub async fn get_full_premarket_info(
                     solana_lamp: pm_db.premarket_goal_sol_lamp,
                 },
                 is_extended: pm_db.is_extended,
+                is_hided: pm_db.is_hided,
                 deadline_timestamp: pm_db.premarket_deadline,
                 created_timestamp: pm_db.premarket_created,
                 finished_timestamp: pm_db.premarket_finished,
@@ -96,8 +99,11 @@ pub async fn get_list(
     pool: &PgPool,
     cursor: i64,
     limit: i64,
+    user_opt: Option<UserContextData>
 ) -> Result<Option<PremarketListResult>, actix_web::Error> {
-    let res = premarket_repo::get_list(pool, cursor, limit)
+    let user_id_opt = user_opt.as_ref().map(|u| u.internal_id);
+
+    let res = premarket_repo::get_list(pool, user_id_opt, cursor, limit)
         .await
         .map_err(ErrorInternalServerError)?;
 
@@ -113,9 +119,10 @@ pub async fn get_list(
 
     let items = rows
         .into_iter()
-        .map(|pm_db| PremarketInfoServiceModel {
+        .map(|pm_db: PremarketInfoDbModel | PremarketInfoServiceModel {
             id: Some(pm_db.id),
             blockchain_address: pm_db.bc_address,
+            short_url_name: pm_db.short_url_name,
             creator: UserInfoShort {
                 id: Some(pm_db.creator_id),
                 blockchain_address: pm_db.creator_address,
@@ -138,6 +145,7 @@ pub async fn get_list(
                 solana_lamp: pm_db.premarket_goal_sol_lamp,
             },
             is_extended: pm_db.is_extended,
+            is_hided: pm_db.is_hided,
             deadline_timestamp: pm_db.premarket_deadline,
             created_timestamp: pm_db.premarket_created,
             finished_timestamp: pm_db.premarket_finished,
@@ -158,6 +166,7 @@ pub async fn create_full_premarket_info(
     let premarket_db: PremarketInfoDbModel = PremarketInfoDbModel {
         id: uuid::Uuid::new_v4(),
         bc_address: premarket.blockchain_address,
+        short_url_name: premarket.short_url_name,
         creator_address: premarket.creator.blockchain_address,
         creator_id: premarket.creator.id.unwrap_or(Uuid::nil()),
         mint_address: premarket.token_info.address,
@@ -174,6 +183,7 @@ pub async fn create_full_premarket_info(
         premarket_created: premarket.created_timestamp,
         premarket_finished: premarket.finished_timestamp,
         is_extended: false,
+        is_hided: premarket.is_hided,
         state: premarket.state.to_string(),
     };
 
@@ -203,6 +213,22 @@ pub async fn create_full_premarket_info(
     premarket_repo::create_premarket_and_community(pool, &premarket_db, &community_db, link_db)
         .await
         .map_err(ErrorInternalServerError)
+}
+
+pub async fn update_availability_info(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    is_hided: Option<bool>,
+    short_url_name: Option<String>,
+) -> Result<(), actix_web::Error> {
+    premarket_repo::update_availability_info(
+        pool,
+        premarket_pubkey,
+        is_hided,
+        short_url_name,
+    )
+    .await
+    .map_err(ErrorInternalServerError)
 }
 
 pub async fn update_community_info(

@@ -62,7 +62,7 @@ pub async fn build_create_premarket_tx_unsigned(
     };
 
     let mint_pub = mint.pubkey().to_string();
-    delete_signing_key_by_pubkey(pool, &mint_pub).await?;
+    delete_signing_key_by_pubkey(pool, &mint_pub).await?; // should be looked instead of "delete"
 
     let revelcy = read_revelcy_auth(params.network);
     let revelcy_pub = revelcy.pubkey();

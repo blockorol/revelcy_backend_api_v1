@@ -47,6 +47,7 @@ pub enum ApiErrorCode {
     // Internal Error
     InternalBuildTxFailed,
     InternalSignTxFailed,
+    InternalUpdateFailed,
 
     // basic error - about validation
     ValidationError,
@@ -123,6 +124,18 @@ impl ApiError {
                 code: ApiErrorCode::PremarketJoinAmountTooLarge,
                 field: Some("amount_sol_lamp"),
                 message: Some("amount_sol_lamp must be > 0".into()),
+                errors: None,
+            },
+        }
+    }
+
+    pub fn internal_update_db_error() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "internal_error",
+                code: ApiErrorCode::InternalUpdateFailed,
+                field: None,
+                message: Some("failed to update internal state".into()),
                 errors: None,
             },
         }
@@ -329,6 +342,7 @@ impl ResponseError for ApiError {
             AuthMissingWallet => StatusCode::UNAUTHORIZED,
 
             InternalBuildTxFailed
+            | InternalUpdateFailed
             | InternalSignTxFailed => StatusCode::INTERNAL_SERVER_ERROR,
 
         }
