@@ -64,6 +64,7 @@ impl TryFrom<FingerprintEventParts> for UserFingerprintEventInsert {
 
         // raw client json (в client складывай то, что реально есть во FrontendData)
         let client: Value = json!({
+            "user_id": p.fe.user_id,
             "timezone": p.fe.timezone,
             "locale": p.fe.locale,
             "language": p.fe.language,

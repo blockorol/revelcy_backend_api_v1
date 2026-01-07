@@ -72,6 +72,7 @@ pub async fn user_set_info(
         .to_string();
 
     let fe_data: UserFingerprintEventFrontendData = UserFingerprintEventFrontendData {
+        user_id: dto.client.user_id,
         event_type: event_type_str,
 
         install_id: dto.client.install_id.unwrap_or_else(|| "default".into()),

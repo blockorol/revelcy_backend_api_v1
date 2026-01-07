@@ -39,6 +39,7 @@ pub enum UserInfoEventType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientContextDTO {
     // from FE
+    pub user_id: Option<String>,
     pub user_agent: Option<String>,
     pub language: Option<String>,       // navigator.language
     pub languages: Option<Vec<String>>, // navigator.languages

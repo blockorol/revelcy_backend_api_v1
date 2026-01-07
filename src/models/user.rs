@@ -61,6 +61,7 @@ pub struct ScreenInfo {
 
 #[derive(Serialize, Deserialize)]
 pub struct UserFingerprintEventFrontendData {
+    pub user_id: Option<String>,
     pub event_type: String,
     
     pub install_id: String,
