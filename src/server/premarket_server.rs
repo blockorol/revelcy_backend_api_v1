@@ -15,11 +15,12 @@ use crate::server::premarket_validation::{
     validate_extend_premarket,
     validate_finish_premarket,
     validate_refund_premarket,
+    validate_withdraw_vesting,
 };
 use crate::server::auth_validation::validate_base_request;
 
 use crate::api::premarket::{
-    BlockchainInfoDTO, CheckTxDTO, ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketDTO, CreatePremarketTxRequest, CreatePremarketTxResponse, DeployTxDTO, DistributeTokensRequest, ExtendPremarketTxRequest, ExtendedPremarketDTO, FinishPremarketTxRequest, FinishedPremarketDTO, GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO, GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO, HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest, PremarketTransactionDTO, SentTxResponse, TokenClaimedDTO, TokenClaimedResponse, TokenDynamicInfoDTO, TokenLinksDTO, TokenState, TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateCommunityDTO, UpdatePremarketDataDTO, UserJoinedToPremarketDTO
+    BlockchainInfoDTO, CheckTxDTO, ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketDTO, CreatePremarketTxRequest, CreatePremarketTxResponse, DeployTxDTO, DistributeTokensRequest, ExtendPremarketTxRequest, ExtendedPremarketDTO, FinishPremarketTxRequest, FinishedPremarketDTO, GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO, GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO, HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest, PremarketTransactionDTO, SentTxResponse, TokenClaimedDTO, TokenClaimedResponse, TokenDynamicInfoDTO, TokenLinksDTO, TokenState, TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateCommunityDTO, UpdatePremarketDataDTO, UserJoinedToPremarketDTO, WithdrawVestingTxRequest
 };
 use crate::models::premarket::{
     BuildFinishTxParams, 
@@ -28,6 +29,7 @@ use crate::models::premarket::{
     BuildOutTxParams, 
     BuildPremarketTxParams, 
     BuildClaimTokensTxParams,
+    BuildWithdrawVestingTxParams,
     CommunityInfoServiceModel, 
     CommunityLink, DeployTxParams,
     DistributeTokensParams, GetPremarketDataParams,
@@ -48,7 +50,7 @@ use crate::services::background_finaliser::{
 
 use crate::services::solana_service_v2::{
     build_kill_premarket_tx_unsigned,
-    build_claim_tokens_tx_unsigned, build_create_premarket_tx_unsigned, build_extend_premarket_tx_unsigned, build_finish_premarket_tx_unsigned, build_join_premarket_tx_unsigned, build_out_premarket_tx_unsigned, get_mint_kp, parse_create_premarket_tx_from_base64, parse_extend_premarket_tx_from_base64, parse_join_premarket_tx_from_base64, parse_out_premarket_tx_from_base64, send_signed_tx_base64, update_premarket_data_tx_unsigned, wait_for_confirmed
+    build_claim_tokens_tx_unsigned, build_create_premarket_tx_unsigned, build_extend_premarket_tx_unsigned, build_finish_premarket_tx_unsigned, build_join_premarket_tx_unsigned, build_out_premarket_tx_unsigned, build_withdraw_vesting_tx_unsigned, get_mint_kp, parse_create_premarket_tx_from_base64, parse_extend_premarket_tx_from_base64, parse_join_premarket_tx_from_base64, parse_out_premarket_tx_from_base64, send_signed_tx_base64, update_premarket_data_tx_unsigned, wait_for_confirmed
 };
 
 
@@ -89,6 +91,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/tx/kill",   web::post().to(kill_premarket_tx))
         .route("/tx/extend_premarket", web::post().to(extend_premarket_tx))
         .route("/tx/claim_tokens", web::post().to(claim_tokens_tx))
+        .route("/tx/withdraw_vesting", web::post().to(withdraw_vesting_tx))
         
         .route("/tx/test_kill",   web::post().to(test_kill_premarket_tx))
 
@@ -126,6 +129,7 @@ pub async fn sign_and_send_transaction(
             | "extend_premarket"
             | "claim_tokens"
             | "refund_premarket"
+            | "withdraw_vesting"
     );
 
     if !is_supported {
@@ -516,6 +520,17 @@ pub async fn sign_and_send_transaction(
             });
         })});
     }
+
+    if tx_type == "withdraw_vesting" {
+        // Validate withdraw_vesting
+        validate_withdraw_vesting().map_err(ApiError::from_field_errors)?;
+
+        // TODO: Optional - parse tx and validate user == ctx.user.current_pubkey
+        // For now, we rely on the JWT validation that already happened
+
+        // No database update needed for withdraw_vesting
+        // The update_method will remain as the default (no-op with warning)
+    }
     // ─────────────────────────────────────────────────────────────
     // 2) Default Revelcy sign (no extra signers)
     // ─────────────────────────────────────────────────────────────
@@ -873,6 +888,40 @@ pub async fn claim_tokens_tx(
 
     let res = build_claim_tokens_tx_unsigned(params).await.map_err(|e| {
         eprintln!("build_claim_tokens_tx error: {e:?}");
+        ApiError::internal_build_tx_failed()
+    })?;
+
+    Ok(HttpResponse::Ok().json(TxOnlyResponse {
+        transaction: res.tx_base64,
+    }))
+}
+
+pub async fn withdraw_vesting_tx(
+    req: HttpRequest,
+    payload: web::Json<WithdrawVestingTxRequest>,
+) -> ApiResult<HttpResponse> {
+    let dto = payload.into_inner();
+
+    let ctx = validate_base_request(
+        &req,
+        dto.network.as_str(),
+        Some(dto.user_pubkey.as_str()),
+    )?;
+
+    let token_mint = Pubkey::from_str(&dto.token_mint)
+        .map_err(|_| ApiError::invalid_token_mint())?;
+
+    // Validate withdraw vesting
+    validate_withdraw_vesting().map_err(ApiError::from_field_errors)?;
+
+    let params = BuildWithdrawVestingTxParams {
+        network: ctx.network,
+        user: ctx.user.current_pubkey,
+        token_mint,
+    };
+
+    let res: crate::models::premarket::BuiltTx = build_withdraw_vesting_tx_unsigned(params).await.map_err(|e| {
+        eprintln!("build_withdraw_vesting_tx error: {e:?}");
         ApiError::internal_build_tx_failed()
     })?;
 

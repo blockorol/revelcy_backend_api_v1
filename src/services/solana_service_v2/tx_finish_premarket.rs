@@ -141,6 +141,6 @@ pub async fn build_finish_premarket_tx_unsigned(
 
     Ok(BuiltTx {
         tx_base64: tx_b64,
-        premarket_pda: params.premarket,
+        premarket_pda: Some(params.premarket),
     })
 }
