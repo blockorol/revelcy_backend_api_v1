@@ -2,6 +2,7 @@ use actix_web::web;
 mod file_server;
 mod public_server;
 mod user_server;
+mod user_server_extractor;
 mod premarket_server;
 mod premarket_validation;
 mod proxy;
