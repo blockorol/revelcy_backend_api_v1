@@ -8,12 +8,7 @@ use serde::{Serialize, Deserialize};
 use crate::api::errors::ApiError;
 use crate::services::jwt_service;
 use crate::models::premarket::SolanaNetwork;
-
-#[derive(Serialize, Deserialize)]
-pub struct UserContextData {
-    pub internal_id: Uuid,
-    pub current_pubkey: Pubkey, // current pubkey with action from context. should be on of the user address
-}
+use crate::models::user::UserContextData;
 
 pub struct BaseRequestContext {
     pub network: SolanaNetwork,
@@ -41,6 +36,7 @@ pub fn validate_base_request(
     // ─── NETWORK ────────────────────────────────────────────
     let network = SolanaNetwork::try_from(network_str)
         .map_err(|_| ApiError::invalid_network())?;
+    
 
     // ─── USER PUBKEY ────────────────────────────────────────
     // to do: change this validation to check by user_id (from token), is wallet from the users or not
@@ -73,7 +69,8 @@ pub fn validate_base_request(
 
     let user_context_data = UserContextData {
         internal_id: token_data.user_id,
-        current_pubkey: user_pubkey, 
+        wallets: vec![user_pubkey], 
+        current_pubkey: user_pubkey,
     };
 
     Ok(BaseRequestContext {

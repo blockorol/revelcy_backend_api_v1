@@ -19,9 +19,10 @@ use crate::server::premarket_validation::{
 use crate::server::auth_validation::validate_base_request;
 
 use crate::api::premarket::{
-    BlockchainInfoDTO, CheckTxDTO, ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketDTO, CreatePremarketTxRequest, CreatePremarketTxResponse, DeployTxDTO, DistributeTokensRequest, ExtendPremarketTxRequest, ExtendedPremarketDTO, FinishPremarketTxRequest, FinishedPremarketDTO, GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO, GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO, HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest, PremarketTransactionDTO, SentTxResponse, TokenClaimedDTO, TokenClaimedResponse, TokenDynamicInfoDTO, TokenLinksDTO, TokenState, TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateCommunityDTO, UpdatePremarketDataDTO, UserJoinedToPremarketDTO
+    AvailabilityInfoDTO, BlockchainInfoDTO, CheckTxDTO, ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketDTO, CreatePremarketTxRequest, CreatePremarketTxResponse, DeployTxDTO, DistributeTokensRequest, ExtendPremarketTxRequest, ExtendedPremarketDTO, FinishPremarketTxRequest, FinishedPremarketDTO, GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO, GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO, HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest, PremarketTransactionDTO, SentTxResponse, ShortPremarketInfoDTO, TokenClaimedDTO, TokenClaimedResponse, TokenDynamicInfoDTO, TokenLinksDTO, TokenState, TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateAvailabilityInfoDTO, UpdateCommunityDTO, UpdatePremarketDataDTO, UserJoinedToPremarketDTO
 };
 use crate::models::premarket::{
+    PremarketLookupKeyType,
     BuildFinishTxParams, 
     BuildJoinTxParams, 
     BuildKillTxParams, 
@@ -68,6 +69,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/get_dynamic_info", web::get().to(get_dynamic_info))
         .route("/get_holder_entry_price", web::get().to(get_holder_entry_price))
         .route("/update_community", web::post().to(update_community_info))
+        .route("/update_availability", web::post().to(update_availability))
 
         .route("/created", web::post().to(created_premarket))
         .route("/user_joined", web::post().to(user_joined))
@@ -193,6 +195,8 @@ pub async fn sign_and_send_transaction(
             blockchain_address: parsed.premarket_pda.to_string(),
             finished_timestamp: None,
             is_extended: false,
+            is_hided: false,
+            short_url_name: None,
         };
         // community should be updated on the next step
         let community = CommunityInfoServiceModel{
@@ -333,7 +337,7 @@ pub async fn sign_and_send_transaction(
 
         // extend needs DB state validation
         let premarket_str: String = parsed.premarket.to_string().clone();
-        let premarket = premarket_service::get_full_premarket_info(&pool, &premarket_str)
+        let premarket = premarket_service::get_full_premarket_info(&pool, &premarket_str, PremarketLookupKeyType::BcAddress)
             .await
             .map_err(|e| {
                 eprintln!("get_full_premarket_info error: {e:?}");
@@ -423,7 +427,7 @@ pub async fn sign_and_send_transaction(
 
 
         // 1) DB validation (same as build)
-        let full = premarket_service::get_full_premarket_info(pool.get_ref(), &premarket_str)
+        let full = premarket_service::get_full_premarket_info(pool.get_ref(), &premarket_str, PremarketLookupKeyType::BcAddress)
             .await
             .map_err(|e| { eprintln!("get_full_premarket_info error: {e:?}"); ApiError::internal_sign_tx_failed_goal() })?
             .ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
@@ -478,7 +482,7 @@ pub async fn sign_and_send_transaction(
             .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
         // 1) DB validation (same as build)
-        let full = premarket_service::get_full_premarket_info(&pool, &premarket_str)
+        let full = premarket_service::get_full_premarket_info(&pool, &premarket_str, PremarketLookupKeyType::BcAddress)
             .await
             .map_err(|e| { eprintln!("get_full_premarket_info error: {e:?}"); ApiError::internal_sign_tx_failed() })?
             .ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
@@ -691,7 +695,7 @@ pub async fn finish_premarket_tx(
         .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
     // 1) load premarket from DB
-    let full = premarket_service::get_full_premarket_info(pool.get_ref(), &dto.premarket_account)
+    let full = premarket_service::get_full_premarket_info(pool.get_ref(), &dto.premarket_account, PremarketLookupKeyType::BcAddress)
         .await
         .map_err(|e| {
             eprintln!("get_full_premarket_info error: {e:?}");
@@ -1012,7 +1016,7 @@ pub async fn extend_premarket_tx(
     let premarket_key = Pubkey::from_str(&dto.premarket_account)
         .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
-    let premarket = premarket_service::get_full_premarket_info(&pool, &dto.premarket_account)
+    let premarket = premarket_service::get_full_premarket_info(&pool, &dto.premarket_account, PremarketLookupKeyType::BcAddress)
         .await
         .map_err(|e| {
             eprintln!("❌ Failed to get premarket({}) data: {}", dto.premarket_account, e);
@@ -1046,6 +1050,7 @@ pub async fn extend_premarket_tx(
 }
 
 pub async fn get_list_main_info(
+    req: HttpRequest,
     pool: web::Data<PgPool>,
     query: web::Query<GetListQuery>,
 ) -> Result<HttpResponse, Error> {
@@ -1054,76 +1059,119 @@ pub async fn get_list_main_info(
     if limit <= 0 { limit = 50; }
     if limit > 200 { limit = 200; }
 
-    let list_opt = premarket_service::get_list(pool.get_ref(), cursor, limit)
+
+    let user_opt = validate_base_request(&req, query.network.as_str(), None)
+        .ok()
+        .map(|ctx| ctx.user); // <-- берём только user
+
+    let list = premarket_service::get_list(pool.get_ref(), cursor, limit, user_opt)
         .await
-        .map_err(ErrorInternalServerError)?;
+        .map_err(ErrorInternalServerError)?
+        .unwrap_or(PremarketListResult { items: vec![], total: Some(0) });
 
-    let list = list_opt.unwrap_or(PremarketListResult {
-        items: Vec::new(),
-        total: Some(0),
-    });
 
-    let premarkets_vec: Vec<BlockchainInfoDTO> = list.items
+    let premarkets_vec: Vec<ShortPremarketInfoDTO> = list.items
         .into_iter()
-        .map(|premarket_info| BlockchainInfoDTO {
-            id: premarket_info.id.map(|id| id.to_string()),
-            ipfs_uri: premarket_info.token_info.data_uri.clone(),
-            creator_id: premarket_info.creator.id
-                .map(|id| id.to_string())
-                .unwrap_or_default(),
-            creator_address: premarket_info.creator.blockchain_address.clone(),
-            premarket_address: premarket_info.blockchain_address.clone(),
-            name: premarket_info.token_info.name.clone(),
-            description: premarket_info.token_info.description.clone(),
-            symbol: premarket_info.token_info.symbol.clone(),
-            image_url: premarket_info.token_info.image_url.clone(),
-            links: TokenLinksDTO {
-                telegram: premarket_info.token_info.links.telegram.clone(),
-                twitter:  premarket_info.token_info.links.twitter.clone(),
-                web_site: premarket_info.token_info.links.web_site.clone(),
+        .map(|premarket_info| ShortPremarketInfoDTO {
+            blockchain_info: BlockchainInfoDTO {
+                id: premarket_info.id.map(|id| id.to_string()),
+                ipfs_uri: premarket_info.token_info.data_uri.clone(),
+                creator_id: premarket_info.creator.id
+                    .map(|id| id.to_string())
+                    .unwrap_or_default(),
+                creator_address: premarket_info.creator.blockchain_address.clone(),
+                premarket_address: premarket_info.blockchain_address.clone(),
+                name: premarket_info.token_info.name.clone(),
+                description: premarket_info.token_info.description.clone(),
+                symbol: premarket_info.token_info.symbol.clone(),
+                image_url: premarket_info.token_info.image_url.clone(),
+                links: TokenLinksDTO {
+                    telegram: premarket_info.token_info.links.telegram.clone(),
+                    twitter:  premarket_info.token_info.links.twitter.clone(),
+                    web_site: premarket_info.token_info.links.web_site.clone(),
+                },
+                premarket_is_extended: Some(premarket_info.is_extended),
+                premarket_goal_sol_lamp: premarket_info.goal.solana_lamp.to_string(),
+                premarket_deadline: premarket_info.deadline_timestamp,
+                premarket_created:  premarket_info.created_timestamp,
+                premarket_finished: premarket_info.finished_timestamp,
+                mint_address: premarket_info.token_info.address.clone(),
+                state: match premarket_info.state {
+                    PremarketState::Premarket => TokenState::Premarket,
+                    PremarketState::Canceled  => TokenState::Canceled,
+                    PremarketState::Finished  => TokenState::Finished,
+                },
             },
-            premarket_is_extended: Some(premarket_info.is_extended),
-            premarket_goal_sol_lamp: premarket_info.goal.solana_lamp.to_string(),
-            premarket_deadline: premarket_info.deadline_timestamp,
-            premarket_created:  premarket_info.created_timestamp,
-            premarket_finished: premarket_info.finished_timestamp,
-            mint_address: premarket_info.token_info.address.clone(),
-            state: match premarket_info.state {
-                PremarketState::Premarket => TokenState::Premarket,
-                PremarketState::Canceled  => TokenState::Canceled,
-                PremarketState::Finished  => TokenState::Finished,
+            availability_info: AvailabilityInfoDTO {
+                token_short_url_name: premarket_info.short_url_name.clone(),
+                is_hided: premarket_info.is_hided,
             },
         })
         .collect();
 
-    let resp = GetListMainInfoDTO {
-        premarkets: Some(premarkets_vec), 
-        total: list.total,                
-    };
-
-    Ok(HttpResponse::Ok().json(resp))
+    Ok(HttpResponse::Ok().json(GetListMainInfoDTO {
+        premarkets: Some(premarkets_vec),
+        total: list.total,
+    }))
 }
 
 pub async fn get_main_info(
+    req: HttpRequest,
     pool: web::Data<PgPool>,
     query: web::Query<GetMainInfoQuery>,
-) -> HttpResponse {
-    println!("received request to get token info");
-    let premarket_id_str = query.premarket_id.trim();
+) -> ApiResult<HttpResponse> {
+    let id_opt = query.premarket_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let name_opt = query.premarket_name.as_deref().map(str::trim).filter(|s| !s.is_empty());
 
-    let pubkey = match Pubkey::from_str(premarket_id_str) {
-        Ok(pk) => pk,
-        Err(_) => return HttpResponse::BadRequest().body("Invalid premarket_id (not a valid pubkey)"),
+    let (key, key_type): (String, PremarketLookupKeyType) = if let Some(id) = id_opt {
+        let pk = Pubkey::from_str(id).map_err(|_| ApiError::invalid_premarket_pubkey())?;
+        (pk.to_string(), PremarketLookupKeyType::BcAddress)
+    } else if let Some(name) = name_opt {
+        (name.to_string(), PremarketLookupKeyType::Name)
+    } else {
+        return Err(ApiError::from_field_errors(vec![FieldError{
+            field: "premarket_id|premarket_name",
+            code: ApiErrorCode::ValidationError,
+            message: "either premarket_id or premarket_name is required",
+        }]));
     };
 
-    let premarket_info = match premarket_service::get_full_premarket_info(&pool, &pubkey.to_string()).await {
+
+    let premarket_info = match premarket_service::get_full_premarket_info(&pool, &key, key_type).await {
         Ok(Some(info)) => info,
-        Ok(None) => return HttpResponse::NotFound().body("Premarket info not found"),
+        Ok(None) => return Err(ApiError::invalid_premarket_pubkey()),
         Err(err) => {
             eprintln!("Error fetching premarket info: {:?}", err);
-            return HttpResponse::InternalServerError().finish();
+            return Err(ApiError::internal_server_error());
         }
     };
+
+    if premarket_info.main_info.is_hided && key_type == PremarketLookupKeyType::BcAddress {
+        let ctx: super::auth_validation::BaseRequestContext = match validate_base_request(&req, query.network.as_str(), None) {
+            Ok(v) => v,
+            Err(_) => return Err(ApiError::invalid_auth_token()),
+        };
+
+        let creator_id_ok = premarket_info.main_info.creator.id == Some(ctx.user.internal_id);
+
+        let creator_pubkey = match Pubkey::from_str(premarket_info.main_info.creator.blockchain_address.as_str()) {
+            Ok(pk) => pk,
+            Err(e) => {
+                eprintln!("Invalid creator blockchain_address in DB: {:?}", e);
+                return Err(ApiError::internal_server_error())
+            }
+        };
+
+        let creator_wallet_ok = creator_pubkey == ctx.user.current_pubkey;
+
+        if (!creator_id_ok) || (!creator_wallet_ok) {
+            return Err(ApiError::from_field_errors(vec![FieldError{
+                field: "premarket_id|premarket_name",
+                code: ApiErrorCode::PremarketNotFound,
+                message: "premarket not found",
+            }]));
+        }
+    }
 
     let blockchain_info = BlockchainInfoDTO {
         id: premarket_info.main_info.id.map(|id| id.to_string()),
@@ -1168,13 +1216,18 @@ pub async fn get_main_info(
         token_banner_url: premarket_info.community.token_banner_url,
         links: dto_links,
     };
+    let availability_info = AvailabilityInfoDTO {
+        token_short_url_name: premarket_info.main_info.short_url_name.clone(),
+        is_hided: premarket_info.main_info.is_hided,
+    };
 
     let response = GetMainInfoDTO {
         blockchain_info,
         community_info,
+        availability_info,
     };
-
-    HttpResponse::Ok().json(response)
+    
+    Ok(HttpResponse::Ok().json(response))
 }
 
 pub async fn get_dynamic_info(
@@ -1299,6 +1352,8 @@ pub async fn created_premarket(
         blockchain_address: info.premarket_address,
         finished_timestamp: None,
         is_extended: false,
+        is_hided: false,
+        short_url_name: None,
     };
 
 
@@ -1326,6 +1381,50 @@ pub async fn created_premarket(
     }
     Ok(HttpResponse::Ok().body("Saved"))
 }
+
+pub async fn update_availability(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    payload: web::Json<UpdateAvailabilityInfoDTO>,
+) -> ApiResult<HttpResponse> {
+    let dto = payload.into_inner();
+
+    let ctx = validate_base_request(&req, &dto.network, None)?; // network тут не важен, только auth
+
+    // 1) validate pubkey
+    let premarket_pubkey = Pubkey::from_str(&dto.premarket_pubkey)
+        .map_err(|_| ApiError::invalid_premarket_pubkey())?
+        .to_string();
+
+    // 2) load premarket
+    let pm = premarket_service::get_full_premarket_info(&pool, &premarket_pubkey, PremarketLookupKeyType::BcAddress)
+        .await
+        .map_err(|_| ApiError::internal_update_db_error())?
+        .ok_or_else(ApiError::missing_premarket)?;
+
+    // 3) check creator
+    if !(pm.main_info.creator.id == Some(ctx.user.internal_id)) {
+        return Err(ApiError::forbidden());
+    }
+
+
+    // 4) normalize inputs
+
+    // 5) save
+    premarket_service::update_availability_info(
+        pool.get_ref(),
+        &premarket_pubkey,
+        dto.is_hided,
+        dto.token_short_url_name,
+    )
+    .await
+    .map_err(|_| ApiError::internal_update_db_error())?;
+    println!("Update availability Done");
+
+
+    Ok(HttpResponse::Ok().finish())
+}
+
 
 pub async fn update_community_info(
     pool: web::Data<PgPool>,
