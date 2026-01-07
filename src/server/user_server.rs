@@ -1,17 +1,122 @@
-use actix_web::{web, web::BytesMut, HttpResponse, HttpRequest, Scope};
+use actix_web::{web, web::BytesMut, HttpResponse, HttpRequest, HttpMessage, Scope};
 use actix_multipart::Multipart;
 use sqlx::PgPool;
-use crate::api::dto::*;
+use crate::api::premarket;
+use crate::api::user::{
+    AddAvatarResponseDto,
+    AddUserNameRequestDto,
+    AddUserNameResponseDto,
+    UserSetInfoRequestDTO,
+    UserSetInfoResponseDTO
+};
+use crate::api::errors::{ApiError, ApiResult};
+use uuid::Uuid;
+
+use crate::models::user::{ScreenInfo, UserFingerprintEventFrontendData, UserFingerprintEventBackendData};
 use crate::services::jwt_service;
 use crate::services::user_service;
 use futures_util::{StreamExt, TryStreamExt};
+use crate::server::user_server_extractor::{
+    extract_client_ip,
+    extract_header,
+};
+use crate::services::user_info_service;
+
 
 
 pub fn user_scope() -> Scope {
     web::scope("/user")
+        .route("/set_additional_info", web::post().to(user_set_info))
         .route("/update_username", web::post().to(update_username))
         .route("/update_avatar", web::post().to(update_avatar))
 }
+pub async fn user_set_info(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    payload: web::Json<UserSetInfoRequestDTO>,
+) -> ApiResult<HttpResponse> {
+    let dto = payload.into_inner();
+
+    // ─────────────────────────────────────────────────────────────
+    // JwtMiddleware already put token into extensions
+    // ─────────────────────────────────────────────────────────────
+    let token = req
+        .extensions()
+        .get::<String>()
+        .cloned()
+        .unwrap_or_default();
+
+    let token_data = jwt_service::decode_jwt_with_user_info(&token)
+        .ok();
+
+    let user_id_opt: Option<Uuid> = token_data
+        .and_then(|t| Some(t.user_id));
+
+    // ─────────────────────────────────────────────────────────────
+    // Backend-collected request context (source of truth)
+    // ─────────────────────────────────────────────────────────────
+    let ip = extract_client_ip(&req).unwrap_or_else(|| "default".into());
+    let user_agent = extract_header(&req, "user-agent").unwrap_or_else(|| "default".into());
+    let accept_language = extract_header(&req, "accept-language").unwrap_or_else(|| "default".into());
+
+    let sec_ch_ua = extract_header(&req, "sec-ch-ua").unwrap_or_else(|| "default".into());
+    let sec_ch_ua_platform = extract_header(&req, "sec-ch-ua-platform").unwrap_or_else(|| "default".into());
+    let sec_ch_ua_mobile = extract_header(&req, "sec-ch-ua-mobile").unwrap_or_else(|| "default".into());
+    let event_type_str = serde_json::to_value(&dto.event_type)
+        .map_err(|e| {
+            eprintln!("user_set_info: serialize event_type error: {e:?}");
+            ApiError::internal_server_error()
+        })?
+        .as_str()
+        .unwrap_or("other")
+        .to_string();
+
+    let fe_data: UserFingerprintEventFrontendData = UserFingerprintEventFrontendData {
+        event_type: event_type_str,
+
+        install_id: dto.client.install_id.unwrap_or_else(|| "default".into()),
+        install_id_source: dto.client.install_id_source.unwrap_or_else(|| "default".into()),
+
+        client_ts_ms: dto.client_timestamp_ms,
+
+        timezone: dto.client.timezone,
+        locale: dto.client.locale,
+        languages: dto.client.languages,
+        language: dto.client.language,
+        screen: ScreenInfo {
+            height: dto.client.screen_height,
+            width: dto.client.screen_width,
+        },
+        
+        pixel_ratio: dto.client.pixel_ratio,
+        user_agent: dto.client.user_agent,
+        phantom_version: dto.client.phantom_version,
+    };
+    
+    let be_data: UserFingerprintEventBackendData= UserFingerprintEventBackendData{
+        ip,
+        user_agent,
+        accept_language,
+        sec_ch_ua,
+        sec_ch_ua_platform,
+        sec_ch_ua_mobile,
+    };
+    user_info_service::write_user_fingerprint_event(
+        pool.get_ref(),
+        user_id_opt,
+        dto.premarket,
+        fe_data,
+        be_data,
+    )
+    .await
+    .map_err(|e| {
+        eprintln!("user_set_info: db write error: {e:?}");
+        ApiError::internal_server_error()
+    })?;
+
+    Ok(HttpResponse::Ok().json(UserSetInfoResponseDTO { ok: true }))
+}
+
 
 async fn update_username(
     pool: web::Data<PgPool>,
@@ -133,7 +238,6 @@ pub fn extract_user_info_from_request(req: &HttpRequest) -> Result<jwt_service::
 pub async fn extract_single_png_from_multipart(
     payload: &mut Multipart,
 ) -> Result<BytesMut, HttpResponse> {
-    println!("🔍 [EXTRACT_PNG] Starting multipart field extraction");
     let mut field_count = 0;
 
     loop {
