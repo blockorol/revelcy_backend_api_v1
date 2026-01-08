@@ -239,6 +239,13 @@ pub struct ClaimTokensTxRequest {
 }
 
 #[derive(serde::Deserialize)]
+pub struct WithdrawVestingTxRequest {
+    pub network: String,          // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,      // base58
+    pub token_mint: String,       // base58
+}
+
+#[derive(serde::Deserialize)]
 pub struct TokenClaimedDTO {
     pub network: String,          // "devnet" | "mainnet-beta"
     pub user_pubkey: String,      // base58
