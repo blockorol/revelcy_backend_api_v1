@@ -5,6 +5,13 @@ use solana_sdk::pubkey::Pubkey;
 
 use crate::api::premarket::{LinkTypeDTO, TokenDynamicInfoDTO, HolderInfoDTO};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PremarketLookupKeyType {
+    BcAddress,
+    Name,
+}
+
+
 
 #[derive(Debug, Clone)]
 pub struct BuildJoinTxParams {
@@ -104,6 +111,7 @@ pub enum SolanaNetwork {
 pub struct PremarketInfoServiceModel {
     pub id: Option<Uuid>, // Option to create method
     pub blockchain_address: String,
+    pub short_url_name: Option<String>,
     pub creator: UserInfoShort,
     pub token_info: TokenInfo,
     pub goal: PremarketGoal,
@@ -111,6 +119,7 @@ pub struct PremarketInfoServiceModel {
     pub created_timestamp: i64,
     pub finished_timestamp: Option<i64>,
     pub is_extended: bool,
+    pub is_hided: bool,
     pub state: PremarketState,
 }
 

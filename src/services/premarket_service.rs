@@ -1,14 +1,16 @@
 use crate::models::premarket::{
+    PremarketLookupKeyType,
     CommunityInfoServiceModel, CommunityLink, FullPremarketInfo, HolderInfo,
     JoinConfirmationStatusDTO, LinkType, OutConfirmationStatusDTO, PremarketGoal,
     PremarketInfoServiceModel, PremarketListResult, PremarketOnchainData, PremarketOnchainUser,
     PremarketState, TokenDynamicInfo, TokenInfo, TokenLinks, TxConfirmationStatusDTO,
     UserInfoShort,
 };
+use crate::models::user::UserContextData;
 
 use crate::storage::models::{
-    CommunityInfoDbModel, CommunityLinkDbModel, HolderDbModel, PremarketInfoDbModel,
-};
+    CommunityInfoDbModel, CommunityLinkDbModel, HolderDbModel, PremarketInfoDbModel
+}; // todo: по хорошему убрать это. сервисный уровень не должен знать про модели БД. он рабоатет с моделями сервиса, и каст должен идти в репозитории
 use crate::storage::premarket_repo;
 use actix_web::error::ErrorBadRequest;
 use actix_web::error::ErrorInternalServerError;
@@ -23,13 +25,24 @@ use std::str::FromStr;
 
 pub async fn get_full_premarket_info(
     pool: &PgPool,
-    bc_address: &str,
+    key: &str,
+    key_type: PremarketLookupKeyType,
 ) -> Result<Option<FullPremarketInfo>, actix_web::Error> {
-    match premarket_repo::get_premarket_info_by_bc_address(pool, bc_address).await {
+    let data = match key_type {
+        PremarketLookupKeyType::BcAddress => {
+            premarket_repo::get_premarket_info_by_bc_address(pool, key).await
+        }
+        PremarketLookupKeyType::Name => {
+            premarket_repo::get_premarket_info_by_name(pool, key).await
+        }
+    };
+
+    match data {
         Ok(Some((pm_db, cm_db, links_db))) => {
             let premarket_info = PremarketInfoServiceModel {
                 id: Some(pm_db.id),
                 blockchain_address: pm_db.bc_address,
+                short_url_name: pm_db.short_url_name,
                 creator: UserInfoShort {
                     id: Some(pm_db.creator_id),
                     blockchain_address: pm_db.creator_address,
@@ -52,6 +65,7 @@ pub async fn get_full_premarket_info(
                     solana_lamp: pm_db.premarket_goal_sol_lamp,
                 },
                 is_extended: pm_db.is_extended,
+                is_hided: pm_db.is_hided,
                 deadline_timestamp: pm_db.premarket_deadline,
                 created_timestamp: pm_db.premarket_created,
                 finished_timestamp: pm_db.premarket_finished,
@@ -79,7 +93,7 @@ pub async fn get_full_premarket_info(
             let community_info = CommunityInfoServiceModel {
                 description: cm_db.description,
                 token_banner_url: cm_db.token_banner_url,
-                links: links,
+                links,
             };
 
             Ok(Some(FullPremarketInfo {
@@ -96,8 +110,11 @@ pub async fn get_list(
     pool: &PgPool,
     cursor: i64,
     limit: i64,
+    user_opt: Option<UserContextData>
 ) -> Result<Option<PremarketListResult>, actix_web::Error> {
-    let res = premarket_repo::get_list(pool, cursor, limit)
+    let user_id_opt = user_opt.as_ref().map(|u| u.internal_id);
+
+    let res = premarket_repo::get_list(pool, user_id_opt, cursor, limit)
         .await
         .map_err(ErrorInternalServerError)?;
 
@@ -113,9 +130,10 @@ pub async fn get_list(
 
     let items = rows
         .into_iter()
-        .map(|pm_db| PremarketInfoServiceModel {
+        .map(|pm_db: PremarketInfoDbModel | PremarketInfoServiceModel {
             id: Some(pm_db.id),
             blockchain_address: pm_db.bc_address,
+            short_url_name: pm_db.short_url_name,
             creator: UserInfoShort {
                 id: Some(pm_db.creator_id),
                 blockchain_address: pm_db.creator_address,
@@ -138,6 +156,7 @@ pub async fn get_list(
                 solana_lamp: pm_db.premarket_goal_sol_lamp,
             },
             is_extended: pm_db.is_extended,
+            is_hided: pm_db.is_hided,
             deadline_timestamp: pm_db.premarket_deadline,
             created_timestamp: pm_db.premarket_created,
             finished_timestamp: pm_db.premarket_finished,
@@ -158,6 +177,7 @@ pub async fn create_full_premarket_info(
     let premarket_db: PremarketInfoDbModel = PremarketInfoDbModel {
         id: uuid::Uuid::new_v4(),
         bc_address: premarket.blockchain_address,
+        short_url_name: premarket.short_url_name,
         creator_address: premarket.creator.blockchain_address,
         creator_id: premarket.creator.id.unwrap_or(Uuid::nil()),
         mint_address: premarket.token_info.address,
@@ -174,6 +194,7 @@ pub async fn create_full_premarket_info(
         premarket_created: premarket.created_timestamp,
         premarket_finished: premarket.finished_timestamp,
         is_extended: false,
+        is_hided: premarket.is_hided,
         state: premarket.state.to_string(),
     };
 
@@ -203,6 +224,22 @@ pub async fn create_full_premarket_info(
     premarket_repo::create_premarket_and_community(pool, &premarket_db, &community_db, link_db)
         .await
         .map_err(ErrorInternalServerError)
+}
+
+pub async fn update_availability_info(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    is_hided: Option<bool>,
+    short_url_name: Option<String>,
+) -> Result<(), actix_web::Error> {
+    premarket_repo::update_availability_info(
+        pool,
+        premarket_pubkey,
+        is_hided,
+        short_url_name,
+    )
+    .await
+    .map_err(ErrorInternalServerError)
 }
 
 pub async fn update_community_info(
@@ -262,18 +299,10 @@ pub async fn get_dynamic_info(
         })
         .collect();
 
-    println!("reserved_sol_lamp: {}", holder_data.reserved_sol_lamp);
-    println!(
-        "reserved_sol_24h_before_lamp: {}",
-        holder_data.reserved_sol_24h_before_lamp
-    );
-
     let current_price_lamp = get_price_by_market_cap(holder_data.reserved_sol_lamp as u64).await;
-    println!("current_price_lamp: {}", current_price_lamp);
 
     let price_24h_ago_lamp =
         get_price_by_market_cap(holder_data.reserved_sol_24h_before_lamp as u64).await;
-    println!("price_24h_ago_lamp: {}", price_24h_ago_lamp);
 
     let change_24h = if price_24h_ago_lamp > 0.0 && price_24h_ago_lamp != current_price_lamp {
         ((current_price_lamp - price_24h_ago_lamp) / price_24h_ago_lamp) * 100.0
@@ -366,7 +395,6 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
 
     let current_sol_price = match reqwest::get(&url).await {
         Ok(response) => {
-            println!("Pyth API response status: {}", response.status());
             match response.json::<PythResponse>().await {
                 Ok(pyth_response) => {
                     //println!("Pyth API response: {:?}", pyth_response);
@@ -376,7 +404,6 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
                         let expo = parsed_data.price.expo;
                         let price_value: f64 = price_str.parse().unwrap_or(0.0);
                         let price = price_value * 10_f64.powi(expo);
-                        //println!("Extracted SOL price from Pyth: {}", price);
                         price
                     } else {
                         println!("No parsed data found in Pyth response");
@@ -394,7 +421,6 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
             0.0
         }
     };
-    println!("Final current_sol_price: {}", current_sol_price);
 
     let real_sol_amount: f64 = real_lamp_amount as f64 / 1_000_000_000.0;
 
@@ -409,12 +435,7 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
     let price = virtual_lamp_amount / virtual_token_amount as f64 * current_sol_price;
     let final_price = (price * 1_000_000_000.0).round() / 1_000_000_000.0;
 
-    println!("Real sol amount: {}", real_sol_amount);
-    println!("Real token amount: {}", real_token_amount);
-    println!("Virtual sol amount: {}", virtual_lamp_amount);
-    println!("Virtual token amount: {}", virtual_token_amount);
-    println!("Price: {}", price);
-    println!("Final price: {}", final_price);
+    println!("Real sol: {}, token: {}, Virtual sol: {}, token: {} => price {}, Final price: {}", real_sol_amount, real_token_amount, virtual_lamp_amount, virtual_token_amount, price, final_price  );
     final_price
 }
 

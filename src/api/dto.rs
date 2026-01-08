@@ -40,22 +40,3 @@ pub struct PremarketInfoResponseDto {
     pub uri: String,
     pub creator: String,
 }
-
-// ======= HTTP DTO User =======
-
-#[derive(Deserialize)]
-pub struct AddUserNameRequestDto {
-    pub username: String,
-}
-
-#[derive(Serialize)]
-pub struct AddUserNameResponseDto {
-    pub username: String,
-    pub jwt: String,
-}
-
-#[derive(Serialize)]
-pub struct AddAvatarResponseDto {
-    pub avatar_url: String,
-    pub jwt: String,
-}
