@@ -50,7 +50,7 @@ use crate::services::background_finaliser::{
 
 use crate::services::solana_service_v2::{
     build_kill_premarket_tx_unsigned,
-    build_claim_tokens_tx_unsigned, build_create_premarket_tx_unsigned, build_extend_premarket_tx_unsigned, build_finish_premarket_tx_unsigned, build_join_premarket_tx_unsigned, build_out_premarket_tx_unsigned, build_withdraw_vesting_tx_unsigned, get_mint_kp, parse_create_premarket_tx_from_base64, parse_extend_premarket_tx_from_base64, parse_join_premarket_tx_from_base64, parse_out_premarket_tx_from_base64, send_signed_tx_base64, update_premarket_data_tx_unsigned, wait_for_confirmed
+    build_claim_tokens_tx_unsigned, build_create_premarket_tx_unsigned, build_extend_premarket_tx_unsigned, build_finish_premarket_tx_unsigned, build_join_premarket_tx_unsigned, build_out_premarket_tx_unsigned, build_withdraw_vesting_tx_unsigned, get_mint_kp, parse_create_premarket_tx_from_base64, parse_extend_premarket_tx_from_base64, parse_join_premarket_tx_from_base64, parse_out_premarket_tx_from_base64, parse_withdraw_vesting_tx_from_base64, send_signed_tx_base64, update_premarket_data_tx_unsigned, wait_for_confirmed
 };
 
 
@@ -522,14 +522,32 @@ pub async fn sign_and_send_transaction(
     }
 
     if tx_type == "withdraw_vesting" {
-        // Validate withdraw_vesting
+        let parsed = parse_withdraw_vesting_tx_from_base64(&dto.unsigned_tx, ctx.network)
+            .map_err(|e| {
+                eprintln!("parse withdraw_vesting tx error: {e:?}");
+                ApiError::from_field_errors(vec![FieldError {
+                    field: "unsigned_tx",
+                    code: ApiErrorCode::ValidationError,
+                    message: "invalid withdraw_vesting transaction",
+                }])
+            })?;
+
+        // User in tx must match auth user
+        if parsed.user != ctx.user.current_pubkey {
+            return Err(ApiError::wrong_user_pubkey_for_user());
+        }
+
+        // Validate withdraw_vesting business rules
         validate_withdraw_vesting().map_err(ApiError::from_field_errors)?;
 
-        // TODO: Optional - parse tx and validate user == ctx.user.current_pubkey
-        // For now, we rely on the JWT validation that already happened
-
         // No database update needed for withdraw_vesting
-        // The update_method will remain as the default (no-op with warning)
+        // Vesting state is stored on-chain
+        update_method = Box::new(move || {
+            Box::pin(async move {
+                // No-op: withdraw_vesting doesn't require database updates
+                // All vesting data is managed on-chain
+            })
+        });
     }
     // ─────────────────────────────────────────────────────────────
     // 2) Default Revelcy sign (no extra signers)
