@@ -1187,14 +1187,14 @@ pub async fn update_uri_tx(
             ApiError::missing_premarket()
         })?
         .ok_or_else(ApiError::missing_premarket)?;
-    let info_from_ipfs = ipfs_service::get_ipfs_token_info(&dto.new_uri).await.map_err(|e| {
-            eprintln!("parse update uri tx error: failed to upload from IPFS: {e:?}");
-            ApiError::from_field_errors(vec![FieldError {
-                field: "uri",
-                code: ApiErrorCode::ValidationError,
-                message: "failed to get info from IPFS",
-            }])
-        })?;
+    // let info_from_ipfs = ipfs_service::get_ipfs_token_info(&dto.new_uri).await.map_err(|e| {
+    //         eprintln!("parse update uri tx error: failed to upload from IPFS: {e:?}");
+    //         ApiError::from_field_errors(vec![FieldError {
+    //             field: "uri",
+    //             code: ApiErrorCode::ValidationError,
+    //             message: "failed to get info from IPFS",
+    //         }])
+    //     })?;
 
     validate_update_uri_premarket(
         premarket.main_info.state,
