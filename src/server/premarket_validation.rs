@@ -87,8 +87,8 @@ pub fn validate_join_premarket(params: &BuildJoinTxParams) -> Result<(), Vec<Fie
 // todo: check me and add other fields
 pub fn validate_update_uri_premarket(
     state: PremarketState,
-    old_token_info: &TokenInfo,
-    new_token_info: &TokenInfo
+    // old_token_info: &TokenInfo,
+    // new_token_info: &TokenInfo
 ) -> Result<(), Vec<FieldError>> {
     let mut errors = Vec::new();
 
@@ -99,27 +99,27 @@ pub fn validate_update_uri_premarket(
             message: "premarket is wrong state for extension",
         });
     }
-    if old_token_info.description != new_token_info.description {
-        errors.push(FieldError {
-            field: "description",
-            code: ApiErrorCode::PremarketWrongStateForExtension,
-            message: "description was changed",
-        });
-    }
-    if old_token_info.name != old_token_info.name {
-        errors.push(FieldError {
-            field: "name",
-            code: ApiErrorCode::PremarketWrongStateForExtension,
-            message: "name was changed",
-        });
-    }
-    if old_token_info.symbol != old_token_info.symbol {
-        errors.push(FieldError {
-            field: "symbol",
-            code: ApiErrorCode::PremarketWrongStateForExtension,
-            message: "symbol was changed",
-        });
-    }
+    // if old_token_info.description != new_token_info.description {
+    //     errors.push(FieldError {
+    //         field: "description",
+    //         code: ApiErrorCode::PremarketWrongStateForExtension,
+    //         message: "description was changed",
+    //     });
+    // }
+    // if old_token_info.name != old_token_info.name {
+    //     errors.push(FieldError {
+    //         field: "name",
+    //         code: ApiErrorCode::PremarketWrongStateForExtension,
+    //         message: "name was changed",
+    //     });
+    // }
+    // if old_token_info.symbol != old_token_info.symbol {
+    //     errors.push(FieldError {
+    //         field: "symbol",
+    //         code: ApiErrorCode::PremarketWrongStateForExtension,
+    //         message: "symbol was changed",
+    //     });
+    // }
 
     if errors.is_empty() { Ok(()) } else { Err(errors) }
 }
