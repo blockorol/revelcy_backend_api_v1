@@ -11,7 +11,6 @@ pub const OUT_METHOD_NAME: &str = "out_of_premarket";
 pub const FINISH_METHOD_NAME: &str = "finish_premarket";
 pub const UPDATE_PREMARKET_DATA_METHOD_NAME: &str = "update_premarket_data";
 pub const CLAIM_TOKENS_METHOD_NAME: &str = "claim_tokens";
-pub const WITHDRAW_VESTING_METHOD_NAME: &str = "withdraw_vesting";
 
 pub fn constants(network: SolanaNetwork) -> (
     Pubkey, // MINT_AUTH

@@ -75,7 +75,7 @@ pub async fn build_update_premarket_data_tx_unsigned(
 
     Ok(BuiltTx {
         tx_base64: tx_b64,
-        premarket_pda: Some(premarket),
+        premarket_pda: premarket,
     })
 }
 

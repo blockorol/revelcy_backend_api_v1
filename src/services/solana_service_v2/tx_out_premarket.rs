@@ -71,7 +71,7 @@ pub async fn build_out_premarket_tx_unsigned(params: BuildOutTxParams) -> Result
 
     Ok(BuiltTx {
         tx_base64: tx_b64,
-        premarket_pda: Some(params.premarket),
+        premarket_pda: params.premarket,
     })
 }
 

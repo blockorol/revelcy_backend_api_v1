@@ -59,6 +59,6 @@ pub async fn build_claim_tokens_tx_unsigned(params: BuildClaimTokensTxParams) ->
 
     Ok(BuiltTx {
         tx_base64: tx_b64,
-        premarket_pda: Some(params.premarket),
+        premarket_pda: params.premarket,
     })
 }

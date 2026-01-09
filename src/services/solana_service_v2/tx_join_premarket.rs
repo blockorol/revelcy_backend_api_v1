@@ -82,7 +82,7 @@ pub async fn build_join_premarket_tx_unsigned(params: BuildJoinTxParams) -> Resu
 
     Ok(BuiltTx {
         tx_base64: tx_b64,
-        premarket_pda: Some(params.premarket),
+        premarket_pda: params.premarket,
     })
 }
 

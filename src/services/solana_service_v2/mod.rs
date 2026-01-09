@@ -10,7 +10,6 @@ pub mod tx_kill_premarket;
 pub mod tx_update_premarket_data;
 pub mod tx_extend_premarket;
 pub mod tx_claim_tokens;
-pub mod tx_withdraw_vesting;
 pub mod solana_methods;
 
 pub use solana_methods::{
@@ -54,8 +53,4 @@ pub use tx_extend_premarket::{
     ParsedExtendPremarketTx,
 };
 pub use tx_claim_tokens::build_claim_tokens_tx_unsigned;
-pub use tx_withdraw_vesting::{
-    build_withdraw_vesting_tx_unsigned,
-    parse_withdraw_vesting_tx_from_base64,
-    ParsedWithdrawVestingTx,
-};
+

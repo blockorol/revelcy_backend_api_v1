@@ -225,12 +225,3 @@ pub fn validate_refund_premarket(
 
     if errors.is_empty() { Ok(()) } else { Err(errors) }
 }
-
-pub fn validate_withdraw_vesting() -> Result<(), Vec<FieldError>> {
-    let errors = Vec::new();
-
-    // TODO: Add validation logic for withdraw vesting
-    // For now, this is a placeholder that accepts all requests
-    
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
-}
