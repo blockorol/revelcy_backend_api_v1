@@ -428,28 +428,41 @@ pub async fn sign_and_send_transaction(
 
         validate_update_uri_premarket(
             premarket.main_info.state,
-            premarket.main_info.token_info,
-            info_from_ipfs,
+            &premarket.main_info.token_info,
+            &info_from_ipfs,
         )
         .map_err(ApiError::from_field_errors)?;
         let pool2 = pool.clone();
-        let info_from_ipfs2 = info_from_ipfs.clone();
+        let new_uri = parsed.new_uri.clone();
+
+        let image_url = info_from_ipfs.image_url.clone();
+        let data_uri  = info_from_ipfs.data_uri.clone();
+        let telegram  = info_from_ipfs.links.telegram.clone();
+        let twitter   = info_from_ipfs.links.twitter.clone();
+        let web_site  = info_from_ipfs.links.web_site.clone();
+
         let premarket_pubkey = parsed.premarket.to_string();
         update_method = Box::new(move || { 
             let pool2 = pool2.clone();
             let premarket_pubkey = premarket_pubkey.clone();
             let new_uri = parsed.new_uri.clone();
-            let info_from_ipfs_clone = info_from_ipfs2.clone();
+            let new_uri = new_uri.clone();
+            let image_url = image_url.clone();
+            let data_uri = data_uri.clone();
+            let telegram = telegram.clone();
+            let twitter = twitter.clone();
+            let web_site = web_site.clone();
+
             Box::pin(async move {
             // Update database with new deadline
             premarket_service::update_premarket_links(
                 pool2.get_ref(),
                 &premarket_pubkey,
-                info_from_ipfs_clone.image_url,
-                info_from_ipfs_clone.data_uri,
-                info_from_ipfs_clone.links.telegram,
-                info_from_ipfs_clone.links.twitter,
-                info_from_ipfs_clone.links.web_site,
+                image_url,
+                data_uri,
+                telegram,
+                twitter,
+                web_site,
             ).await.map_err(|e| {
                 eprintln!(
                     "Failed to update DB: update links for premarket '{}' deadline: {} by user {} ({}): {}",
@@ -1184,8 +1197,8 @@ pub async fn update_uri_tx(
 
     validate_update_uri_premarket(
         premarket.main_info.state,
-        premarket.main_info.token_info,
-        info_from_ipfs,
+        &premarket.main_info.token_info,
+        &info_from_ipfs,
     )
     .map_err(ApiError::from_field_errors)?;
 

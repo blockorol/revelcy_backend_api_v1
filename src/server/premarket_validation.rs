@@ -87,8 +87,8 @@ pub fn validate_join_premarket(params: &BuildJoinTxParams) -> Result<(), Vec<Fie
 // todo: check me and add other fields
 pub fn validate_update_uri_premarket(
     state: PremarketState,
-    old_token_info: TokenInfo,
-    new_token_info: TokenInfo
+    old_token_info: &TokenInfo,
+    new_token_info: &TokenInfo
 ) -> Result<(), Vec<FieldError>> {
     let mut errors = Vec::new();
 
