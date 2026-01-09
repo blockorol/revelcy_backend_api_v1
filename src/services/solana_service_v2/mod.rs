@@ -9,6 +9,7 @@ pub mod tx_finish_premarket;
 pub mod tx_kill_premarket;
 pub mod tx_update_premarket_data;
 pub mod tx_extend_premarket;
+pub mod tx_update_uri;
 pub mod tx_claim_tokens;
 pub mod tx_withdraw_vesting;
 pub mod solana_methods;
@@ -19,7 +20,7 @@ pub use solana_methods::{
     wait_for_confirmed,
 };
 
-
+// tx_* methods:
 pub use tx_create_premarket::{
     build_create_premarket_tx_unsigned,
     parse_create_premarket_tx_from_base64,
@@ -52,6 +53,11 @@ pub use tx_extend_premarket::{
     build_extend_premarket_tx_unsigned,
     parse_extend_premarket_tx_from_base64,
     ParsedExtendPremarketTx,
+};
+pub use tx_update_uri::{
+    build_update_uri_premarket_tx_unsigned,
+    parse_update_uri_premarket_tx_from_base64,
+    ParsedUpdateURIPremarketTx,
 };
 pub use tx_claim_tokens::build_claim_tokens_tx_unsigned;
 pub use tx_withdraw_vesting::{

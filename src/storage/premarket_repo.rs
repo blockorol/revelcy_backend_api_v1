@@ -630,6 +630,42 @@ pub async fn update_premarket_deadline(
     Ok(res.rows_affected())
 }
 
+
+pub struct UpdateLinks {
+    pub image_url: Option<String>,
+    pub data_uri: String,
+    pub telegram: Option<String>,
+    pub twitter: Option<String>,
+    pub web_site: Option<String>,
+}
+pub async fn update_all_links_premarket(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    liks_to_update: UpdateLinks,
+) -> Result<u64> {
+    let res = sqlx::query(
+        r#"
+        UPDATE premarket_info
+        SET image_url = $1,
+            data_uri = $2,
+            telegram = $3,
+            twitter = $4,
+            web_site = $5,
+        WHERE bc_address = $6
+        "#,
+    )
+    .bind(liks_to_update.image_url)
+    .bind(liks_to_update.data_uri)
+    .bind(liks_to_update.telegram)
+    .bind(liks_to_update.twitter)
+    .bind(liks_to_update.web_site)
+    .bind(premarket_pubkey)
+    .execute(pool)
+    .await?;
+
+    Ok(res.rows_affected())
+}
+
 pub async fn update_holder_claimed_status(
     pool: &PgPool,
     premarket_pubkey: &str,
