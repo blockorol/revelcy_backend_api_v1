@@ -417,62 +417,63 @@ pub async fn sign_and_send_transaction(
                 ApiError::internal_build_tx_failed() // если хочешь точнее: сделать InternalDbFailed
             })?
             .ok_or_else(|| ApiError::missing_premarket())?;
-        let info_from_ipfs = ipfs_service::get_ipfs_token_info(&parsed.new_uri).await.map_err(|e| {
-                eprintln!("parse create_premarket tx error: failed to upload from IPFS: {e:?}");
-                ApiError::from_field_errors(vec![FieldError {
-                    field: "uri",
-                    code: ApiErrorCode::ValidationError,
-                    message: "failed to get info from IPFS",
-                }])
-            })?;
+        // let info_from_ipfs = ipfs_service::get_ipfs_token_info(&parsed.new_uri).await.map_err(|e| {
+        //         eprintln!("parse create_premarket tx error: failed to upload from IPFS: {e:?}");
+        //         ApiError::from_field_errors(vec![FieldError {
+        //             field: "uri",
+        //             code: ApiErrorCode::ValidationError,
+        //             message: "failed to get info from IPFS",
+        //         }])
+        //     })?;
 
         validate_update_uri_premarket(
             premarket.main_info.state,
-            &premarket.main_info.token_info,
-            &info_from_ipfs,
+            // &premarket.main_info.token_info,
+            // &info_from_ipfs,
         )
         .map_err(ApiError::from_field_errors)?;
-        let pool2 = pool.clone();
-        let new_uri = parsed.new_uri.clone();
-
-        let image_url = info_from_ipfs.image_url.clone();
-        let data_uri  = info_from_ipfs.data_uri.clone();
-        let telegram  = info_from_ipfs.links.telegram.clone();
-        let twitter   = info_from_ipfs.links.twitter.clone();
-        let web_site  = info_from_ipfs.links.web_site.clone();
+        // let pool2 = pool.clone();
+        // let new_uri = parsed.new_uri.clone();
+// 
+        // let image_url = premarket.image_url.clone();
+        // let data_uri  = info_from_ipfs.data_uri.clone();
+        // let telegram  = info_from_ipfs.links.telegram.clone();
+        // let twitter   = info_from_ipfs.links.twitter.clone();
+        // let web_site  = info_from_ipfs.links.web_site.clone();
 
         let premarket_pubkey = parsed.premarket.to_string();
         update_method = Box::new(move || { 
-            let pool2 = pool2.clone();
-            let premarket_pubkey = premarket_pubkey.clone();
-            let new_uri = parsed.new_uri.clone();
-            let new_uri = new_uri.clone();
-            let image_url = image_url.clone();
-            let data_uri = data_uri.clone();
-            let telegram = telegram.clone();
-            let twitter = twitter.clone();
-            let web_site = web_site.clone();
+            // let pool2 = pool2.clone();
+            // let premarket_pubkey = premarket_pubkey.clone();
+            // let new_uri = parsed.new_uri.clone();
+            // let new_uri = new_uri.clone();
+            // let image_url = image_url.clone();
+            // let data_uri = data_uri.clone();
+            // let telegram = telegram.clone();
+            // let twitter = twitter.clone();
+            // let web_site: Option<String> = web_site.clone();
 
             Box::pin(async move {
+                println!("PANIC!!!! no method to update DB info for tx_type update url");
             // Update database with new deadline
-            premarket_service::update_premarket_links(
-                pool2.get_ref(),
-                &premarket_pubkey,
-                image_url,
-                data_uri,
-                telegram,
-                twitter,
-                web_site,
-            ).await.map_err(|e| {
-                eprintln!(
-                    "Failed to update DB: update links for premarket '{}' deadline: {} by user {} ({}): {}",
-                    premarket_pubkey,
-                    new_uri,
-                    ctx.user.internal_id.to_string(), 
-                    ctx.user.current_pubkey.to_string(), 
-                    e,
-                );
-            });
+            // premarket_service::update_premarket_links(
+            //     pool2.get_ref(),
+            //     &premarket_pubkey,
+            //     image_url,
+            //     data_uri,
+            //     telegram,
+            //     twitter,
+            //     web_site,
+            // ).await.map_err(|e| {
+            //     eprintln!(
+            //         "Failed to update DB: update links for premarket '{}' deadline: {} by user {} ({}): {}",
+            //         premarket_pubkey,
+            //         new_uri,
+            //         ctx.user.internal_id.to_string(), 
+            //         ctx.user.current_pubkey.to_string(), 
+            //         e,
+            //     );
+            // });
         })});
     }
 
@@ -1197,8 +1198,8 @@ pub async fn update_uri_tx(
 
     validate_update_uri_premarket(
         premarket.main_info.state,
-        &premarket.main_info.token_info,
-        &info_from_ipfs,
+        // &premarket.main_info.token_info,
+        // &info_from_ipfs,
     )
     .map_err(ApiError::from_field_errors)?;
 
