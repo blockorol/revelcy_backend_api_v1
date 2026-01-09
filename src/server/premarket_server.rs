@@ -10,17 +10,12 @@ use crate::api::errors::{ApiErrorCode, ApiError, FieldError, ApiResult};
 
 use solana_sdk::pubkey::Pubkey;
 use crate::server::premarket_validation::{
-    validate_create_premarket,
-    validate_join_premarket,
-    validate_extend_premarket,
-    validate_finish_premarket,
-    validate_refund_premarket,
-    validate_withdraw_vesting,
+    validate_create_premarket, validate_extend_premarket, validate_finish_premarket, validate_join_premarket, validate_refund_premarket, validate_update_uri_premarket, validate_withdraw_vesting
 };
 use crate::server::auth_validation::validate_base_request;
 
 use crate::api::premarket::{
-    WithdrawVestingTxRequest, AvailabilityInfoDTO, BlockchainInfoDTO, CheckTxDTO, ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketDTO, CreatePremarketTxRequest, CreatePremarketTxResponse, DeployTxDTO, DistributeTokensRequest, ExtendPremarketTxRequest, ExtendedPremarketDTO, FinishPremarketTxRequest, FinishedPremarketDTO, GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO, GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO, HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest, PremarketTransactionDTO, SentTxResponse, ShortPremarketInfoDTO, TokenClaimedDTO, TokenClaimedResponse, TokenDynamicInfoDTO, TokenLinksDTO, TokenState, TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateAvailabilityInfoDTO, UpdateCommunityDTO, UpdatePremarketDataDTO, UserJoinedToPremarketDTO
+    WithdrawVestingTxRequest, AvailabilityInfoDTO, BlockchainInfoDTO, CheckTxDTO, ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketDTO, CreatePremarketTxRequest, CreatePremarketTxResponse, DeployTxDTO, DistributeTokensRequest, UpdateURITxRequest, ExtendPremarketTxRequest, ExtendedPremarketDTO, FinishPremarketTxRequest, FinishedPremarketDTO, GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO, GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO, HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest, PremarketTransactionDTO, SentTxResponse, ShortPremarketInfoDTO, TokenClaimedDTO, TokenClaimedResponse, TokenDynamicInfoDTO, TokenLinksDTO, TokenState, TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateAvailabilityInfoDTO, UpdateCommunityDTO, UpdatePremarketDataDTO, UserJoinedToPremarketDTO
 };
 use crate::models::premarket::{
     PremarketLookupKeyType,
@@ -51,7 +46,17 @@ use crate::services::background_finaliser::{
 
 use crate::services::solana_service_v2::{
     build_kill_premarket_tx_unsigned,
-    build_claim_tokens_tx_unsigned, build_create_premarket_tx_unsigned, build_extend_premarket_tx_unsigned, build_finish_premarket_tx_unsigned, build_join_premarket_tx_unsigned, build_out_premarket_tx_unsigned, build_withdraw_vesting_tx_unsigned, get_mint_kp, parse_create_premarket_tx_from_base64, parse_extend_premarket_tx_from_base64, parse_join_premarket_tx_from_base64, parse_out_premarket_tx_from_base64, parse_withdraw_vesting_tx_from_base64, send_signed_tx_base64, update_premarket_data_tx_unsigned, wait_for_confirmed
+    build_claim_tokens_tx_unsigned,
+    build_create_premarket_tx_unsigned, parse_create_premarket_tx_from_base64,
+    build_update_premarket_data_tx_unsigned,
+    build_extend_premarket_tx_unsigned, parse_extend_premarket_tx_from_base64,
+    build_update_uri_premarket_tx_unsigned, parse_update_uri_premarket_tx_from_base64,
+    build_finish_premarket_tx_unsigned,
+    build_join_premarket_tx_unsigned, parse_join_premarket_tx_from_base64,
+    build_out_premarket_tx_unsigned, parse_out_premarket_tx_from_base64,
+    build_withdraw_vesting_tx_unsigned, parse_withdraw_vesting_tx_from_base64,
+    get_mint_kp, send_signed_tx_base64, update_premarket_data_tx_unsigned,
+    wait_for_confirmed
 };
 
 
@@ -73,6 +78,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/update_community", web::post().to(update_community_info))
         .route("/update_availability", web::post().to(update_availability))
 
+        // todo: remove me:
         .route("/created", web::post().to(created_premarket))
         .route("/user_joined", web::post().to(user_joined))
         .route("/user_out", web::post().to(user_out))
@@ -80,6 +86,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/killed", web::post().to(killed_premarket))
         .route("/extended_premarket", web::post().to(extended_premarket))
         .route("/distribute_tokens", web::post().to(distribute_tokens))
+        // todo: remove me (/update)
         .route("/update", web::post().to(update_premarket_data_tx))
         .route("/token_claimed", web::post().to(token_claimed))
 
@@ -92,6 +99,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/tx/finish", web::post().to(finish_premarket_tx))
         .route("/tx/kill",   web::post().to(kill_premarket_tx))
         .route("/tx/extend_premarket", web::post().to(extend_premarket_tx))
+        .route("/tx/update_uri", web::post().to(update_uri_tx))
         .route("/tx/claim_tokens", web::post().to(claim_tokens_tx))
         .route("/tx/withdraw_vesting", web::post().to(withdraw_vesting_tx))
         
@@ -129,6 +137,7 @@ pub async fn sign_and_send_transaction(
             | "out_of_premarket"
             | "finish_premarket"
             | "extend_premarket"
+            | "update_uri"
             | "claim_tokens"
             | "refund_premarket"
             | "withdraw_vesting"
@@ -372,6 +381,76 @@ pub async fn sign_and_send_transaction(
             ).await.map_err(|e| {
                 eprintln!(
                     "Failed to update DB: update_deadline for premarket '{}' deadline: {} by user {} ({}): {}",
+                    premarket_pubkey,
+                    new_deadline,
+                    ctx.user.internal_id.to_string(), 
+                    ctx.user.current_pubkey.to_string(), 
+                    e,
+                );
+            });
+        })});
+    }
+
+    if tx_type == "update_uri" {
+        // parse unsigned tx first
+        let parsed = parse_update_uri_premarket_tx_from_base64(&dto.unsigned_tx, ctx.network)
+            .map_err(|e| {
+                eprintln!("parse extend_premarket tx error: {e:?}");
+                ApiError::from_field_errors(vec![FieldError {
+                    field: "unsigned_tx",
+                    code: ApiErrorCode::ValidationError,
+                    message: "invalid extend_premarket transaction",
+                }])
+            })?;
+
+        if parsed.user != ctx.user.current_pubkey {
+            return Err(ApiError::wrong_user_pubkey_for_user());
+        }
+
+        // extend needs DB state validation
+        let premarket_str: String = parsed.premarket.to_string().clone();
+        let premarket = premarket_service::get_full_premarket_info(&pool, &premarket_str, PremarketLookupKeyType::BcAddress)
+            .await
+            .map_err(|e| {
+                eprintln!("get_full_premarket_info error: {e:?}");
+                // тут это скорее 500 или 400? если “не найден” - 400.
+                ApiError::internal_build_tx_failed() // если хочешь точнее: сделать InternalDbFailed
+            })?
+            .ok_or_else(|| ApiError::missing_premarket())?;
+        let info_from_ipfs = ipfs_service::get_ipfs_token_info(&parsed.new_uri).await.map_err(|e| {
+                eprintln!("parse create_premarket tx error: failed to upload from IPFS: {e:?}");
+                ApiError::from_field_errors(vec![FieldError {
+                    field: "uri",
+                    code: ApiErrorCode::ValidationError,
+                    message: "failed to get info from IPFS",
+                }])
+            })?;
+
+        validate_update_uri_premarket(
+            premarket.main_info.state,
+            premarket.main_info.token_info,
+            info_from_ipfs,
+        )
+        .map_err(ApiError::from_field_errors)?;
+        let pool2 = pool.clone();
+        let premarket_pubkey = parsed.premarket.to_string();
+        update_method = Box::new(move || { 
+            let pool2 = pool2.clone();
+            let premarket_str = premarket_str.clone();
+            let new_deadline = parsed.new_deadline.clone();
+            Box::pin(async move {
+            // Update database with new deadline
+            premarket_service::update_premarket_links(
+                pool2.get_ref(),
+                &premarket_pubkey,
+                info_from_ipfs.image_url,
+                info_from_ipfs.data_uri,
+                info_from_ipfs.links.telegram,
+                info_from_ipfs.links.twitter,
+                info_from_ipfs.links.web_site,
+            ).await.map_err(|e| {
+                eprintln!(
+                    "Failed to update DB: update links for premarket '{}' deadline: {} by user {} ({}): {}",
                     premarket_pubkey,
                     new_deadline,
                     ctx.user.internal_id.to_string(), 
@@ -1067,6 +1146,64 @@ pub async fn extended_premarket(
     Ok(HttpResponse::Ok().json("ok"))
 }
 
+
+pub async fn update_uri_tx(
+    req: HttpRequest,
+    payload: web::Json<UpdateURITxRequest>,
+    pool: web::Data<PgPool>,
+
+) -> ApiResult<HttpResponse> {
+    let dto = payload.into_inner();
+
+    let ctx = validate_base_request(
+        &req,
+        dto.network.as_str(),
+        Some(dto.user_pubkey.as_str()),
+    )?;
+
+    let premarket_key = Pubkey::from_str(&dto.premarket_account)
+        .map_err(|_| ApiError::invalid_premarket_pubkey())?;
+
+    let premarket = premarket_service::get_full_premarket_info(&pool, &dto.premarket_account, PremarketLookupKeyType::BcAddress)
+        .await
+        .map_err(|e| {
+            eprintln!("❌ Failed to get premarket({}) data: {}", dto.premarket_account, e);
+            ApiError::missing_premarket()
+        })?
+        .ok_or_else(ApiError::missing_premarket)?;
+    let info_from_ipfs = ipfs_service::get_ipfs_token_info(&parsed.new_uri).await.map_err(|e| {
+            eprintln!("parse update uri tx error: failed to upload from IPFS: {e:?}");
+            ApiError::from_field_errors(vec![FieldError {
+                field: "uri",
+                code: ApiErrorCode::ValidationError,
+                message: "failed to get info from IPFS",
+            }])
+        })?;
+
+    validate_update_uri_premarket(
+        premarket.main_info.state,
+        premarket.main_info.token_info,
+        info_from_ipfs,
+    )
+    .map_err(ApiError::from_field_errors)?;
+
+    let res = build_update_uri_premarket_tx_unsigned(
+        ctx.network,
+        ctx.user.current_pubkey,
+        premarket_key,
+        dto.new_uri,
+    )
+    .await
+    .map_err(|e| {
+        eprintln!("build_extend_premarket_tx error: {e:?}");
+        ApiError::internal_build_tx_failed()
+    })?;
+
+    Ok(HttpResponse::Ok().json(TxOnlyResponse {
+        transaction: res.tx_base64,
+    }))
+
+}
 pub async fn extend_premarket_tx(
     req: HttpRequest,
     payload: web::Json<ExtendPremarketTxRequest>,

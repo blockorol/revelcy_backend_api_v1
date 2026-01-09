@@ -223,6 +223,14 @@ pub struct KillPremarketTxRequest {
 }
 
 #[derive(serde::Deserialize)]
+pub struct UpdateURITxRequest {
+    pub network: String,          // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,      // base58
+    pub premarket_account: String, // base58
+    pub new_uri: String,        // new uri
+}
+
+#[derive(serde::Deserialize)]
 pub struct ExtendPremarketTxRequest {
     pub network: String,          // "devnet" | "mainnet-beta"
     pub user_pubkey: String,      // base58

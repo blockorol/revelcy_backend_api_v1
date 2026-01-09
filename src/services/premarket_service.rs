@@ -685,6 +685,36 @@ pub async fn update_premarket_deadline(
     Ok(())
 }
 
+pub async fn update_premarket_links(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    image_url: Option<String>,
+    data_uri: String,
+    telegram: Option<String>,
+    twitter: Option<String>,
+    web_site: Option<String>,
+) -> Result<(), actix_web::Error> {
+    let payload = premarket_repo::UpdateLinks {
+        image_url:image_url,
+        data_uri: data_uri,
+        telegram: telegram,
+        twitter: links.twitter,
+        web_site: links.web_site,
+    };
+    let affected = premarket_repo::update_all_links_premarket(pool, premarket_pubkey, payload)
+        .await
+        .map_err(ErrorInternalServerError)?;
+
+    if affected == 0 {
+        return Err(actix_web::error::ErrorNotFound(format!(
+            "premarket '{}' not found",
+            premarket_pubkey
+        )));
+    }
+
+    Ok(())
+}
+
 pub async fn user_claimed_token(
     pool: &PgPool,
     premarket_pubkey: &Pubkey,
