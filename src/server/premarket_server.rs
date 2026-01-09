@@ -433,26 +433,28 @@ pub async fn sign_and_send_transaction(
         )
         .map_err(ApiError::from_field_errors)?;
         let pool2 = pool.clone();
+        let info_from_ipfs2 = info_from_ipfs.clone();
         let premarket_pubkey = parsed.premarket.to_string();
         update_method = Box::new(move || { 
             let pool2 = pool2.clone();
-            let premarket_str = premarket_str.clone();
-            let new_deadline = parsed.new_deadline.clone();
+            let premarket_pubkey = premarket_pubkey.clone();
+            let new_uri = parsed.new_uri.clone();
+            let info_from_ipfs_clone = info_from_ipfs2.clone();
             Box::pin(async move {
             // Update database with new deadline
             premarket_service::update_premarket_links(
                 pool2.get_ref(),
                 &premarket_pubkey,
-                info_from_ipfs.image_url,
-                info_from_ipfs.data_uri,
-                info_from_ipfs.links.telegram,
-                info_from_ipfs.links.twitter,
-                info_from_ipfs.links.web_site,
+                info_from_ipfs_clone.image_url,
+                info_from_ipfs_clone.data_uri,
+                info_from_ipfs_clone.links.telegram,
+                info_from_ipfs_clone.links.twitter,
+                info_from_ipfs_clone.links.web_site,
             ).await.map_err(|e| {
                 eprintln!(
                     "Failed to update DB: update links for premarket '{}' deadline: {} by user {} ({}): {}",
                     premarket_pubkey,
-                    new_deadline,
+                    new_uri,
                     ctx.user.internal_id.to_string(), 
                     ctx.user.current_pubkey.to_string(), 
                     e,
@@ -1171,7 +1173,7 @@ pub async fn update_uri_tx(
             ApiError::missing_premarket()
         })?
         .ok_or_else(ApiError::missing_premarket)?;
-    let info_from_ipfs = ipfs_service::get_ipfs_token_info(&parsed.new_uri).await.map_err(|e| {
+    let info_from_ipfs = ipfs_service::get_ipfs_token_info(&dto.new_uri).await.map_err(|e| {
             eprintln!("parse update uri tx error: failed to upload from IPFS: {e:?}");
             ApiError::from_field_errors(vec![FieldError {
                 field: "uri",

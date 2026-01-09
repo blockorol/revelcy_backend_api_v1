@@ -86,11 +86,11 @@ pub fn parse_update_uri_premarket_tx_from_base64(
         return Err(anyhow!("extend tx: only end_timestamp fields must be set"));
     }
 
-    Ok(ParsedExtendPremarketTx {
+    Ok(ParsedUpdateURIPremarketTx {
         revelcy_auth,
         user,
         premarket,
-        new_deadline,
+        new_uri,
     })
 }
 

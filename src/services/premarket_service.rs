@@ -698,8 +698,8 @@ pub async fn update_premarket_links(
         image_url:image_url,
         data_uri: data_uri,
         telegram: telegram,
-        twitter: links.twitter,
-        web_site: links.web_site,
+        twitter: twitter,
+        web_site: web_site,
     };
     let affected = premarket_repo::update_all_links_premarket(pool, premarket_pubkey, payload)
         .await
