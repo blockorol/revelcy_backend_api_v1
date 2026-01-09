@@ -1,7 +1,7 @@
 use chrono::Utc;
 
 use crate::api::errors::{ApiErrorCode, FieldError};
-use crate::models::premarket::{PremarketInfoServiceModel, BuildPremarketTxParams, BuildJoinTxParams, PremarketState, FullPremarketInfo};
+use crate::models::premarket::{BuildJoinTxParams, BuildPremarketTxParams, FullPremarketInfo, PremarketInfoServiceModel, PremarketState, TokenInfo};
 
 const MAX_JOIN_SOL_LAMPORTS: u64 = 2 * solana_sdk::native_token::LAMPORTS_PER_SOL;
 
@@ -80,6 +80,46 @@ pub fn validate_join_premarket(params: &BuildJoinTxParams) -> Result<(), Vec<Fie
             message: "amount_sol_lamp must be less 2",
         });
     }
+
+    if errors.is_empty() { Ok(()) } else { Err(errors) }
+}
+
+// todo: check me and add other fields
+pub fn validate_update_uri_premarket(
+    state: PremarketState,
+    // old_token_info: &TokenInfo,
+    // new_token_info: &TokenInfo
+) -> Result<(), Vec<FieldError>> {
+    let mut errors = Vec::new();
+
+    if state != PremarketState::Premarket {
+        errors.push(FieldError {
+            field: "premarket",
+            code: ApiErrorCode::PremarketWrongStateForExtension,
+            message: "premarket is wrong state for extension",
+        });
+    }
+    // if old_token_info.description != new_token_info.description {
+    //     errors.push(FieldError {
+    //         field: "description",
+    //         code: ApiErrorCode::PremarketWrongStateForExtension,
+    //         message: "description was changed",
+    //     });
+    // }
+    // if old_token_info.name != old_token_info.name {
+    //     errors.push(FieldError {
+    //         field: "name",
+    //         code: ApiErrorCode::PremarketWrongStateForExtension,
+    //         message: "name was changed",
+    //     });
+    // }
+    // if old_token_info.symbol != old_token_info.symbol {
+    //     errors.push(FieldError {
+    //         field: "symbol",
+    //         code: ApiErrorCode::PremarketWrongStateForExtension,
+    //         message: "symbol was changed",
+    //     });
+    // }
 
     if errors.is_empty() { Ok(()) } else { Err(errors) }
 }
@@ -223,5 +263,14 @@ pub fn validate_refund_premarket(
     //     });
     // }
 
+    if errors.is_empty() { Ok(()) } else { Err(errors) }
+}
+
+pub fn validate_withdraw_vesting() -> Result<(), Vec<FieldError>> {
+    let errors = Vec::new();
+
+    // TODO: Add validation logic for withdraw vesting
+    // For now, this is a placeholder that accepts all requests
+    
     if errors.is_empty() { Ok(()) } else { Err(errors) }
 }

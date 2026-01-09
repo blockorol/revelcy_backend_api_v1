@@ -62,6 +62,13 @@ pub struct BuildClaimTokensTxParams {
 }
 
 #[derive(Debug, Clone)]
+pub struct BuildWithdrawVestingTxParams {
+    pub network: SolanaNetwork,
+    pub user: solana_sdk::pubkey::Pubkey,
+    pub token_mint: solana_sdk::pubkey::Pubkey,
+}
+
+#[derive(Debug, Clone)]
 pub struct GetPremarketDataParams {
     pub network: SolanaNetwork,
     pub premarket: solana_sdk::pubkey::Pubkey,
@@ -84,7 +91,7 @@ pub struct BuildPremarketTxParams {
 #[derive(Debug, Clone, Deserialize)]
 pub struct BuiltTx {
     pub tx_base64: String,
-    pub premarket_pda: Pubkey,
+    pub premarket_pda: Option<Pubkey>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
