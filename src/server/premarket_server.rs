@@ -1,7 +1,6 @@
 use std::str::FromStr;
 use std::time::Duration;
 use sqlx::{PgPool};
-use uuid::Uuid;
 use chrono::Utc;
 use actix_web::{web, Error, HttpResponse, HttpRequest, HttpMessage};
 use actix_web::error::ErrorInternalServerError;
@@ -42,7 +41,7 @@ use crate::models::premarket::{
     GetPremarketDataParams,
     HolderInfo, PremarketGoal, PremarketInfoServiceModel,
     PremarketListResult, PremarketState, SolanaNetwork, TokenInfo, 
-    TokenLinks, UserInfoShort,
+    UserInfoShort,
     CheckTxParams, 
 };
 
@@ -59,7 +58,6 @@ use crate::services::solana_service_v2::{
     build_kill_premarket_tx_unsigned,
     build_claim_tokens_tx_unsigned,
     build_create_premarket_tx_unsigned, parse_create_premarket_tx_from_base64,
-    build_update_premarket_data_tx_unsigned,
     build_extend_premarket_tx_unsigned, parse_extend_premarket_tx_from_base64,
     build_update_uri_premarket_tx_unsigned, parse_update_uri_premarket_tx_from_base64,
     build_finish_premarket_tx_unsigned,

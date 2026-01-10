@@ -294,19 +294,6 @@ impl From<LinkType> for LinkTypeDTO {
     }
 }
 
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum JoinConfirmationStatusDTO {
-    JoinSuccess,
-    JoinFailed,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum OutConfirmationStatusDTO {
-    OutSuccess,
-    OutFailed,
-}
-
 #[derive(Debug, Clone)]
 pub struct PremarketOnchainUser {
     pub wallet: Pubkey,

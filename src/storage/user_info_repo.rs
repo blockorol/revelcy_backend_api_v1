@@ -1,6 +1,5 @@
 use serde_json::Value;
 use sqlx::{PgPool, Result};
-use uuid::Uuid;
 use crate::models::user::UserFingerprintEventInsert;
 
 pub async fn insert_user_fingerprint_event(

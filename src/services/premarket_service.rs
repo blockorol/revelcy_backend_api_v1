@@ -1,7 +1,7 @@
 use crate::models::premarket::{
     PremarketLookupKeyType,
     CommunityInfoServiceModel, CommunityLink, FullPremarketInfo, HolderInfo,
-    JoinConfirmationStatusDTO, LinkType, OutConfirmationStatusDTO, PremarketGoal,
+    LinkType, PremarketGoal,
     PremarketInfoServiceModel, PremarketListResult, PremarketOnchainData, PremarketOnchainUser,
     PremarketState, TokenDynamicInfo, TokenInfo, TokenLinks, TxConfirmationStatusDTO,
     UserInfoShort,
