@@ -10,12 +10,23 @@ use crate::api::errors::{ApiErrorCode, ApiError, FieldError, ApiResult};
 
 use solana_sdk::pubkey::Pubkey;
 use crate::server::premarket_validation::{
-    validate_create_premarket, validate_extend_premarket, validate_finish_premarket, validate_join_premarket, validate_refund_premarket, validate_update_uri_premarket, validate_withdraw_vesting
+    validate_create_premarket, validate_extend_premarket,
+    validate_finish_premarket, validate_join_premarket,
+    validate_refund_premarket, validate_update_uri_premarket,
+    validate_withdraw_vesting
 };
 use crate::server::auth_validation::validate_base_request;
 
 use crate::api::premarket::{
-    WithdrawVestingTxRequest, AvailabilityInfoDTO, BlockchainInfoDTO, CheckTxDTO, ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketDTO, CreatePremarketTxRequest, CreatePremarketTxResponse, DeployTxDTO, DistributeTokensRequest, UpdateURITxRequest, ExtendPremarketTxRequest, ExtendedPremarketDTO, FinishPremarketTxRequest, FinishedPremarketDTO, GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO, GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO, HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest, PremarketTransactionDTO, SentTxResponse, ShortPremarketInfoDTO, TokenClaimedDTO, TokenClaimedResponse, TokenDynamicInfoDTO, TokenLinksDTO, TokenState, TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateAvailabilityInfoDTO, UpdateCommunityDTO, UpdatePremarketDataDTO, UserJoinedToPremarketDTO
+    WithdrawVestingTxRequest, AvailabilityInfoDTO, BlockchainInfoDTO, 
+    CheckTxDTO, ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketTxRequest, 
+    CreatePremarketTxResponse, DeployTxDTO, UpdateURITxRequest, ExtendPremarketTxRequest, FinishPremarketTxRequest,
+     GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO,
+     GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO,
+     HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest,
+     SentTxResponse, ShortPremarketInfoDTO, TokenDynamicInfoDTO, TokenLinksDTO, TokenState,
+     TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateAvailabilityInfoDTO,
+     UpdateCommunityDTO, UserJoinedToPremarketDTO
 };
 use crate::models::premarket::{
     PremarketLookupKeyType,
@@ -28,10 +39,10 @@ use crate::models::premarket::{
     BuildWithdrawVestingTxParams,
     CommunityInfoServiceModel, 
     CommunityLink, DeployTxParams,
-    DistributeTokensParams, GetPremarketDataParams,
+    GetPremarketDataParams,
     HolderInfo, PremarketGoal, PremarketInfoServiceModel,
     PremarketListResult, PremarketState, SolanaNetwork, TokenInfo, 
-    TokenLinks, UpdatePremarketDataParams, UserInfoShort,
+    TokenLinks, UserInfoShort,
     CheckTxParams, 
 };
 
@@ -55,14 +66,13 @@ use crate::services::solana_service_v2::{
     build_join_premarket_tx_unsigned, parse_join_premarket_tx_from_base64,
     build_out_premarket_tx_unsigned, parse_out_premarket_tx_from_base64,
     build_withdraw_vesting_tx_unsigned, parse_withdraw_vesting_tx_from_base64,
-    get_mint_kp, send_signed_tx_base64, update_premarket_data_tx_unsigned,
+    get_mint_kp, send_signed_tx_base64,
     wait_for_confirmed
 };
 
 
 use crate::services::solana_service::{
     check_tx_service, deploy_tx_service,
-    distribute_tk,
     get_premarket_data,
     sign_tx_with_revelcy,
     test_build_kill_premarket_tx,
@@ -78,20 +88,10 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/update_community", web::post().to(update_community_info))
         .route("/update_availability", web::post().to(update_availability))
 
-        // todo: remove me:
-        .route("/created", web::post().to(created_premarket))
         .route("/user_joined", web::post().to(user_joined))
-        .route("/user_out", web::post().to(user_out))
-        .route("/finished", web::post().to(finished_premarket))
-        .route("/killed", web::post().to(killed_premarket))
-        .route("/extended_premarket", web::post().to(extended_premarket))
-        .route("/distribute_tokens", web::post().to(distribute_tokens))
-        // todo: remove me (/update)
-        .route("/update", web::post().to(update_premarket_data_tx))
-        .route("/token_claimed", web::post().to(token_claimed))
 
-        .route("/deploy_tx",   web::post().to(deploy_tx))
-        .route("/check_tx",   web::post().to(check_tx))
+        // .route("/deploy_tx",   web::post().to(deploy_tx))
+        // .route("/check_tx",   web::post().to(check_tx))
 
         .route("/tx/create", web::post().to(create_premarket_tx))
         .route("/tx/join",   web::post().to(join_premarket_tx))
@@ -865,41 +865,6 @@ pub async fn finish_premarket_tx(
     }))
 }
 
-pub async fn distribute_tokens(
-    pool: web::Data<PgPool>,
-    payload: web::Json<DistributeTokensRequest>,
-) -> Result<HttpResponse, Error> {
-    let dto = payload.into_inner();
-
-    let network = SolanaNetwork::try_from(dto.network.as_str())
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))?;
-
-    let user = Pubkey::from_str(&dto.user_pubkey)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid user_pubkey"))?;
-
-    let premarket = Pubkey::from_str(&dto.premarket_account)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_account"))?;
-
-    let token_mint = Pubkey::from_str(&dto.token_mint)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid token_mint"))?;
-
-    let users = dto.users;
-
-    let params = DistributeTokensParams { network, user, premarket, token_mint, users };
-
-    match distribute_tk(&pool, params).await {
-        Ok(_) => {
-            let msg = format!("Tokens distributet!");
-            println!("{}", msg);
-            Ok(HttpResponse::Ok().body(msg))
-        }
-        Err(e) => {
-            eprintln!("Error distributing tokens: {:?}", e);
-            Ok(HttpResponse::InternalServerError().body("Error distributing tokens"))
-        }
-    }
-}
-
 pub async fn kill_premarket_tx(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -1046,122 +1011,6 @@ pub async fn withdraw_vesting_tx(
         transaction: res.tx_base64,
     }))
 }
-
-pub async fn token_claimed(
-    pool: web::Data<PgPool>,
-    payload: web::Json<TokenClaimedDTO>,
-) -> Result<HttpResponse, actix_web::Error> {
-    let dto = payload.into_inner();
-
-    let network = SolanaNetwork::try_from(dto.network.as_str())
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))?;
-
-    let premarket = Pubkey::from_str(&dto.premarket_account)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_account"))?;
-
-    // Create async RPC client based on network
-    let rpc_url = match network {
-        SolanaNetwork::Devnet => std::env::var("SOLANA_DEVNET_RPC")
-            .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string()),
-        SolanaNetwork::MainnetBeta => std::env::var("SOLANA_MAINNET_RPC")
-            .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string()),
-    };
-    
-    let client = solana_client::nonblocking::rpc_client::RpcClient::new(rpc_url);
-
-    // Check on-chain claimed status and update database if needed
-    match premarket_service::check_and_update_claimed_status(
-        pool.get_ref(),
-        &client,
-        &premarket,
-        &dto.user_pubkey,
-    )
-    .await
-    {
-        Ok((claimed, updated_in_db)) => {
-            println!(
-                "User {} claimed status: {}, DB updated: {}",
-                dto.user_pubkey, claimed, updated_in_db
-            );
-            Ok(HttpResponse::Ok().json(TokenClaimedResponse {
-                claimed,
-                updated_in_db,
-            }))
-        }
-        Err(e) => {
-            eprintln!("token_claimed error: {e:?}");
-            Err(e)
-        }
-    }
-}
-
-pub async fn extended_premarket(
-    pool: web::Data<sqlx::PgPool>,
-    payload: web::Json<ExtendedPremarketDTO>,
-) -> Result<HttpResponse, Error> {
-    let dto = payload.into_inner();
-    
-    // Extract premarket pubkey from DTO
-    let premarket_pubkey = Pubkey::from_str(&dto.base.premarket_pub_key)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_pub_key"))?;
-    
-    // Parse network
-    let network = SolanaNetwork::try_from(dto.network.as_str())
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))?;
-    
-    // Call get_premarket_data to check extended_premarket flag
-    let params = GetPremarketDataParams { network, premarket: premarket_pubkey };
-    let premarket_data = get_premarket_data(params).await
-        .map_err(|e| {
-            eprintln!("❌ Failed to get premarket data: {}", e);
-            actix_web::error::ErrorInternalServerError("failed to get premarket data")
-        })?;
-    
-    // Check if extended_premarket is true
-    if !premarket_data.extended_premarket {
-        return Ok(HttpResponse::BadRequest().body("extended_premarket is not true"));
-    }
-    
-    // Update database with new deadline
-    premarket_service::update_premarket_deadline(
-        pool.get_ref(),
-        &dto.base.premarket_pub_key,
-        dto.new_deadline,
-    )
-    .await
-    .map_err(|e| {
-        eprintln!(
-            "❌ Failed to update premarket '{}' deadline: {} (tx: {}, wallet: {})",
-            dto.base.premarket_pub_key,
-            e,
-            dto.base.tx,
-            dto.base.user_wallet
-        );
-        actix_web::error::ErrorInternalServerError("failed to update premarket deadline")
-    })?;
-
-    // Set premarket state to "premarket"
-    premarket_service::set_premarket_state(
-        pool.get_ref(),
-        &dto.base.premarket_pub_key,
-        PremarketState::Premarket,
-        None,
-    )
-    .await
-    .map_err(|e| {
-        eprintln!(
-            "❌ Failed to set premarket '{}' state to Premarket: {} (tx: {}, wallet: {})",
-            dto.base.premarket_pub_key,
-            e,
-            dto.base.tx,
-            dto.base.user_wallet
-        );
-        actix_web::error::ErrorInternalServerError("failed to set premarket state")
-    })?;
-
-    Ok(HttpResponse::Ok().json("ok"))
-}
-
 
 pub async fn update_uri_tx(
     req: HttpRequest,
@@ -1527,80 +1376,6 @@ pub async fn get_holder_entry_price(
     Ok(HttpResponse::Ok().json(resp))
 }
 
-pub async fn created_premarket(
-    pool: web::Data<PgPool>,
-    payload: web::Json<CreatePremarketDTO>,
-) -> Result<HttpResponse, Error> {
-
-    let dto = payload.into_inner();
-    let info = dto.blockchain_info;
-    let community = dto.community_info;
-    let solana_lamp = match info.premarket_goal_sol_lamp.parse::<i64>() {
-        Ok(val) => val,
-        Err(e) => {
-            eprintln!("❌ Failed to parse premarket_goal_sol_lamp: {}", e);
-            return Err(actix_web::error::ErrorBadRequest("Invalid lamp value"));
-        }
-    };
-
-
-    let premarket = PremarketInfoServiceModel {
-        id: None,
-        token_info: TokenInfo { 
-            address: info.mint_address,
-            name: info.name,
-            description: info.description,
-            symbol: info.symbol,
-            image_url: info.image_url,
-            data_uri: info.ipfs_uri,
-            links:  TokenLinks {
-                telegram: info.links.telegram,
-                twitter: info.links.twitter,
-                web_site: info.links.web_site,
-            }
-        }, 
-        creator: UserInfoShort{
-            id: Some(Uuid::parse_str(&info.creator_id).unwrap_or_else(|_| Uuid::nil())),
-            blockchain_address: info.creator_address,
-        },
-        state: info.state.into(),
-        goal: PremarketGoal{
-            solana_lamp: solana_lamp,
-        },
-        deadline_timestamp: info.premarket_deadline,
-        created_timestamp: info.premarket_created,
-        blockchain_address: info.premarket_address,
-        finished_timestamp: None,
-        is_extended: false,
-        is_hided: false,
-        short_url_name: None,
-    };
-
-
-    let service_links: Option<Vec<CommunityLink>> = community.links.map(|links| {
-        links
-            .into_iter()
-            .map(|link| CommunityLink {
-                text: link.text,
-                url: link.url,
-                r#type: link.r#type.into(), // LinkTypeDTO → LinkType
-            })
-            .collect()
-    });
-
-
-    let community = CommunityInfoServiceModel {
-        description: community.description,
-        token_banner_url: community.token_banner_url,
-        links: service_links
-    };
-
-    if let Err(e) = premarket_service::create_full_premarket_info(&pool, premarket, community).await {
-        eprintln!("❌ Failed to create full premarket info: {:?}", e);
-        return Err(e);
-    }
-    Ok(HttpResponse::Ok().body("Saved"))
-}
 
 pub async fn update_availability(
     req: HttpRequest,
@@ -1717,93 +1492,6 @@ pub async fn user_joined(
     Ok(HttpResponse::Ok().body("User joined saved"))
 }
 
-pub async fn user_out(
-    pool: web::Data<PgPool>,
-    payload: web::Json<PremarketTransactionDTO>,
-) -> Result<HttpResponse, Error> {
-    let dto: PremarketTransactionDTO = payload.into_inner();
-    if let Err(e) = premarket_service::remove_holder(&pool, &dto.premarket_pub_key, &dto.user_wallet).await {
-        println!(
-            "❌ Failed to add holder to premarket_pubkey {}: {}",
-            dto.premarket_pub_key,
-            e
-        );
-        return Err(e);
-    }
-    println!("User out: {:?}", dto);
-    Ok(HttpResponse::Ok().body("User out saved"))
-}
-
-pub async fn finished_premarket(
-    pool: web::Data<sqlx::PgPool>,
-    payload: web::Json<FinishedPremarketDTO>,
-) -> Result<HttpResponse, Error> {
-    let dto = payload.into_inner();
-    let new_state   = PremarketState::Finished;
-    
-    if let Err(e) = premarket_service::set_premarket_state(
-        &pool,
-        &dto.base.premarket_pub_key,
-        new_state,
-        Some(Utc::now().timestamp()),
-    ).await {
-        println!(
-            "❌ Failed to set premarket '{}' state to {:?}: {} (tx: {}, wallet: {})",
-            dto.base.premarket_pub_key,
-            new_state,
-            e,
-            dto.base.tx,
-            dto.base.user_wallet
-        );
-        return Err(e);
-    }
-
-    println!(
-        "Premarket '{}' marked as {:?}. tx: {}, wallet: {}",
-        dto.base.premarket_pub_key,
-        new_state,
-        dto.base.tx,
-        dto.base.user_wallet
-    );
-
-    Ok(HttpResponse::Ok().body("Premarket finished state saved"))
-}
-
-pub async fn killed_premarket(
-    pool: web::Data<sqlx::PgPool>,
-    payload: web::Json<FinishedPremarketDTO>,
-) -> Result<HttpResponse, Error> {
-    let dto = payload.into_inner();
-    let new_state = PremarketState::Canceled;
-
-    if let Err(e) = premarket_service::set_premarket_state(
-        &pool,
-        &dto.base.premarket_pub_key,
-        new_state,
-        Some(Utc::now().timestamp())
-    ).await {
-        println!(
-            "❌ Failed to set premarket '{}' state to {:?}: {} (tx: {}, wallet: {})",
-            dto.base.premarket_pub_key,
-            new_state,
-            e,
-            dto.base.tx,
-            dto.base.user_wallet
-        );
-        return Err(e);
-    }
-
-    println!(
-        "Premarket '{}' marked as {:?}. tx: {}, wallet: {}",
-        dto.base.premarket_pub_key,
-        new_state,
-        dto.base.tx,
-        dto.base.user_wallet
-    );
-
-    Ok(HttpResponse::Ok().body("Premarket finished state saved"))
-}
-
 impl From<TokenState> for PremarketState {
     fn from(state: TokenState) -> Self {
         match state {
@@ -1812,37 +1500,6 @@ impl From<TokenState> for PremarketState {
             TokenState::Finished => PremarketState::Finished,
         }
     }
-}
-
-pub async fn update_premarket_data_tx(
-    payload: web::Json<UpdatePremarketDataDTO>,
-) -> Result<HttpResponse, Error> {
-
-    let dto = payload.into_inner();
-
-    let params = UpdatePremarketDataParams {
-        network: dto.network,
-        user_pubkey: dto.user_pubkey,
-        premarket_account: dto.premarket_account,
-        end_timestamp: dto.end_timestamp,
-        end_timestamp_updated: dto.end_timestamp_updated,
-        goal_sol: dto.goal_sol,
-        max_sol: dto.max_sol,
-        mint: dto.mint,
-        name: dto.name,
-        symbol: dto.symbol,
-        uri: dto.uri,
-        creator: dto.creator,
-    };
-
-    match update_premarket_data_tx_unsigned(params).await {
-        Ok(res) => Ok(HttpResponse::Ok().json(TxOnlyResponse { transaction: res.tx_base64 })),
-        Err(e) => {
-            eprintln!("update_premarket_data error: {e:?}");
-            Ok(HttpResponse::InternalServerError().body("failed to build kill tx"))
-        }
-    }
-
 }
 
 pub async fn deploy_tx(

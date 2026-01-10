@@ -23,7 +23,6 @@ use crate::models::premarket::{
     BuildKillTxParams, 
     CheckTxParams,
     GetPremarketDataParams, 
-    DistributeTokensParams, 
     PremarketOnchainUser,
     PremarketOnchainData,
     SolanaNetwork, 
@@ -168,84 +167,6 @@ pub fn sign_tx_with_revelcy(
     let signed_b64 = BASE64.encode(signed_raw);
 
     Ok(signed_b64)
-}
-
-
-pub async fn distribute_tk(
-    _pool: &PgPool,
-    params: DistributeTokensParams,
-) -> Result<u64> {
-    //extracting params 
-    //preparing tx
-    //sending tx 
-    //geting result 
-    //returning result 
-
-    let program_id = program_id_for(params.network);
-    let client = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
-    let revelcy_auth = read_revelcy_auth(params.network);
-    let premarket_account = params.premarket;
-    let all_entered_users = params.users;
-    let token_mint = params.token_mint;
-
-    println!("Premarket Account: {}", premarket_account);
-    println!("Token Mint: {}", token_mint);
-    println!("All Entered Users: {:?}", all_entered_users);
-
-    let revelcy_auth_ata = get_associated_token_address(&revelcy_auth.pubkey(), &token_mint);
-    println!("Revelcy Auth: {}", revelcy_auth.pubkey());
-    let mut accounts = vec![
-        AccountMeta::new(revelcy_auth.pubkey(), true),
-        AccountMeta::new(revelcy_auth_ata, false),
-        AccountMeta::new(premarket_account, false),
-        AccountMeta::new(token_mint, false),
-        AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-        AccountMeta::new_readonly(token_program_id, false),
-        AccountMeta::new_readonly(associated_token_program_id, false),
-    ];
-
-    for user in all_entered_users {
-        let user_ata = get_associated_token_address(&Pubkey::from_str(&user).unwrap(), &token_mint);
-        accounts.push(AccountMeta::new(user_ata, false));
-        accounts.push(AccountMeta::new(Pubkey::from_str(&user).unwrap(), false));
-        println!("User account: {}", user);
-        println!("User ATA: {}", user_ata);
-    }
-
-    let _discriminator: [u8; 8] = [
-        105,
-        69,
-        130,
-        52,
-        196,
-        28,
-        176,
-        120
-    ];
-
-    let mut data = Vec::with_capacity(8);
-    //data.extend_from_slice(&discriminator);
-    data.extend_from_slice(&anchor_sighash_global(DISTRIBUTE_METHOD_NAME));
-
-
-    let ix = Instruction { program_id, accounts, data };
-    let add_cu_ix = ComputeBudgetInstruction::set_compute_unit_limit(1_000_000);
-
-    let blockhash = get_valid_latest_blockhash(&client, 50).await.context("get_latest_blockhash failed")?;
-
-
-    let tx = Transaction::new_signed_with_payer(
-        &[add_cu_ix, ix],
-        Some(&revelcy_auth.pubkey()),
-        &[&revelcy_auth],
-        blockhash,
-    );
-
-    let sig = client.send_and_confirm_transaction(&tx).await.context("send_and_confirm_transaction failed")?;
-    println!("tx signature: {}", sig);
-
-    Ok(1)
-
 }
 
 pub async fn test_build_kill_premarket_tx(

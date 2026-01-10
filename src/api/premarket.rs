@@ -59,11 +59,6 @@ pub struct UpdateCommunityDTO {
     pub premarket_pubkey: String,
     pub community_info: CommunityInfoDTO,
 }
-#[derive(Deserialize)]
-pub struct CreatePremarketDTO {
-    pub blockchain_info: BlockchainInfoDTO,
-    pub community_info: CommunityInfoDTO,
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct BlockchainInfoDTO {
@@ -206,16 +201,6 @@ pub struct FinishPremarketTxRequest {
 }
 
 #[derive(serde::Deserialize)]
-
-pub struct DistributeTokensRequest {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
-    pub premarket_account: String, // base58
-    pub token_mint: String,       // base58
-    pub users: Vec<String>,        // base58
-}
-
-#[derive(serde::Deserialize)]
 pub struct KillPremarketTxRequest {
     pub network: String,          // "devnet" | "mainnet-beta"
     pub user_pubkey: String,      // base58
@@ -252,20 +237,6 @@ pub struct WithdrawVestingTxRequest {
     pub user_pubkey: String,      // base58
     pub token_mint: String,       // base58
 }
-
-#[derive(serde::Deserialize)]
-pub struct TokenClaimedDTO {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
-    pub premarket_account: String, // base58
-}
-
-#[derive(serde::Serialize)]
-pub struct TokenClaimedResponse {
-    pub claimed: bool,
-    pub updated_in_db: bool,
-}
-
 
 #[derive(serde::Serialize)]
 pub struct TxOnlyResponse {
@@ -346,19 +317,6 @@ pub struct UserJoinedToPremarketDTO {
     pub join_amount_in_sol_lamport: u64,
 }
 
-#[derive(Deserialize)]
-pub struct FinishedPremarketDTO {
-    pub base: PremarketTransactionDTO,
-    pub network: String,          // "devnet" | "mainnet-beta"
-}
-
-#[derive(Deserialize)]
-pub struct ExtendedPremarketDTO {
-    pub base: PremarketTransactionDTO,
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub new_deadline: i64,       // unix timestamp
-}
-
 mod string_as_number {
     use serde::{self, Serializer, Deserializer, Deserialize}; // <--- добавлен Deserialize
     use std::fmt::Display;
@@ -381,22 +339,6 @@ mod string_as_number {
         let s = String::deserialize(d)?; // теперь всё ок
         s.parse::<T>().map_err(serde::de::Error::custom)
     }
-}
-
-#[derive(Deserialize)]
-pub struct UpdatePremarketDataDTO {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
-    pub premarket_account: String, // base58
-    pub end_timestamp: Option<i64>,
-    pub end_timestamp_updated: Option<bool>,
-    pub goal_sol: Option<u64>,
-    pub max_sol: Option<u64>,
-    pub mint: Option<String>,
-    pub name: Option<String>,
-    pub symbol: Option<String>,
-    pub uri: Option<String>,
-    pub creator: Option<String>,
 }
 
 #[derive(serde::Deserialize)]

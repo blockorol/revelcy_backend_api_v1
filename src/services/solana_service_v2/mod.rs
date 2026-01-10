@@ -47,7 +47,6 @@ pub use tx_kill_premarket::build_kill_premarket_tx_unsigned;
 pub use tx_update_premarket_data::{
     UpdatePremarketDataArgs,
     build_update_premarket_data_tx_unsigned,
-    update_premarket_data_tx_unsigned,
 };
 pub use tx_extend_premarket::{
     build_extend_premarket_tx_unsigned,
