@@ -26,7 +26,7 @@ use crate::api::premarket::{
      HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest,
      SentTxResponse, ShortPremarketInfoDTO, TokenDynamicInfoDTO, TokenLinksDTO, TokenState,
      TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateAvailabilityInfoDTO,
-     UpdateCommunityDTO, UserJoinedToPremarketDTO
+     UpdateCommunityDTO
 };
 use crate::models::premarket::{
     PremarketLookupKeyType,
@@ -87,8 +87,6 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/get_holder_entry_price", web::get().to(get_holder_entry_price))
         .route("/update_community", web::post().to(update_community_info))
         .route("/update_availability", web::post().to(update_availability))
-
-        .route("/user_joined", web::post().to(user_joined))
 
         // .route("/deploy_tx",   web::post().to(deploy_tx))
         // .route("/check_tx",   web::post().to(check_tx))
@@ -219,8 +217,14 @@ pub async fn sign_and_send_transaction(
         };
 
         let pool2 = pool.clone();
+        let amount_initial_buy_sol_lamp = parsed.params.creator_allocate;
+        let premarket2 = premarket.clone();
+        let premarket_pubkey = premarket.blockchain_address.clone();
         update_method = Box::new(move || { 
             let pool2 = pool2.clone();
+            let amount_initial_buy_sol_lamp = amount_initial_buy_sol_lamp.clone();
+            let premarket = premarket2.clone();
+            let premarket_pubkey = premarket_pubkey.clone();
             Box::pin(async move {
                 premarket_service::create_full_premarket_info(
                     pool2.get_ref(),
@@ -234,6 +238,30 @@ pub async fn sign_and_send_transaction(
                         e
                     );
                 });
+                if amount_initial_buy_sol_lamp != 0 {
+                    let holder = HolderInfo {
+                        wallet_address: premarket_pubkey.clone(),
+                        amount_sol_lamp: amount_initial_buy_sol_lamp,
+                        join_timestamp: Utc::now().timestamp_millis(),
+                        id: None,
+                        icon_url: None,
+                        username: None,
+                        claimed: false
+                    };
+                    premarket_service::add_holder(
+                        pool2.get_ref(),
+                        &premarket_pubkey,
+                        holder
+                    ).await.map_err(|e| {
+                    eprintln!("Failed to update DB: join user in alocate (mint:{:#}, pda:{:#}, sol:{:#}, uri:{:#}): {:#}", 
+                        parsed.mint, 
+                        parsed.premarket_pda,
+                        amount_initial_buy_sol_lamp,
+                        uri,
+                        e
+                    );
+                });
+                }
             })
         });
     }
@@ -267,7 +295,6 @@ pub async fn sign_and_send_transaction(
             amount_sol_lamp: parsed.params.amount,
             claimed: false,
         };
-        println!("holder created");
 
         let pool2 = pool.clone();
         let premarket_str = parsed.premarket.to_string();
@@ -577,8 +604,6 @@ pub async fn sign_and_send_transaction(
     if tx_type == "refund_premarket" { 
         // todo: get premarket_pub from tx!!!! 
         let premarket_str: String = dto.premarket.clone().ok_or_else(ApiError::missing_premarket)?;
-        let premarket_pubkey = Pubkey::from_str(&premarket_str)
-            .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
         // 1) DB validation (same as build)
         let full = premarket_service::get_full_premarket_info(&pool, &premarket_str, PremarketLookupKeyType::BcAddress)
@@ -1451,45 +1476,6 @@ pub async fn update_community_info(
     }
     Ok(HttpResponse::Ok().body("Saved"))
 
-}
-
-pub async fn user_joined(
-    pool: web::Data<PgPool>,
-    payload: web::Json<UserJoinedToPremarketDTO>,
-) -> Result<HttpResponse, Error> {
-        println!("received request to user_joined");
-
-    let dto = payload.into_inner();
-    
-    println!("amount: {}", dto.join_amount_in_sol_lamport);
-    println!("premarket_pub_key: {}", dto.base.tx);
-    println!("premarket_pub_key: {}", dto.base.premarket_pub_key);
-    println!("user_wallet: {}", dto.base.user_wallet);
-    println!("user_id: {:?}", dto.base.user_id); // Option<Uuid> — лучше с {:?}
-
-    let holder = HolderInfo {
-        wallet_address: dto.base.user_wallet,
-        id:dto.base.user_id,
-        icon_url: None,
-        username: None,
-        join_timestamp: Utc::now().timestamp_millis(),
-        amount_sol_lamp: dto.join_amount_in_sol_lamport,
-        claimed: false,
-    };
-    println!("holder created");
-
-    if let Err(e) = premarket_service::add_holder(&pool, &dto.base.premarket_pub_key, holder).await {
-        println!(
-            "❌ Failed to add holder to premarket_pubkey {}: {}",
-            dto.base.premarket_pub_key,
-            e
-        );
-        return Err(e);
-    }
-    
-    println!("User joined");
-    
-    Ok(HttpResponse::Ok().body("User joined saved"))
 }
 
 impl From<TokenState> for PremarketState {

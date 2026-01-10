@@ -259,20 +259,6 @@ pub struct SentTxResponse  {
     pub status: TransactionStatus,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct PremarketTransactionDTO {
-    #[serde(rename = "premarket_pub_key")]
-    pub premarket_pub_key: String,
-
-    #[serde(rename = "user_wallet")]
-    pub user_wallet: String,
-
-    #[serde(rename = "user_id")]
-    pub user_id: Option<Uuid>,
-
-    pub tx: String,
-}
-
 #[derive(Deserialize)]
 pub struct TxToSignRequest {
     pub network: String,          // "devnet" | "mainnet-beta"
@@ -302,19 +288,6 @@ pub struct CreatePremarketTxResponse {
     pub transaction: String,           // base64(serialized Transaction)
     pub premarket_account_pda: String, // base58
     pub mint_address: String,
-}
-
-
-#[derive(Deserialize, Debug)]
-pub struct UserJoinedToPremarketDTO {
-    #[serde(flatten)]
-    pub base: PremarketTransactionDTO,
-
-    #[serde(
-        rename = "join_amount_in_sol_lamport",
-        with = "string_as_number"
-    )]
-    pub join_amount_in_sol_lamport: u64,
 }
 
 mod string_as_number {

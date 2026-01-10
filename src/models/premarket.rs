@@ -121,7 +121,6 @@ pub struct UserInfoShort {
 }
 
 
-
 #[derive(Serialize, Deserialize, Copy, Debug, Clone,PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum PremarketState {
