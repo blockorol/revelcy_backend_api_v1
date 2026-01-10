@@ -34,9 +34,6 @@ use crate::api::premarket::CheckTxResponse;
 use serde_json;
 use sqlx::PgPool;
 
-use spl_associated_token_account::ID as associated_token_program_id;
-use spl_associated_token_account::get_associated_token_address;
-use spl_token::ID as token_program_id;
 
 impl TryFrom<&str> for SolanaNetwork {
     type Error = anyhow::Error;

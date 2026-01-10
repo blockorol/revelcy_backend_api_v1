@@ -1,4 +1,3 @@
-use serde_json::Value;
 use sqlx::{PgPool, Result};
 use crate::models::user::UserFingerprintEventInsert;
 
