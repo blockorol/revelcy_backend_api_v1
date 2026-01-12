@@ -45,6 +45,10 @@ pub enum ApiErrorCode {
     PremarketFinishGoalNotReached,
     PremarketAlreadyFinished,
 
+    // Vesting validation
+    InvalidTimestamp,
+    InvalidPercentage,
+
     // Internal Error
     InternalBuildTxFailed,
     InternalSignTxFailed,
@@ -56,6 +60,7 @@ pub enum ApiErrorCode {
     InvalidTxType,
     InvalidPremarketPubkey,
     MissingPremarket,
+    MissingField,
 }
 
 /// Описание ошибки конкретного поля.
@@ -375,6 +380,9 @@ impl ResponseError for ApiError {
             | PremarketFinishGoalNotReached
             | PremarketAlreadyFinished
             | MissingPremarket
+            | InvalidTimestamp
+            | InvalidPercentage
+            | MissingField
             => StatusCode::BAD_REQUEST,
             
             WrongUserPubkeyForUser 

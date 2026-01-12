@@ -34,6 +34,9 @@ pub struct BuildFinishTxParams {
     pub network: SolanaNetwork,
     pub user: solana_sdk::pubkey::Pubkey,
     pub premarket: solana_sdk::pubkey::Pubkey,
+    pub timestamp_start: i64,
+    pub timestamp_end: i64,
+    pub init_unlock: u64,
 }
 
 #[derive(Debug, Clone)]

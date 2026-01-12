@@ -202,7 +202,10 @@ pub struct OutPremarketTxRequest {
 pub struct FinishPremarketTxRequest {
     pub network: String,          // "devnet" | "mainnet-beta"
     pub user_pubkey: String,      // base58
-    pub premarket_account: String // base58
+    pub premarket_account: String, // base58
+    pub timestamp_start: i64,     // vesting start timestamp
+    pub timestamp_end: i64,       // vesting end timestamp
+    pub init_unlock: u64,         // initial unlock percentage (0-100)
 }
 
 #[derive(serde::Deserialize)]
@@ -308,6 +311,10 @@ pub struct TxToSignRequest {
     pub unsigned_tx: String,      // base64(serialized Transaction)
     pub tx_type: String,          // "create_premarket" | "join_premarket" | ...
     pub premarket: Option<String>,
+    // Vesting parameters (required when tx_type == "finish_premarket")
+    pub timestamp_start: Option<i64>,
+    pub timestamp_end: Option<i64>,
+    pub init_unlock: Option<u64>,
 }
 
 #[derive(Deserialize)]

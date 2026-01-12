@@ -48,7 +48,6 @@ use crate::services::solana_service_v2::{
     build_kill_premarket_tx_unsigned,
     build_claim_tokens_tx_unsigned,
     build_create_premarket_tx_unsigned, parse_create_premarket_tx_from_base64,
-    build_update_premarket_data_tx_unsigned,
     build_extend_premarket_tx_unsigned, parse_extend_premarket_tx_from_base64,
     build_update_uri_premarket_tx_unsigned, parse_update_uri_premarket_tx_from_base64,
     build_finish_premarket_tx_unsigned,
@@ -524,6 +523,22 @@ pub async fn sign_and_send_transaction(
         let premarket_pubkey = Pubkey::from_str(&premarket_str)
             .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
+        // Validate vesting parameters are present
+        let timestamp_start = dto.timestamp_start.ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
+            field: "timestamp_start",
+            code: ApiErrorCode::MissingField,
+            message: "timestamp_start is required for finish_premarket",
+        }]))?;
+        let timestamp_end = dto.timestamp_end.ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
+            field: "timestamp_end",
+            code: ApiErrorCode::MissingField,
+            message: "timestamp_end is required for finish_premarket",
+        }]))?;
+        let init_unlock = dto.init_unlock.ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
+            field: "init_unlock",
+            code: ApiErrorCode::MissingField,
+            message: "init_unlock is required for finish_premarket",
+        }]))?;
 
         // 1) DB validation (same as build)
         let full = premarket_service::get_full_premarket_info(pool.get_ref(), &premarket_str, PremarketLookupKeyType::BcAddress)
@@ -535,7 +550,7 @@ pub async fn sign_and_send_transaction(
                 message: "premarket not found",
             }]))?;
 
-        validate_finish_premarket(&full)
+        validate_finish_premarket(&full, timestamp_start, timestamp_end, init_unlock)
             .map_err(ApiError::from_field_errors)?;
 
         // 2) optional: parse tx and ensure correct accounts
@@ -843,7 +858,7 @@ pub async fn finish_premarket_tx(
     //     })?;
 
     // 3) validate finish business rules
-    validate_finish_premarket(&full)
+    validate_finish_premarket(&full, dto.timestamp_start, dto.timestamp_end, dto.init_unlock)
         .map_err(ApiError::from_field_errors)?;
 
     // 4) build tx
@@ -851,6 +866,9 @@ pub async fn finish_premarket_tx(
         network: ctx.network,
         user: ctx.user.current_pubkey,
         premarket: premarket_pub,
+        timestamp_start: dto.timestamp_start,
+        timestamp_end: dto.timestamp_end,
+        init_unlock: dto.init_unlock,
     };
 
     let res = build_finish_premarket_tx_unsigned(pool.get_ref(), params)
