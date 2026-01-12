@@ -313,29 +313,3 @@ mod string_as_number {
         s.parse::<T>().map_err(serde::de::Error::custom)
     }
 }
-
-#[derive(serde::Deserialize)]
-pub struct DeployTxDTO {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub tx: String,
-}
-
-#[derive(serde::Deserialize)]
-pub struct CheckTxDTO {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub sig: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CheckTxResponse {
-    pub user_pubkey: Option<String>,
-    pub name: Option<String>,
-    pub symbol: Option<String>,
-    pub uri: Option<String>,
-    pub deadline: Option<i64>,
-    pub goal_sol_lamp: Option<u64>,
-    pub max_sol_lamp: Option<u64>,
-    pub creator_allocate_lamp: Option<u64>,
-    pub premarket: Option<String>,
-    pub lamports_in: Option<u64>,
-}

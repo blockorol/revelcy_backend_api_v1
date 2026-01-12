@@ -18,8 +18,8 @@ use crate::server::auth_validation::validate_base_request;
 
 use crate::api::premarket::{
     WithdrawVestingTxRequest, AvailabilityInfoDTO, BlockchainInfoDTO, 
-    CheckTxDTO, ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketTxRequest, 
-    CreatePremarketTxResponse, DeployTxDTO, UpdateURITxRequest, ExtendPremarketTxRequest, FinishPremarketTxRequest,
+    ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketTxRequest, 
+    CreatePremarketTxResponse, UpdateURITxRequest, ExtendPremarketTxRequest, FinishPremarketTxRequest,
      GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO,
      GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO,
      HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest,
@@ -37,12 +37,11 @@ use crate::models::premarket::{
     BuildClaimTokensTxParams,
     BuildWithdrawVestingTxParams,
     CommunityInfoServiceModel, 
-    CommunityLink, DeployTxParams,
+    CommunityLink,
     GetPremarketDataParams,
     HolderInfo, PremarketGoal, PremarketInfoServiceModel,
     PremarketListResult, PremarketState, SolanaNetwork, TokenInfo, 
     UserInfoShort,
-    CheckTxParams, 
 };
 
 use crate::services::{
@@ -65,15 +64,12 @@ use crate::services::solana_service_v2::{
     build_out_premarket_tx_unsigned, parse_out_premarket_tx_from_base64,
     build_withdraw_vesting_tx_unsigned, parse_withdraw_vesting_tx_from_base64,
     get_mint_kp, send_signed_tx_base64,
-    wait_for_confirmed
+    wait_for_confirmed,sign_tx_with_revelcy
 };
 
 
 use crate::services::solana_service::{
-    check_tx_service, deploy_tx_service,
     get_premarket_data,
-    sign_tx_with_revelcy,
-    test_build_kill_premarket_tx,
 };
 
 pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
@@ -83,11 +79,9 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/get_list", web::get().to(get_list_main_info))
         .route("/get_dynamic_info", web::get().to(get_dynamic_info))
         .route("/get_holder_entry_price", web::get().to(get_holder_entry_price))
+
         .route("/update_community", web::post().to(update_community_info))
         .route("/update_availability", web::post().to(update_availability))
-
-        // .route("/deploy_tx",   web::post().to(deploy_tx))
-        // .route("/check_tx",   web::post().to(check_tx))
 
         .route("/tx/create", web::post().to(create_premarket_tx))
         .route("/tx/join",   web::post().to(join_premarket_tx))
@@ -98,8 +92,6 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/tx/update_uri", web::post().to(update_uri_tx))
         .route("/tx/claim_tokens", web::post().to(claim_tokens_tx))
         .route("/tx/withdraw_vesting", web::post().to(withdraw_vesting_tx))
-        
-        .route("/tx/test_kill",   web::post().to(test_kill_premarket_tx))
 
         .route("/tx/sign_create_transaction", web::post().to(sign_and_send_transaction))
 }
@@ -939,33 +931,6 @@ pub async fn kill_premarket_tx(
     }
 }
 
-pub async fn test_kill_premarket_tx(
-    pool: web::Data<PgPool>,
-    payload: web::Json<KillPremarketTxRequest>,
-) -> Result<HttpResponse, actix_web::Error> {
-    let dto = payload.into_inner();
-
-    let network = SolanaNetwork::try_from(dto.network.as_str())
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid network"))?;
-
-    let user = Pubkey::from_str(&dto.user_pubkey)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid user_pubkey"))?;
-
-    let premarket = Pubkey::from_str(&dto.premarket_account)
-        .map_err(|_| actix_web::error::ErrorBadRequest("invalid premarket_account"))?;
-
-    let users = Vec::new(); // GET FROM BLOCKCHAIN
-
-    let params = BuildKillTxParams { network, user, premarket, users };
-
-    match test_build_kill_premarket_tx(pool.get_ref(), params).await {
-        Ok(res) => Ok(HttpResponse::Ok().json(res)),
-        Err(e) => {
-            eprintln!("build_kill_premarket_tx error: {e:?}");
-            Ok(HttpResponse::InternalServerError().body("failed to build kill tx"))
-        }
-    }
-}
 pub async fn claim_tokens_tx(
     req: HttpRequest,
     payload: web::Json<ClaimTokensTxRequest>,
@@ -1482,48 +1447,6 @@ impl From<TokenState> for PremarketState {
             TokenState::Premarket => PremarketState::Premarket,
             TokenState::Canceled => PremarketState::Canceled,
             TokenState::Finished => PremarketState::Finished,
-        }
-    }
-}
-
-pub async fn deploy_tx(
-    pool: web::Data<sqlx::PgPool>,
-    payload: web::Json<DeployTxDTO>,
-) -> Result<HttpResponse, Error> {
-
-    let dto = payload.into_inner();
-
-    let params = DeployTxParams {
-        network: dto.network,
-        tx: dto.tx,
-    };
-
-    match deploy_tx_service(pool.get_ref(), params).await {
-        Ok(res) => Ok(HttpResponse::Ok().json(res)),
-        Err(e) => {
-            eprintln!("build_kill_premarket_tx error: {e:?}");
-            Ok(HttpResponse::InternalServerError().body("failed to build kill tx"))
-        }
-    }
-}
-
-pub async fn check_tx(
-    pool: web::Data<sqlx::PgPool>,
-    payload: web::Json<CheckTxDTO>,
-) -> Result<HttpResponse, Error> {
-    
-    let dto = payload.into_inner();
-
-    let params = CheckTxParams {
-        network: dto.network,
-        sig: dto.sig,
-    };
-
-    match check_tx_service(pool.get_ref(), params).await {
-        Ok(res) => Ok(HttpResponse::Ok().json(res)),
-        Err(e) => {
-            eprintln!("build_kill_premarket_tx error: {e:?}");
-            Ok(HttpResponse::InternalServerError().body("failed to build kill tx"))
         }
     }
 }

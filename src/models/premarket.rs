@@ -311,16 +311,6 @@ pub struct PremarketOnchainData {
     pub mint: Pubkey,
 }
 
-pub struct DeployTxParams {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub tx: String,
-}
-
-pub struct CheckTxParams {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub sig: String,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct PythPriceData {
     pub price: String,
