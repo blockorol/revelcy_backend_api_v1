@@ -13,7 +13,7 @@ use solana_sdk::{
 };
 use std::{str::FromStr, time::Duration};
 
-use crate::models::premarket::{BuiltTx, SolanaNetwork, UpdatePremarketDataParams};
+use crate::models::premarket::{BuiltTx, SolanaNetwork};
 
 use super::constants::UPDATE_PREMARKET_DATA_METHOD_NAME;
 use super::env::{program_id_for, read_revelcy_auth, rpc_url};
@@ -77,29 +77,4 @@ pub async fn build_update_premarket_data_tx_unsigned(
         tx_base64: tx_b64,
         premarket_pda: Some(premarket),
     })
-}
-
-pub async fn update_premarket_data_tx_unsigned(
-    params: UpdatePremarketDataParams,
-) -> Result<BuiltTx> {
-    let network = SolanaNetwork::try_from(params.network.as_str())
-        .map_err(|e| anyhow::anyhow!("invalid network: {e}"))?;
-
-    let premarket =
-        Pubkey::from_str(&params.premarket_account).context("invalid premarket_account pubkey")?;
-    let user = Pubkey::from_str(&params.user_pubkey).context("invalid user_pubkey")?;
-
-    let args = UpdatePremarketDataArgs {
-        end_timestamp: params.end_timestamp,
-        end_timestamp_updated: params.end_timestamp_updated,
-        goal_sol: params.goal_sol,
-        max_sol: params.max_sol,
-        mint: params.mint,
-        name: params.name,
-        symbol: params.symbol,
-        uri: params.uri,
-        creator: params.creator,
-    };
-
-    build_update_premarket_data_tx_unsigned(network, user, premarket, args).await
 }

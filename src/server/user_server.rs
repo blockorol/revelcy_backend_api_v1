@@ -1,7 +1,6 @@
 use actix_web::{web, web::BytesMut, HttpResponse, HttpRequest, HttpMessage, Scope};
 use actix_multipart::Multipart;
 use sqlx::PgPool;
-use crate::api::premarket;
 use crate::api::user::{
     AddAvatarResponseDto,
     AddUserNameRequestDto,

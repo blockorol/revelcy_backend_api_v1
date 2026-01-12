@@ -59,11 +59,6 @@ pub struct UpdateCommunityDTO {
     pub premarket_pubkey: String,
     pub community_info: CommunityInfoDTO,
 }
-#[derive(Deserialize)]
-pub struct CreatePremarketDTO {
-    pub blockchain_info: BlockchainInfoDTO,
-    pub community_info: CommunityInfoDTO,
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct BlockchainInfoDTO {
@@ -206,16 +201,6 @@ pub struct FinishPremarketTxRequest {
 }
 
 #[derive(serde::Deserialize)]
-
-pub struct DistributeTokensRequest {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
-    pub premarket_account: String, // base58
-    pub token_mint: String,       // base58
-    pub users: Vec<String>,        // base58
-}
-
-#[derive(serde::Deserialize)]
 pub struct KillPremarketTxRequest {
     pub network: String,          // "devnet" | "mainnet-beta"
     pub user_pubkey: String,      // base58
@@ -253,20 +238,6 @@ pub struct WithdrawVestingTxRequest {
     pub token_mint: String,       // base58
 }
 
-#[derive(serde::Deserialize)]
-pub struct TokenClaimedDTO {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
-    pub premarket_account: String, // base58
-}
-
-#[derive(serde::Serialize)]
-pub struct TokenClaimedResponse {
-    pub claimed: bool,
-    pub updated_in_db: bool,
-}
-
-
 #[derive(serde::Serialize)]
 pub struct TxOnlyResponse {
     pub transaction: String,
@@ -286,20 +257,6 @@ pub enum TransactionStatus {
 pub struct SentTxResponse  {
     pub signature: String,
     pub status: TransactionStatus,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct PremarketTransactionDTO {
-    #[serde(rename = "premarket_pub_key")]
-    pub premarket_pub_key: String,
-
-    #[serde(rename = "user_wallet")]
-    pub user_wallet: String,
-
-    #[serde(rename = "user_id")]
-    pub user_id: Option<Uuid>,
-
-    pub tx: String,
 }
 
 #[derive(Deserialize)]
@@ -333,32 +290,6 @@ pub struct CreatePremarketTxResponse {
     pub mint_address: String,
 }
 
-
-#[derive(Deserialize, Debug)]
-pub struct UserJoinedToPremarketDTO {
-    #[serde(flatten)]
-    pub base: PremarketTransactionDTO,
-
-    #[serde(
-        rename = "join_amount_in_sol_lamport",
-        with = "string_as_number"
-    )]
-    pub join_amount_in_sol_lamport: u64,
-}
-
-#[derive(Deserialize)]
-pub struct FinishedPremarketDTO {
-    pub base: PremarketTransactionDTO,
-    pub network: String,          // "devnet" | "mainnet-beta"
-}
-
-#[derive(Deserialize)]
-pub struct ExtendedPremarketDTO {
-    pub base: PremarketTransactionDTO,
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub new_deadline: i64,       // unix timestamp
-}
-
 mod string_as_number {
     use serde::{self, Serializer, Deserializer, Deserialize}; // <--- добавлен Deserialize
     use std::fmt::Display;
@@ -381,46 +312,4 @@ mod string_as_number {
         let s = String::deserialize(d)?; // теперь всё ок
         s.parse::<T>().map_err(serde::de::Error::custom)
     }
-}
-
-#[derive(Deserialize)]
-pub struct UpdatePremarketDataDTO {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
-    pub premarket_account: String, // base58
-    pub end_timestamp: Option<i64>,
-    pub end_timestamp_updated: Option<bool>,
-    pub goal_sol: Option<u64>,
-    pub max_sol: Option<u64>,
-    pub mint: Option<String>,
-    pub name: Option<String>,
-    pub symbol: Option<String>,
-    pub uri: Option<String>,
-    pub creator: Option<String>,
-}
-
-#[derive(serde::Deserialize)]
-pub struct DeployTxDTO {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub tx: String,
-}
-
-#[derive(serde::Deserialize)]
-pub struct CheckTxDTO {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub sig: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CheckTxResponse {
-    pub user_pubkey: Option<String>,
-    pub name: Option<String>,
-    pub symbol: Option<String>,
-    pub uri: Option<String>,
-    pub deadline: Option<i64>,
-    pub goal_sol_lamp: Option<u64>,
-    pub max_sol_lamp: Option<u64>,
-    pub creator_allocate_lamp: Option<u64>,
-    pub premarket: Option<String>,
-    pub lamports_in: Option<u64>,
 }

@@ -1,7 +1,7 @@
 use chrono::Utc;
 
 use crate::api::errors::{ApiErrorCode, FieldError};
-use crate::models::premarket::{BuildJoinTxParams, BuildPremarketTxParams, FullPremarketInfo, PremarketInfoServiceModel, PremarketState, TokenInfo};
+use crate::models::premarket::{BuildJoinTxParams, BuildPremarketTxParams, FullPremarketInfo, PremarketInfoServiceModel, PremarketState};
 
 const MAX_JOIN_SOL_LAMPORTS: u64 = 2 * solana_sdk::native_token::LAMPORTS_PER_SOL;
 

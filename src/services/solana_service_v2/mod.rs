@@ -13,6 +13,11 @@ pub mod tx_update_uri;
 pub mod tx_claim_tokens;
 pub mod tx_withdraw_vesting;
 pub mod solana_methods;
+pub mod contract_specific;
+
+pub use contract_specific::sign_tx_with_revelcy;
+
+
 
 pub use solana_methods::{
     send_signed_tx_base64,
@@ -47,7 +52,6 @@ pub use tx_kill_premarket::build_kill_premarket_tx_unsigned;
 pub use tx_update_premarket_data::{
     UpdatePremarketDataArgs,
     build_update_premarket_data_tx_unsigned,
-    update_premarket_data_tx_unsigned,
 };
 pub use tx_extend_premarket::{
     build_extend_premarket_tx_unsigned,

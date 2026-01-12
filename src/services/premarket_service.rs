@@ -1,7 +1,7 @@
 use crate::models::premarket::{
     PremarketLookupKeyType,
     CommunityInfoServiceModel, CommunityLink, FullPremarketInfo, HolderInfo,
-    JoinConfirmationStatusDTO, LinkType, OutConfirmationStatusDTO, PremarketGoal,
+    LinkType, PremarketGoal,
     PremarketInfoServiceModel, PremarketListResult, PremarketOnchainData, PremarketOnchainUser,
     PremarketState, TokenDynamicInfo, TokenInfo, TokenLinks, TxConfirmationStatusDTO,
     UserInfoShort,
@@ -469,50 +469,6 @@ pub async fn get_tx_confirmation_status(
     }
 }
 
-pub async fn check_user_joined(
-    client: &RpcClient,
-    user: &str,
-    premarket_account: &str,
-) -> Result<JoinConfirmationStatusDTO, actix_web::Error> {
-    let user_pubkey = Pubkey::from_str(user)
-        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid user public key"))?;
-    let premarket_pubkey = Pubkey::from_str(premarket_account)
-        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid premarket account public key"))?;
-
-    let is_holder = get_premarket_data(client, &premarket_pubkey)
-        .await
-        .map(|data| data.users.iter().any(|user| user.wallet == user_pubkey))
-        .unwrap_or(false);
-
-    Ok(if is_holder {
-        JoinConfirmationStatusDTO::JoinSuccess
-    } else {
-        JoinConfirmationStatusDTO::JoinFailed
-    })
-}
-
-pub async fn check_user_out(
-    client: &RpcClient,
-    user: &str,
-    premarket_account: &str,
-) -> Result<OutConfirmationStatusDTO, actix_web::Error> {
-    let user_pubkey = Pubkey::from_str(user)
-        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid user public key"))?;
-    let premarket_pubkey = Pubkey::from_str(premarket_account)
-        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid premarket account public key"))?;
-
-    let is_holder = get_premarket_data(client, &premarket_pubkey)
-        .await
-        .map(|data| data.users.iter().any(|user| user.wallet == user_pubkey))
-        .unwrap_or(false);
-
-    Ok(if is_holder {
-        OutConfirmationStatusDTO::OutFailed
-    } else {
-        OutConfirmationStatusDTO::OutSuccess
-    })
-}
-
 pub async fn get_premarket_data(
     client: &RpcClient,
     premarket_account: &Pubkey,
@@ -737,59 +693,4 @@ pub async fn user_claimed_token(
     }
 
     Ok(())
-}
-
-pub async fn check_and_update_claimed_status(
-    pool: &PgPool,
-    client: &RpcClient,
-    premarket_pubkey: &Pubkey,
-    user_wallet: &str,
-) -> Result<(bool, bool), actix_web::Error> {
-    // Get on-chain premarket data
-    let onchain_data = get_premarket_data(client, premarket_pubkey)
-        .await
-        .map_err(ErrorInternalServerError)?;
-
-    // Parse user wallet pubkey
-    let user_pubkey = Pubkey::from_str(user_wallet)
-        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid user wallet address"))?;
-
-    // Find user in on-chain data
-    let user_entry = onchain_data.users.iter().find(|u| u.wallet == user_pubkey);
-
-    match user_entry {
-        Some(user) if user.claimed => {
-            // User has claimed on-chain, update database
-            let affected = premarket_repo::update_holder_claimed_status(
-                pool,
-                &premarket_pubkey.to_string(),
-                user_wallet,
-                true,
-            )
-            .await
-            .map_err(ErrorInternalServerError)?;
-
-            println!(
-                "✅ Updated claimed status for user {} in premarket {}: affected {} rows",
-                user_wallet, premarket_pubkey, affected
-            );
-
-            Ok((true, affected > 0))
-        }
-        Some(_user) => {
-            // User exists but hasn't claimed yet
-            println!(
-                "ℹ️  User {} has not claimed tokens yet in premarket {}",
-                user_wallet, premarket_pubkey
-            );
-            Ok((false, false))
-        }
-        None => {
-            // User not found in premarket
-            Err(actix_web::error::ErrorNotFound(format!(
-                "User {} not found in premarket {}",
-                user_wallet, premarket_pubkey
-            )))
-        }
-    }
 }

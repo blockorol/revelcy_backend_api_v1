@@ -37,15 +37,6 @@ pub struct BuildFinishTxParams {
 }
 
 #[derive(Debug, Clone)]
-pub struct DistributeTokensParams {
-    pub network: SolanaNetwork,
-    pub user: solana_sdk::pubkey::Pubkey,
-    pub premarket: solana_sdk::pubkey::Pubkey,
-    pub token_mint: solana_sdk::pubkey::Pubkey,
-    pub users: Vec<String>,
-}
-
-#[derive(Debug, Clone)]
 pub struct BuildKillTxParams {
     pub network: SolanaNetwork,
     pub user: solana_sdk::pubkey::Pubkey,
@@ -128,7 +119,6 @@ pub struct UserInfoShort {
     pub id: Option<Uuid>,
     pub blockchain_address: String,
 }
-
 
 
 #[derive(Serialize, Deserialize, Copy, Debug, Clone,PartialEq)]
@@ -304,19 +294,6 @@ impl From<LinkType> for LinkTypeDTO {
     }
 }
 
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum JoinConfirmationStatusDTO {
-    JoinSuccess,
-    JoinFailed,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum OutConfirmationStatusDTO {
-    OutSuccess,
-    OutFailed,
-}
-
 #[derive(Debug, Clone)]
 pub struct PremarketOnchainUser {
     pub wallet: Pubkey,
@@ -332,32 +309,6 @@ pub struct PremarketOnchainData {
     pub goal_lamports: u64,
     pub max_lamports: u64,
     pub mint: Pubkey,
-}
-
-#[derive(Debug, Clone)]
-pub struct UpdatePremarketDataParams {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
-    pub premarket_account: String, // base58
-    pub end_timestamp: Option<i64>,
-    pub end_timestamp_updated: Option<bool>,
-    pub goal_sol: Option<u64>,
-    pub max_sol: Option<u64>,
-    pub mint: Option<String>,
-    pub name: Option<String>,
-    pub symbol: Option<String>,
-    pub uri: Option<String>,
-    pub creator: Option<String>,
-}
-
-pub struct DeployTxParams {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub tx: String,
-}
-
-pub struct CheckTxParams {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub sig: String,
 }
 
 #[derive(Debug, Deserialize)]
