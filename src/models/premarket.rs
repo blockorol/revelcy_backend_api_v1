@@ -3,7 +3,7 @@ use uuid::Uuid;
 use std::str::FromStr;
 use solana_sdk::pubkey::Pubkey;
 
-use crate::api::premarket::{LinkTypeDTO, TokenDynamicInfoDTO, HolderInfoDTO};
+use crate::api::premarket::{ TokenDynamicInfoDTO, HolderInfoDTO};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PremarketLookupKeyType {
@@ -184,21 +184,21 @@ pub struct TokenLinks {
     pub web_site: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct CommunityInfoServiceModel {
     pub description: String,
     pub token_banner_url: Option<String>,
     pub links: Option<Vec<CommunityLink>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct CommunityLink {
     pub text: String,
     pub url: String,
     pub r#type: LinkType,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum LinkType {
     X,
@@ -267,29 +267,6 @@ impl From<HolderInfo> for HolderInfoDTO {
             username: holder.username,
             amount_sol_lamp: holder.amount_sol_lamp,
             claimed: holder.claimed,
-        }
-    }
-}
-
-
-// From DTO → Service
-impl From<LinkTypeDTO> for LinkType {
-    fn from(value: LinkTypeDTO) -> Self {
-        match value {
-            LinkTypeDTO::X => LinkType::X,
-            LinkTypeDTO::Tg => LinkType::Tg,
-            LinkTypeDTO::Other => LinkType::Other,
-        }
-    }
-}
-
-// From Service → DTO
-impl From<LinkType> for LinkTypeDTO {
-    fn from(value: LinkType) -> Self {
-        match value {
-            LinkType::X => LinkTypeDTO::X,
-            LinkType::Tg => LinkTypeDTO::Tg,
-            LinkType::Other => LinkTypeDTO::Other,
         }
     }
 }

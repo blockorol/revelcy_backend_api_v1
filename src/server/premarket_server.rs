@@ -14,7 +14,7 @@ use crate::server::premarket_validation::{
     validate_refund_premarket, validate_update_uri_premarket,
     validate_withdraw_vesting
 };
-use crate::server::auth_validation::validate_base_request;
+use crate::server::auth_validation::{validate_base_request, BaseRequestContext};
 
 use crate::api::premarket::{
     WithdrawVestingTxRequest, AvailabilityInfoDTO, BlockchainInfoDTO, 
@@ -25,7 +25,8 @@ use crate::api::premarket::{
      HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest,
      SentTxResponse, ShortPremarketInfoDTO, TokenDynamicInfoDTO, TokenLinksDTO, TokenState,
      TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateAvailabilityInfoDTO,
-     UpdateCommunityDTO
+     UpdateCommunityDTO,
+     OldTxFields, CommonTxFields, CreatePremarketReq, Network
 };
 use crate::models::premarket::{
     PremarketLookupKeyType,
@@ -175,7 +176,7 @@ pub async fn sign_and_send_transaction(
 
 async fn handle_create_premarket(
     pool: web::Data<sqlx::PgPool>,
-    ctx: &RequestContext, // поставь свой реальный тип ctx
+    ctx: &BaseRequestContext, // поставь свой реальный тип ctx
     req2: CreatePremarketReq,
 ) -> ApiResult<TxFinalizePlan> {
     let tx_type: &'static str = "create_premarket";
@@ -235,11 +236,16 @@ async fn handle_create_premarket(
         short_url_name: None,
     };
 
+    let community_links: Option<Vec<CommunityLink>> = req2.about_community.links.clone().map(|v| {
+        v.into_iter().map(CommunityLink::from).collect()
+    });
+
     let community = CommunityInfoServiceModel {
         description: req2.about_community.description.clone(),
         token_banner_url: req2.about_community.token_banner_url.clone(),
-        links: req2.about_community.links.clone(),
+        links:community_links,
     };
+
 
     let amount_initial_buy_sol_lamp = parsed.params.creator_allocate;
     let premarket_pubkey = premarket.blockchain_address.clone();
@@ -302,7 +308,7 @@ async fn handle_create_premarket(
 
 async fn handle_join_premarket(
     pool: web::Data<sqlx::PgPool>,
-    ctx: &RequestContext,
+    ctx: &BaseRequestContext,
     common: CommonTxFields,
 ) -> ApiResult<TxFinalizePlan> {
     let tx_type: &'static str = "join_premarket";
@@ -367,7 +373,7 @@ async fn handle_join_premarket(
 
 async fn handle_out_of_premarket(
     pool: web::Data<sqlx::PgPool>,
-    ctx: &RequestContext,
+    ctx: &BaseRequestContext,
     common: CommonTxFields,
 ) -> ApiResult<TxFinalizePlan> {
     let tx_type: &'static str = "out_of_premarket";
@@ -418,7 +424,7 @@ async fn handle_out_of_premarket(
 
 async fn handle_extend_premarket(
     pool: web::Data<sqlx::PgPool>,
-    ctx: &RequestContext,
+    ctx: &BaseRequestContext,
     old: OldTxFields,
 ) -> ApiResult<TxFinalizePlan> {
     let tx_type: &'static str = "extend_premarket";
@@ -492,7 +498,7 @@ async fn handle_extend_premarket(
 
 async fn handle_update_uri(
     _pool: web::Data<sqlx::PgPool>,
-    ctx: &RequestContext,
+    ctx: &BaseRequestContext,
     old: OldTxFields,
 ) -> ApiResult<TxFinalizePlan> {
     let tx_type: &'static str = "update_uri";
@@ -525,7 +531,7 @@ async fn handle_update_uri(
 
 async fn handle_claim_tokens(
     pool: web::Data<sqlx::PgPool>,
-    ctx: &RequestContext,
+    ctx: &BaseRequestContext,
     old: OldTxFields,
 ) -> ApiResult<TxFinalizePlan> {
     let tx_type: &'static str = "claim_tokens";
@@ -565,7 +571,7 @@ async fn handle_claim_tokens(
 
 async fn handle_finish_premarket(
     pool: web::Data<sqlx::PgPool>,
-    ctx: &RequestContext,
+    ctx: &BaseRequestContext,
     old: OldTxFields,
 ) -> ApiResult<TxFinalizePlan> {
     let tx_type: &'static str = "finish_premarket";
@@ -637,7 +643,7 @@ async fn handle_finish_premarket(
 
 async fn handle_refund_premarket(
     pool: web::Data<sqlx::PgPool>,
-    ctx: &RequestContext,
+    ctx: &BaseRequestContext,
     old: OldTxFields,
 ) -> ApiResult<TxFinalizePlan> {
     let tx_type: &'static str = "refund_premarket";
@@ -690,7 +696,7 @@ async fn handle_refund_premarket(
 
 async fn handle_withdraw_vesting(
     _pool: web::Data<sqlx::PgPool>,
-    ctx: &RequestContext,
+    ctx: &BaseRequestContext,
     common: CommonTxFields,
 ) -> ApiResult<TxFinalizePlan> {
     let tx_type: &'static str = "withdraw_vesting";
@@ -1224,7 +1230,7 @@ pub async fn get_main_info(
     };
 
     if premarket_info.main_info.is_hided && key_type == PremarketLookupKeyType::BcAddress {
-        let ctx: super::auth_validation::BaseRequestContext = match validate_base_request(&req, query.network.as_str(), None) {
+        let ctx = match validate_base_request(&req, query.network.as_str(), None) {
             Ok(v) => v,
             Err(_) => return Err(ApiError::invalid_auth_token()),
         };

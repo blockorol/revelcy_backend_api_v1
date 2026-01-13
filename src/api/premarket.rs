@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use crate::models::premarket::{CommunityLink, LinkType};
 
 // todo: unlock it and change network to that
 // #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -102,27 +103,58 @@ pub struct AvailabilityInfoDTO {
     pub is_hided: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CommunityInfoDTO {
     pub description: String,
     pub token_banner_url: Option<String>,
     pub links: Option<Vec<CommunityLinkDTO>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CommunityLinkDTO {
     pub text: String,
     pub url: String,
     pub r#type: LinkTypeDTO,
 }
+impl From<CommunityLinkDTO> for CommunityLink {
+    fn from(v: CommunityLinkDTO) -> Self {
+        Self {
+            text: v.text,
+            url: v.url,
+            r#type: v.r#type.into(),
+        }
+    }
+}
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum LinkTypeDTO {
     X,
     Tg,
     Other,
 }
+impl From<LinkTypeDTO> for LinkType {
+    fn from(v: LinkTypeDTO) -> Self {
+        match v {
+            LinkTypeDTO::X => LinkType::X,
+            LinkTypeDTO::Tg => LinkType::Tg,
+            LinkTypeDTO::Other => LinkType::Other,
+        }
+    }
+}
+
+
+// From Service → DTO
+impl From<LinkType> for LinkTypeDTO {
+    fn from(value: LinkType) -> Self {
+        match value {
+            LinkType::X => LinkTypeDTO::X,
+            LinkType::Tg => LinkTypeDTO::Tg,
+            LinkType::Other => LinkTypeDTO::Other,
+        }
+    }
+}
+
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
