@@ -18,6 +18,10 @@ pub enum ApiErrorCode {
     AuthInvalidToken,
     ForbiddenAction,
 
+    // Invite code
+    InviteCodeNotFound,
+    InviteCodeAlreadyApplied,
+
     // Premarket creation-validation
     PremarketDeadlineTooEarly,
     PremarketDeadlineTooLate,
@@ -95,6 +99,30 @@ pub struct ApiError {
 }
 
 impl ApiError {
+    pub fn invite_code_not_found() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "validation_error",
+                code: ApiErrorCode::InviteCodeNotFound,
+                field: Some("invite_code"),
+                message: Some("invite code not found or inactive".into()),
+                errors: None,
+            },
+        }
+    }
+
+    pub fn invite_code_already_applied() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "validation_error",
+                code: ApiErrorCode::InviteCodeAlreadyApplied,
+                field: Some("invite_code"),
+                message: Some("invite code already applied".into()),
+                errors: None,
+            },
+        }
+    }
+
     pub fn invalid_token_mint() -> Self {
         Self {
             response: ApiErrorResponse {
@@ -375,7 +403,11 @@ impl ResponseError for ApiError {
             | PremarketFinishGoalNotReached
             | PremarketAlreadyFinished
             | MissingPremarket
+            | InviteCodeNotFound
             => StatusCode::BAD_REQUEST,
+
+            InviteCodeAlreadyApplied 
+            => StatusCode::CONFLICT,
             
             WrongUserPubkeyForUser 
             | ForbiddenAction => StatusCode::FORBIDDEN,
