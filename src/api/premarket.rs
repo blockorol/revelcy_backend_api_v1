@@ -253,18 +253,85 @@ pub enum TransactionStatus {
     Failed,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub enum Network {
+    #[serde(rename = "devnet")]
+    Devnet,
+    #[serde(rename = "mainnet-beta")]
+    MainnetBeta,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CommonTxFields {
+    pub network: Network,
+    pub unsigned_tx: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "tx_type", rename_all = "snake_case")]
+pub enum TxToSignRequest {
+    CreatePremarket(CreatePremarketReq),
+
+    JoinPremarket(CommonTxFields),
+    OutOfPremarket(CommonTxFields),
+
+    FinishPremarket(OldTxFields),
+    ExtendPremarket(OldTxFields),
+    UpdateUri(OldTxFields),
+    ClaimTokens(OldTxFields),
+    RefundPremarket(OldTxFields),
+
+    WithdrawVesting(CommonTxFields),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreatePremarketReq {
+    #[serde(flatten)]
+    pub common: CommonTxFields,
+    pub about_community: CommunityInfoDTO,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OldTxFields {
+    #[serde(flatten)]
+    pub common: CommonTxFields,
+    pub premarket: String,
+}
+impl TxToSignRequest {
+    pub fn common(&self) -> &CommonTxFields {
+        match self {
+            TxToSignRequest::CreatePremarket(x) => &x.common,
+            TxToSignRequest::JoinPremarket(x) => x,
+            TxToSignRequest::OutOfPremarket(x) => x,
+            TxToSignRequest::FinishPremarket(x) => &x.common,
+            TxToSignRequest::ExtendPremarket(x) => &x.common,
+            TxToSignRequest::UpdateUri(x) => &x.common,
+            TxToSignRequest::ClaimTokens(x) => &x.common,
+            TxToSignRequest::RefundPremarket(x) => &x.common,
+            TxToSignRequest::WithdrawVesting(x) => x,
+        }
+    }
+
+    pub fn tx_type_str(&self) -> &'static str {
+        match self {
+            TxToSignRequest::CreatePremarket(_) => "create_premarket",
+            TxToSignRequest::JoinPremarket(_) => "join_premarket",
+            TxToSignRequest::OutOfPremarket(_) => "out_of_premarket",
+            TxToSignRequest::FinishPremarket(_) => "finish_premarket",
+            TxToSignRequest::ExtendPremarket(_) => "extend_premarket",
+            TxToSignRequest::UpdateUri(_) => "update_uri",
+            TxToSignRequest::ClaimTokens(_) => "claim_tokens",
+            TxToSignRequest::RefundPremarket(_) => "refund_premarket",
+            TxToSignRequest::WithdrawVesting(_) => "withdraw_vesting",
+        }
+    }
+}
+
+
 #[derive(serde::Serialize)]
 pub struct SentTxResponse  {
     pub signature: String,
     pub status: TransactionStatus,
-}
-
-#[derive(Deserialize)]
-pub struct TxToSignRequest {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub unsigned_tx: String,      // base64(serialized Transaction)
-    pub tx_type: String,          // "create_premarket" | "join_premarket" | ...
-    pub premarket: Option<String>,
 }
 
 #[derive(Deserialize)]

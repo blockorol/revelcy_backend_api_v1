@@ -67,6 +67,13 @@ use crate::services::solana_service_v2::{
     wait_for_confirmed,sign_tx_with_revelcy
 };
 
+type ExtraSigners = Option<Vec<solana_sdk::signature::Keypair>>;
+
+pub struct TxFinalizePlan {
+    pub tx_type: &'static str,
+    pub extra_signers: ExtraSigners,
+    pub update_method: UpdateFn,
+}
 
 use crate::services::solana_service::{
     get_premarket_data,
@@ -93,7 +100,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/tx/claim_tokens", web::post().to(claim_tokens_tx))
         .route("/tx/withdraw_vesting", web::post().to(withdraw_vesting_tx))
 
-        .route("/tx/sign_create_transaction", web::post().to(sign_and_send_transaction))
+        .route("/tx/sign_and_send_transaction", web::post().to(sign_and_send_transaction))
 }
 
 pub async fn sign_and_send_transaction(
@@ -102,602 +109,615 @@ pub async fn sign_and_send_transaction(
     payload: web::Json<TxToSignRequest>,
 ) -> ApiResult<HttpResponse> {
     let dto = payload.into_inner();
-    let ctx = validate_base_request(&req, dto.network.as_str(), None)?;
 
-    let tx_type = dto.tx_type.clone();
-    let tx_type_for_default = tx_type.clone();
+    // 0) auth + network
+    let network_str = match dto.common().network {
+        Network::Devnet => "devnet",
+        Network::MainnetBeta => "mainnet-beta",
+    };
+    let ctx = validate_base_request(&req, network_str, None)?;
 
-    let mut extra_signers: Option<Vec<solana_sdk::signature::Keypair>> = None;
-    let mut update_method: UpdateFn = Box::new(move || {
-        let tx_type = tx_type_for_default.clone();
-        Box::pin(async move {
-            eprintln!("PANIC!!!! no method to update DB info for tx_type: {}", tx_type);
-        })
-    });
+    let unsigned_tx = dto.common().unsigned_tx.clone();
 
-    // ─────────────────────────────────────────────────────────────
-    // 0) validate tx_type
-    // ─────────────────────────────────────────────────────────────
-    let is_supported = matches!(
-        tx_type.as_str(),
-        "create_premarket"
-            | "join_premarket"
-            | "out_of_premarket"
-            | "finish_premarket"
-            | "extend_premarket"
-            | "update_uri"
-            | "claim_tokens"
-            | "refund_premarket"
-            | "withdraw_vesting"
-    );
-
-    if !is_supported {
-        return Err(ApiError::from_field_errors(vec![FieldError {
-            field: "tx_type",
-            code: ApiErrorCode::InvalidTxType,
-            message: "invalid tx_type",
-        }]));
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // 1) tx-type specific validation based on unsigned_tx
-    //    (parse + validate + user match + sometimes db lookup)
-    // ─────────────────────────────────────────────────────────────
-
-    if tx_type == "create_premarket" {
-        let parsed = parse_create_premarket_tx_from_base64(&dto.unsigned_tx, ctx.network)
-            .map_err(|e| {
-                eprintln!("parse create_premarket tx error: {e:?}");
-                ApiError::from_field_errors(vec![FieldError {
-                    field: "unsigned_tx",
-                    code: ApiErrorCode::ValidationError,
-                    message: "invalid create_premarket transaction",
-                }])
-            })?;
-
-        // user in tx must match auth user
-        if parsed.params.user != ctx.user.current_pubkey {
-            return Err(ApiError::wrong_user_pubkey_for_user());
+    // 1) per-tx handling (parse/validate + prepare finalize plan)
+    let plan = match dto {
+        TxToSignRequest::CreatePremarket(x) => {
+            handle_create_premarket(pool.clone(), &ctx, x).await?
         }
+        TxToSignRequest::JoinPremarket(x) => handle_join_premarket(pool.clone(), &ctx, x).await?,
+        TxToSignRequest::OutOfPremarket(x) => handle_out_of_premarket(pool.clone(), &ctx, x).await?,
+        TxToSignRequest::ExtendPremarket(x) => handle_extend_premarket(pool.clone(), &ctx, x).await?,
+        TxToSignRequest::UpdateUri(x) => handle_update_uri(pool.clone(), &ctx, x).await?,
+        TxToSignRequest::ClaimTokens(x) => handle_claim_tokens(pool.clone(), &ctx, x).await?,
+        TxToSignRequest::FinishPremarket(x) => handle_finish_premarket(pool.clone(), &ctx, x).await?,
+        TxToSignRequest::RefundPremarket(x) => handle_refund_premarket(pool.clone(), &ctx, x).await?,
+        TxToSignRequest::WithdrawVesting(x) => handle_withdraw_vesting(pool.clone(), &ctx, x).await?,
+    };
 
-        validate_create_premarket(&parsed.params).map_err(ApiError::from_field_errors)?;
-        let uri = parsed.params.uri.clone();
-
-
-        let info_from_ipfs = ipfs_service::get_ipfs_token_info(&parsed.params.uri).await.map_err(|e| {
-                eprintln!("parse create_premarket tx error: failed to upload from IPFS: {e:?}");
-                ApiError::from_field_errors(vec![FieldError {
-                    field: "uri",
-                    code: ApiErrorCode::ValidationError,
-                    message: "failed to get info from IPFS",
-                }])
-            })?;
-        let premarket = PremarketInfoServiceModel {
-            id: None,
-            token_info: TokenInfo { 
-                address: parsed.mint.to_string(),
-                name: parsed.params.name,
-                description: info_from_ipfs.description,
-                symbol: parsed.params.symbol,
-                image_url: info_from_ipfs.image_url,
-                data_uri: uri.clone(),
-                links: info_from_ipfs.links
-            }, 
-            creator: UserInfoShort{
-                id: Some(ctx.user.internal_id),
-                blockchain_address: parsed.params.user.to_string(),
-            },
-            state: PremarketState::Premarket,
-            goal: PremarketGoal{
-                solana_lamp: i64::try_from(parsed.params.goal).map_err(|_| ApiError::internal_build_tx_failed())?,
-            },
-            deadline_timestamp: parsed.params.deadline,
-            created_timestamp: Utc::now().timestamp(), // todo: should be get from block info
-            blockchain_address: parsed.premarket_pda.to_string(),
-            finished_timestamp: None,
-            is_extended: false,
-            is_hided: false,
-            short_url_name: None,
-        };
-        // community should be updated on the next step
-        let community = CommunityInfoServiceModel{
-            description: "".to_string(),
-            token_banner_url: None, 
-            links: None
-        };
-
-        let pool2 = pool.clone();
-        let amount_initial_buy_sol_lamp = parsed.params.creator_allocate;
-        let premarket2 = premarket.clone();
-        let premarket_pubkey = premarket.blockchain_address.clone();
-        update_method = Box::new(move || { 
-            let pool2 = pool2.clone();
-            let amount_initial_buy_sol_lamp = amount_initial_buy_sol_lamp.clone();
-            let premarket = premarket2.clone();
-            let premarket_pubkey = premarket_pubkey.clone();
-            Box::pin(async move {
-                premarket_service::create_full_premarket_info(
-                    pool2.get_ref(),
-                    premarket,
-                    community
-                ).await.map_err(|e| {
-                    eprintln!("Failed to update DB: create_full_premarket_info (mint:{:#}, pda:{:#}, uri:{:#}): {:#}", 
-                        parsed.mint, 
-                        parsed.premarket_pda,
-                        uri,
-                        e
-                    );
-                });
-                if amount_initial_buy_sol_lamp != 0 {
-                    let holder = HolderInfo {
-                        wallet_address: premarket_pubkey.clone(),
-                        amount_sol_lamp: amount_initial_buy_sol_lamp,
-                        join_timestamp: Utc::now().timestamp_millis(),
-                        id: None,
-                        icon_url: None,
-                        username: None,
-                        claimed: false
-                    };
-                    premarket_service::add_holder(
-                        pool2.get_ref(),
-                        &premarket_pubkey,
-                        holder
-                    ).await.map_err(|e| {
-                    eprintln!("Failed to update DB: join user in alocate (mint:{:#}, pda:{:#}, sol:{:#}, uri:{:#}): {:#}", 
-                        parsed.mint, 
-                        parsed.premarket_pda,
-                        amount_initial_buy_sol_lamp,
-                        uri,
-                        e
-                    );
-                });
-                }
-            })
-        });
-    }
-
-    if tx_type == "join_premarket" {
-        let parsed = parse_join_premarket_tx_from_base64(&dto.unsigned_tx, ctx.network)
-            .map_err(|e| {
-                eprintln!("parse join_premarket tx error: {e:?}");
-                ApiError::from_field_errors(vec![FieldError {
-                    field: "unsigned_tx",
-                    code: ApiErrorCode::ValidationError,
-                    message: "invalid join_premarket transaction",
-                }])
-            })?;
-
-        if parsed.params.user != ctx.user.current_pubkey {
-            return Err(ApiError::wrong_user_pubkey_for_user());
-        }
-
-        validate_join_premarket(&parsed.params).map_err(ApiError::from_field_errors)?;
-        // TODO (later):
-        // - maybe check premarket state from DB to prevent join when not allowed
-        // - if not allowed => ValidationError with a dedicated code
-        
-        let holder = HolderInfo {
-            wallet_address: parsed.user.to_string(),
-            id: Some(ctx.user.internal_id),
-            icon_url: None,
-            username: None,
-            join_timestamp: Utc::now().timestamp_millis(),
-            amount_sol_lamp: parsed.params.amount,
-            claimed: false,
-        };
-
-        let pool2 = pool.clone();
-        let premarket_str = parsed.premarket.to_string();
-        update_method = Box::new(move || { 
-            let pool2 = pool2.clone();
-            let premarket_str = premarket_str.clone();
-            Box::pin(async move {
-            premarket_service::add_holder(
-                pool2.get_ref(),
-                &premarket_str,
-                holder
-            ).await.map_err(|e| {
-                eprintln!(
-                    "Failed to update DB: add_holder to premarket_pubkey {} for {}({}), with {}: {}",
-                    premarket_str,
-                    ctx.user.internal_id.to_string(),
-                    ctx.user.current_pubkey.to_string(),
-                    parsed.params.amount,
-                    e
-                );
-            });
-        })});
-    }
-
-    if tx_type == "out_of_premarket" {
-        let parsed = parse_out_premarket_tx_from_base64(&dto.unsigned_tx, ctx.network)
-            .map_err(|e| {
-                eprintln!("parse out_of_premarket tx error: {e:?}");
-                ApiError::from_field_errors(vec![FieldError {
-                    field: "unsigned_tx",
-                    code: ApiErrorCode::ValidationError,
-                    message: "invalid out_of_premarket transaction",
-                }])
-            })?;
-
-        // user in tx must match auth user
-        if parsed.user != ctx.user.current_pubkey {
-            return Err(ApiError::wrong_user_pubkey_for_user());
-        }
-
-        // TODO (later):
-        // - optionally check in DB that user actually joined and can out
-        let pool2 = pool.clone();
-        let premarket_str = parsed.premarket.to_string();
-        update_method = Box::new(move || {
-            let pool2 = pool2.clone();
-            let premarket_str = premarket_str.clone();
-            Box::pin(async move {
-            premarket_service::remove_holder(
-                pool2.get_ref(),
-                &premarket_str,
-                &ctx.user.current_pubkey.to_string(),
-            ).await.map_err(|e| {
-                println!(
-                    "Failed to update DB: remove_holder from premarket {} for user {} ({}): {}",
-                    premarket_str,
-                    ctx.user.internal_id.to_string(),
-                    ctx.user.current_pubkey.to_string(),
-                    e
-                );
-            });
-        })});
-    }
-
-    if tx_type == "extend_premarket" {
-        // parse unsigned tx first
-        let parsed = parse_extend_premarket_tx_from_base64(&dto.unsigned_tx, ctx.network)
-            .map_err(|e| {
-                eprintln!("parse extend_premarket tx error: {e:?}");
-                ApiError::from_field_errors(vec![FieldError {
-                    field: "unsigned_tx",
-                    code: ApiErrorCode::ValidationError,
-                    message: "invalid extend_premarket transaction",
-                }])
-            })?;
-
-        if parsed.user != ctx.user.current_pubkey {
-            return Err(ApiError::wrong_user_pubkey_for_user());
-        }
-
-        // extend needs DB state validation
-        let premarket_str: String = parsed.premarket.to_string().clone();
-        let premarket = premarket_service::get_full_premarket_info(&pool, &premarket_str, PremarketLookupKeyType::BcAddress)
-            .await
-            .map_err(|e| {
-                eprintln!("get_full_premarket_info error: {e:?}");
-                // тут это скорее 500 или 400? если “не найден” - 400.
-                ApiError::internal_build_tx_failed() // если хочешь точнее: сделать InternalDbFailed
-            })?
-            .ok_or_else(|| ApiError::missing_premarket())?;
-
-        validate_extend_premarket(
-            premarket.main_info.is_extended,
-            premarket.main_info.state,
-            premarket.main_info.deadline_timestamp,
-            parsed.new_deadline,
-        )
-        .map_err(ApiError::from_field_errors)?;
-        let pool2 = pool.clone();
-        let premarket_pubkey = parsed.premarket.to_string();
-        update_method = Box::new(move || { 
-            let pool2 = pool2.clone();
-            let premarket_str = premarket_str.clone();
-            let new_deadline = parsed.new_deadline.clone();
-            Box::pin(async move {
-            // Update database with new deadline
-            premarket_service::update_premarket_deadline(
-                pool2.get_ref(),
-                &premarket_pubkey,
-                new_deadline,
-            ).await.map_err(|e| {
-                eprintln!(
-                    "Failed to update DB: update_deadline for premarket '{}' deadline: {} by user {} ({}): {}",
-                    premarket_pubkey,
-                    new_deadline,
-                    ctx.user.internal_id.to_string(), 
-                    ctx.user.current_pubkey.to_string(), 
-                    e,
-                );
-            });
-        })});
-    }
-
-    if tx_type == "update_uri" {
-        // parse unsigned tx first
-        let parsed = parse_update_uri_premarket_tx_from_base64(&dto.unsigned_tx, ctx.network)
-            .map_err(|e| {
-                eprintln!("parse extend_premarket tx error: {e:?}");
-                ApiError::from_field_errors(vec![FieldError {
-                    field: "unsigned_tx",
-                    code: ApiErrorCode::ValidationError,
-                    message: "invalid extend_premarket transaction",
-                }])
-            })?;
-
-        if parsed.user != ctx.user.current_pubkey {
-            return Err(ApiError::wrong_user_pubkey_for_user());
-        }
-
-        // extend needs DB state validation
-        let premarket_str: String = parsed.premarket.to_string().clone();
-        let premarket = premarket_service::get_full_premarket_info(&pool, &premarket_str, PremarketLookupKeyType::BcAddress)
-            .await
-            .map_err(|e| {
-                eprintln!("get_full_premarket_info error: {e:?}");
-                // тут это скорее 500 или 400? если “не найден” - 400.
-                ApiError::internal_build_tx_failed() // если хочешь точнее: сделать InternalDbFailed
-            })?
-            .ok_or_else(|| ApiError::missing_premarket())?;
-        // let info_from_ipfs = ipfs_service::get_ipfs_token_info(&parsed.new_uri).await.map_err(|e| {
-        //         eprintln!("parse create_premarket tx error: failed to upload from IPFS: {e:?}");
-        //         ApiError::from_field_errors(vec![FieldError {
-        //             field: "uri",
-        //             code: ApiErrorCode::ValidationError,
-        //             message: "failed to get info from IPFS",
-        //         }])
-        //     })?;
-
-        validate_update_uri_premarket(
-            premarket.main_info.state,
-            // &premarket.main_info.token_info,
-            // &info_from_ipfs,
-        )
-        .map_err(ApiError::from_field_errors)?;
-        // let pool2 = pool.clone();
-        // let new_uri = parsed.new_uri.clone();
-// 
-        // let image_url = premarket.image_url.clone();
-        // let data_uri  = info_from_ipfs.data_uri.clone();
-        // let telegram  = info_from_ipfs.links.telegram.clone();
-        // let twitter   = info_from_ipfs.links.twitter.clone();
-        // let web_site  = info_from_ipfs.links.web_site.clone();
-
-        let premarket_pubkey = parsed.premarket.to_string();
-        update_method = Box::new(move || { 
-            // let pool2 = pool2.clone();
-            // let premarket_pubkey = premarket_pubkey.clone();
-            // let new_uri = parsed.new_uri.clone();
-            // let new_uri = new_uri.clone();
-            // let image_url = image_url.clone();
-            // let data_uri = data_uri.clone();
-            // let telegram = telegram.clone();
-            // let twitter = twitter.clone();
-            // let web_site: Option<String> = web_site.clone();
-
-            Box::pin(async move {
-                println!("PANIC!!!! no method to update DB info for tx_type update url");
-            // Update database with new deadline
-            // premarket_service::update_premarket_links(
-            //     pool2.get_ref(),
-            //     &premarket_pubkey,
-            //     image_url,
-            //     data_uri,
-            //     telegram,
-            //     twitter,
-            //     web_site,
-            // ).await.map_err(|e| {
-            //     eprintln!(
-            //         "Failed to update DB: update links for premarket '{}' deadline: {} by user {} ({}): {}",
-            //         premarket_pubkey,
-            //         new_uri,
-            //         ctx.user.internal_id.to_string(), 
-            //         ctx.user.current_pubkey.to_string(), 
-            //         e,
-            //     );
-            // });
-        })});
-    }
-
-    if tx_type == "claim_tokens" {
-        // todo: get tx info!!!
-        let premarket_str: String = dto.premarket.clone().ok_or_else(ApiError::missing_premarket)?;
-        let premarket_pubkey = Pubkey::from_str(&premarket_str)
-            .map_err(|_| ApiError::invalid_premarket_pubkey())?;
-        // TODO: как только у тебя будет parse_claim_tokens_tx_from_base64:
-        // - parse unsigned tx
-        // - validate user == ctx.user.current_pubkey
-        // - validate token_mint format etc (если нужно)
-        // пока можно оставить без parse, но лучше симметрично как с остальными.
-
-        // пример ожидаемой ошибки:
-        // return Err(ApiError::from_field_errors(vec![FieldError {
-        //   field: "unsigned_tx",
-        //   code: ApiErrorCode::ValidationError,
-        //   message: "invalid claim_tokens transaction",
-        // }]));
-        let pool2 = pool.clone();
-        let user_wallet_str = ctx.user.current_pubkey.to_string();
-        update_method = Box::new(move || {
-            let pool2 = pool2.clone();
-            let premarket_str = premarket_str.clone();
-            Box::pin(async move {
-            let user_wallet_str = user_wallet_str.clone();
-            premarket_service::user_claimed_token(
-                pool2.get_ref(),
-                &premarket_pubkey,
-                &user_wallet_str,
-            ).await
-            .map_err(|e| {
-                eprintln!(
-                    "Failed to update DB: claim_token PM {} for user {}({}): {}",
-                    premarket_pubkey.to_string(),
-                    ctx.user.internal_id.to_string(), 
-                    ctx.user.current_pubkey.to_string(), 
-                    e,
-                );
-            });
-        })});
-    }
-
-    if tx_type == "finish_premarket" {
-        // todo: get premarket_pub from tx!!!! 
-        let premarket_str: String = dto.premarket.clone().ok_or_else(ApiError::missing_premarket)?;
-        let premarket_pubkey = Pubkey::from_str(&premarket_str)
-            .map_err(|_| ApiError::invalid_premarket_pubkey())?;
-
-
-        // 1) DB validation (same as build)
-        let full = premarket_service::get_full_premarket_info(pool.get_ref(), &premarket_str, PremarketLookupKeyType::BcAddress)
-            .await
-            .map_err(|e| { eprintln!("get_full_premarket_info error: {e:?}"); ApiError::internal_sign_tx_failed_goal() })?
-            .ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
-                field: "premarket",
-                code: ApiErrorCode::PremarketNotFound,
-                message: "premarket not found",
-            }]))?;
-
-        validate_finish_premarket(&full)
-            .map_err(ApiError::from_field_errors)?;
-
-        // 2) optional: parse tx and ensure correct accounts
-        // TODO: parse_finish_premarket_tx_from_base64(&dto.unsigned_tx, ctx.network)
-        //   - check parsed.user == ctx.user.current_pubkey
-        //   - check parsed.premarket == premarket_pub
-
-        // 3) load mint key + sign
-        let mint_kp = get_mint_kp(pool.get_ref(), premarket_pubkey).await.map_err(|e| {
-            eprintln!("mint_kp load error: {e:?}");
+    // 2) sign + send + wait
+    let signed = sign_tx_with_revelcy(&unsigned_tx, ctx.network, plan.extra_signers.as_deref())
+        .map_err(|e| {
+            eprintln!("sign_transaction error ({}): {e:?}", plan.tx_type);
             ApiError::internal_sign_tx_failed()
         })?;
 
-        let extra = vec![mint_kp];
-        extra_signers =  Some(extra);
-        let pool2 = pool.clone();
-        update_method = Box::new(move || { 
-            let pool2 = pool2.clone();
-            let premarket_str = premarket_str.clone();
-            Box::pin(async move {
-            premarket_service::set_premarket_state(
-                pool2.get_ref(),
-                &premarket_str,
-                PremarketState::Finished,
-                Some(Utc::now().timestamp()), // to do: change me to time from tx
-            ).await.map_err(|e| {
-                eprintln!(
-                    "Failed to update DB: finish_premarket '{}' state to 'Finished' by user {}({}): {}",
-                    premarket_str,
-                    ctx.user.internal_id.to_string(),
-                    ctx.user.current_pubkey.to_string(),
-                    e,
-                );
-            });
-        })});
-    }
-
-    // tx/kill
-    if tx_type == "refund_premarket" { 
-        // todo: get premarket_pub from tx!!!! 
-        let premarket_str: String = dto.premarket.clone().ok_or_else(ApiError::missing_premarket)?;
-
-        // 1) DB validation (same as build)
-        let full = premarket_service::get_full_premarket_info(&pool, &premarket_str, PremarketLookupKeyType::BcAddress)
-            .await
-            .map_err(|e| { eprintln!("get_full_premarket_info error: {e:?}"); ApiError::internal_sign_tx_failed() })?
-            .ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
-                field: "premarket",
-                code: ApiErrorCode::PremarketNotFound,
-                message: "premarket not found",
-            }]))?;
-
-        validate_refund_premarket(&full.main_info)
-            .map_err(ApiError::from_field_errors)?;
-
-        // 2) optional: parse tx and ensure correct accounts
-        // TODO: parse_finish_premarket_tx_from_base64(&dto.unsigned_tx, ctx.network)
-        //   - check parsed.user == ctx.user.current_pubkey
-        //   - check parsed.premarket 
-
-        let pool2 = pool.clone();
-        update_method = Box::new(move || { 
-            let pool2 = pool2.clone();
-            let premarket_str = premarket_str.clone();
-            Box::pin(async move {
-            premarket_service::set_premarket_state(
-                pool2.get_ref(),
-                &premarket_str,
-                PremarketState::Canceled,
-                Some(Utc::now().timestamp()), // to do: change me to time from tx
-            ).await.map_err(|e| {
-                eprintln!(
-                    "Failed to update DB: refund_premarket '{}' state to 'Canceled' by user {}({}): {}",
-                    premarket_str,
-                    ctx.user.internal_id.to_string(),
-                    ctx.user.current_pubkey.to_string(),
-                    e,
-                );
-            });
-        })});
-    }
-
-    if tx_type == "withdraw_vesting" {
-        let parsed = parse_withdraw_vesting_tx_from_base64(&dto.unsigned_tx, ctx.network)
-            .map_err(|e| {
-                eprintln!("parse withdraw_vesting tx error: {e:?}");
-                ApiError::from_field_errors(vec![FieldError {
-                    field: "unsigned_tx",
-                    code: ApiErrorCode::ValidationError,
-                    message: "invalid withdraw_vesting transaction",
-                }])
-            })?;
-
-        // User in tx must match auth user
-        if parsed.user != ctx.user.current_pubkey {
-            return Err(ApiError::wrong_user_pubkey_for_user());
-        }
-
-        // Validate withdraw_vesting business rules
-        validate_withdraw_vesting().map_err(ApiError::from_field_errors)?;
-
-        // No database update needed for withdraw_vesting
-        // Vesting state is stored on-chain
-        update_method = Box::new(move || {
-            Box::pin(async move {
-                // No-op: withdraw_vesting doesn't require database updates
-                // All vesting data is managed on-chain
-            })
-        });
-    }
-    // ─────────────────────────────────────────────────────────────
-    // 2) Default Revelcy sign (no extra signers)
-    // ─────────────────────────────────────────────────────────────
-    let signed = sign_tx_with_revelcy(&dto.unsigned_tx, ctx.network, extra_signers.as_deref()).map_err(|e| {
-        eprintln!("sign_transaction error ({tx_type}): {e:?}");
-        ApiError::internal_sign_tx_failed()
-    })?;
-
-    let res = send_signed_tx_base64(ctx.network, &signed).await.map_err(|e| {
-        eprintln!("send_signed_tx_base64 error ({tx_type}): {e:?}");
+    let sig = send_signed_tx_base64(ctx.network, &signed).await.map_err(|e| {
+        eprintln!("send_signed_tx_base64 error ({}): {e:?}", plan.tx_type);
         ApiError::internal_send_tx_failed()
     })?;
 
     wait_for_confirmed(
         ctx.network,
-        &res,
+        &sig,
         Duration::from_secs(60),
-        Duration::from_millis(300), // 0.3 sec
-    ).await.map_err(|e| {
-        eprintln!("wait_for_confirmed error ({tx_type}): {e:?}");
+        Duration::from_millis(300),
+    )
+    .await
+    .map_err(|e| {
+        eprintln!("wait_for_confirmed error ({}): {e:?}", plan.tx_type);
         ApiError::internal_confirm_tx_failed()
     })?;
 
+    // 3) finalize in background
     background_finalize_action(
         ctx.network,
-        res,
-        Duration::from_secs(20*60), // timeout
-        Duration::from_secs(1),   // poll_every
-        update_method,
+        sig,
+        Duration::from_secs(20 * 60),
+        Duration::from_secs(1),
+        plan.update_method,
     );
 
-    Ok(HttpResponse::Ok().json(SentTxResponse { 
-        signature: res.to_string(), 
-        status: TransactionStatus::Confirmed }))
+    Ok(HttpResponse::Ok().json(SentTxResponse {
+        signature: sig.to_string(),
+        status: TransactionStatus::Confirmed,
+    }))
 }
+
+async fn handle_create_premarket(
+    pool: web::Data<sqlx::PgPool>,
+    ctx: &RequestContext, // поставь свой реальный тип ctx
+    req2: CreatePremarketReq,
+) -> ApiResult<TxFinalizePlan> {
+    let tx_type: &'static str = "create_premarket";
+
+    let parsed = parse_create_premarket_tx_from_base64(&req2.common.unsigned_tx, ctx.network)
+        .map_err(|e| {
+            eprintln!("parse create_premarket tx error: {e:?}");
+            ApiError::from_field_errors(vec![FieldError {
+                field: "unsigned_tx",
+                code: ApiErrorCode::ValidationError,
+                message: "invalid create_premarket transaction",
+            }])
+        })?;
+
+    if parsed.params.user != ctx.user.current_pubkey {
+        return Err(ApiError::wrong_user_pubkey_for_user());
+    }
+
+    validate_create_premarket(&parsed.params).map_err(ApiError::from_field_errors)?;
+
+    let uri = parsed.params.uri.clone();
+    let info_from_ipfs = ipfs_service::get_ipfs_token_info(&uri).await.map_err(|e| {
+        eprintln!("create_premarket: failed to get info from IPFS: {e:?}");
+        ApiError::from_field_errors(vec![FieldError {
+            field: "uri",
+            code: ApiErrorCode::ValidationError,
+            message: "failed to get info from IPFS",
+        }])
+    })?;
+
+    let premarket = PremarketInfoServiceModel {
+        id: None,
+        token_info: TokenInfo {
+            address: parsed.mint.to_string(),
+            name: parsed.params.name,
+            description: info_from_ipfs.description,
+            symbol: parsed.params.symbol,
+            image_url: info_from_ipfs.image_url,
+            data_uri: uri.clone(),
+            links: info_from_ipfs.links,
+        },
+        creator: UserInfoShort {
+            id: Some(ctx.user.internal_id),
+            blockchain_address: parsed.params.user.to_string(),
+        },
+        state: PremarketState::Premarket,
+        goal: PremarketGoal {
+            solana_lamp: i64::try_from(parsed.params.goal)
+                .map_err(|_| ApiError::internal_build_tx_failed())?,
+        },
+        deadline_timestamp: parsed.params.deadline,
+        created_timestamp: Utc::now().timestamp(),
+        blockchain_address: parsed.premarket_pda.to_string(),
+        finished_timestamp: None,
+        is_extended: false,
+        is_hided: false,
+        short_url_name: None,
+    };
+
+    let community = CommunityInfoServiceModel {
+        description: req2.about_community.description.clone(),
+        token_banner_url: req2.about_community.token_banner_url.clone(),
+        links: req2.about_community.links.clone(),
+    };
+
+    let amount_initial_buy_sol_lamp = parsed.params.creator_allocate;
+    let premarket_pubkey = premarket.blockchain_address.clone();
+
+    let mint_str = premarket.token_info.address.clone();
+    let pda_str = premarket.blockchain_address.clone();
+    let uri_str = uri.clone();
+
+    let pool2 = pool.clone();
+    let premarket2 = premarket.clone();
+
+    let update_method: UpdateFn = Box::new(move || {
+        let pool2 = pool2.clone();
+        let premarket = premarket2.clone();
+        let community = community.clone();
+        let premarket_pubkey = premarket_pubkey.clone();
+        let mint_str = mint_str.clone();
+        let pda_str = pda_str.clone();
+        let uri_str = uri_str.clone();
+
+        Box::pin(async move {
+            premarket_service::create_full_premarket_info(pool2.get_ref(), premarket, community)
+                .await
+                .map_err(|e| {
+                    eprintln!(
+                        "Failed to update DB: create_full_premarket_info (mint:{}, pda:{}, uri:{}): {}",
+                        mint_str, pda_str, uri_str, e
+                    );
+                });
+
+            if amount_initial_buy_sol_lamp != 0 {
+                let holder = HolderInfo {
+                    wallet_address: premarket_pubkey.clone(),
+                    amount_sol_lamp: amount_initial_buy_sol_lamp,
+                    join_timestamp: Utc::now().timestamp_millis(),
+                    id: None,
+                    icon_url: None,
+                    username: None,
+                    claimed: false,
+                };
+
+                premarket_service::add_holder(pool2.get_ref(), &premarket_pubkey, holder)
+                    .await
+                    .map_err(|e| {
+                        eprintln!(
+                            "Failed to update DB: initial holder (pda:{}, sol:{}, uri:{}): {}",
+                            premarket_pubkey, amount_initial_buy_sol_lamp, uri_str, e
+                        );
+                    });
+            }
+        })
+    });
+
+    Ok(TxFinalizePlan {
+        tx_type,
+        extra_signers: None,
+        update_method,
+    })
+}
+
+async fn handle_join_premarket(
+    pool: web::Data<sqlx::PgPool>,
+    ctx: &RequestContext,
+    common: CommonTxFields,
+) -> ApiResult<TxFinalizePlan> {
+    let tx_type: &'static str = "join_premarket";
+
+    let parsed = parse_join_premarket_tx_from_base64(&common.unsigned_tx, ctx.network)
+        .map_err(|e| {
+            eprintln!("parse join_premarket tx error: {e:?}");
+            ApiError::from_field_errors(vec![FieldError {
+                field: "unsigned_tx",
+                code: ApiErrorCode::ValidationError,
+                message: "invalid join_premarket transaction",
+            }])
+        })?;
+
+    if parsed.params.user != ctx.user.current_pubkey {
+        return Err(ApiError::wrong_user_pubkey_for_user());
+    }
+
+    validate_join_premarket(&parsed.params).map_err(ApiError::from_field_errors)?;
+
+    let holder = HolderInfo {
+        wallet_address: parsed.user.to_string(),
+        id: Some(ctx.user.internal_id),
+        icon_url: None,
+        username: None,
+        join_timestamp: Utc::now().timestamp_millis(),
+        amount_sol_lamp: parsed.params.amount,
+        claimed: false,
+    };
+
+    let pool2 = pool.clone();
+    let premarket_str = parsed.premarket.to_string();
+    let amount = parsed.params.amount;
+
+    let user_internal_id_str = ctx.user.internal_id.to_string();
+    let user_pubkey_str = ctx.user.current_pubkey.to_string();
+
+    let update_method: UpdateFn = Box::new(move || {
+        let pool2 = pool2.clone();
+        let premarket_str = premarket_str.clone();
+        let user_internal_id_str = user_internal_id_str.clone();
+        let user_pubkey_str = user_pubkey_str.clone();
+
+        Box::pin(async move {
+            premarket_service::add_holder(pool2.get_ref(), &premarket_str, holder)
+                .await
+                .map_err(|e| {
+                    eprintln!(
+                        "Failed to update DB: add_holder to premarket {} for {}({}), with {}: {}",
+                        premarket_str, user_internal_id_str, user_pubkey_str, amount, e
+                    );
+                });
+        })
+    });
+
+    Ok(TxFinalizePlan {
+        tx_type,
+        extra_signers: None,
+        update_method,
+    })
+}
+
+async fn handle_out_of_premarket(
+    pool: web::Data<sqlx::PgPool>,
+    ctx: &RequestContext,
+    common: CommonTxFields,
+) -> ApiResult<TxFinalizePlan> {
+    let tx_type: &'static str = "out_of_premarket";
+
+    let parsed = parse_out_premarket_tx_from_base64(&common.unsigned_tx, ctx.network)
+        .map_err(|e| {
+            eprintln!("parse out_of_premarket tx error: {e:?}");
+            ApiError::from_field_errors(vec![FieldError {
+                field: "unsigned_tx",
+                code: ApiErrorCode::ValidationError,
+                message: "invalid out_of_premarket transaction",
+            }])
+        })?;
+
+    if parsed.user != ctx.user.current_pubkey {
+        return Err(ApiError::wrong_user_pubkey_for_user());
+    }
+
+    let pool2 = pool.clone();
+    let premarket_str = parsed.premarket.to_string();
+    let user_pubkey_str = ctx.user.current_pubkey.to_string();
+    let user_internal_id_str = ctx.user.internal_id.to_string();
+
+    let update_method: UpdateFn = Box::new(move || {
+        let pool2 = pool2.clone();
+        let premarket_str = premarket_str.clone();
+        let user_pubkey_str = user_pubkey_str.clone();
+        let user_internal_id_str = user_internal_id_str.clone();
+
+        Box::pin(async move {
+            premarket_service::remove_holder(pool2.get_ref(), &premarket_str, &user_pubkey_str)
+                .await
+                .map_err(|e| {
+                    eprintln!(
+                        "Failed to update DB: remove_holder from premarket {} for user {} ({}): {}",
+                        premarket_str, user_internal_id_str, user_pubkey_str, e
+                    );
+                });
+        })
+    });
+
+    Ok(TxFinalizePlan {
+        tx_type,
+        extra_signers: None,
+        update_method,
+    })
+}
+
+async fn handle_extend_premarket(
+    pool: web::Data<sqlx::PgPool>,
+    ctx: &RequestContext,
+    old: OldTxFields,
+) -> ApiResult<TxFinalizePlan> {
+    let tx_type: &'static str = "extend_premarket";
+
+    let parsed = parse_extend_premarket_tx_from_base64(&old.common.unsigned_tx, ctx.network)
+        .map_err(|e| {
+            eprintln!("parse extend_premarket tx error: {e:?}");
+            ApiError::from_field_errors(vec![FieldError {
+                field: "unsigned_tx",
+                code: ApiErrorCode::ValidationError,
+                message: "invalid extend_premarket transaction",
+            }])
+        })?;
+
+    if parsed.user != ctx.user.current_pubkey {
+        return Err(ApiError::wrong_user_pubkey_for_user());
+    }
+
+    let premarket_str: String = parsed.premarket.to_string();
+    let premarket = premarket_service::get_full_premarket_info(
+        &pool,
+        &premarket_str,
+        PremarketLookupKeyType::BcAddress,
+    )
+    .await
+    .map_err(|e| {
+        eprintln!("get_full_premarket_info error: {e:?}");
+        ApiError::internal_build_tx_failed()
+    })?
+    .ok_or_else(|| ApiError::missing_premarket())?;
+
+    validate_extend_premarket(
+        premarket.main_info.is_extended,
+        premarket.main_info.state,
+        premarket.main_info.deadline_timestamp,
+        parsed.new_deadline,
+    )
+    .map_err(ApiError::from_field_errors)?;
+
+    let pool2 = pool.clone();
+    let premarket_pubkey = parsed.premarket.to_string();
+    let new_deadline = parsed.new_deadline;
+
+    let user_pubkey_str = ctx.user.current_pubkey.to_string();
+    let user_internal_id_str = ctx.user.internal_id.to_string();
+
+    let update_method: UpdateFn = Box::new(move || {
+        let pool2 = pool2.clone();
+        let premarket_pubkey = premarket_pubkey.clone();
+        let user_pubkey_str = user_pubkey_str.clone();
+        let user_internal_id_str = user_internal_id_str.clone();
+
+        Box::pin(async move {
+            premarket_service::update_premarket_deadline(pool2.get_ref(), &premarket_pubkey, new_deadline)
+                .await
+                .map_err(|e| {
+                    eprintln!(
+                        "Failed to update DB: update_deadline for premarket '{}' deadline: {} by user {} ({}): {}",
+                        premarket_pubkey, new_deadline, user_internal_id_str, user_pubkey_str, e
+                    );
+                });
+        })
+    });
+
+    Ok(TxFinalizePlan {
+        tx_type,
+        extra_signers: None,
+        update_method,
+    })
+}
+
+async fn handle_update_uri(
+    _pool: web::Data<sqlx::PgPool>,
+    ctx: &RequestContext,
+    old: OldTxFields,
+) -> ApiResult<TxFinalizePlan> {
+    let tx_type: &'static str = "update_uri";
+
+    let parsed = parse_update_uri_premarket_tx_from_base64(&old.common.unsigned_tx, ctx.network)
+        .map_err(|e| {
+            eprintln!("parse update_uri tx error: {e:?}");
+            ApiError::from_field_errors(vec![FieldError {
+                field: "unsigned_tx",
+                code: ApiErrorCode::ValidationError,
+                message: "invalid update_uri transaction",
+            }])
+        })?;
+
+    if parsed.user != ctx.user.current_pubkey {
+        return Err(ApiError::wrong_user_pubkey_for_user());
+    }
+
+    // TODO: should be changed asap
+    let update_method: UpdateFn = Box::new(move || Box::pin(async move {
+        eprintln!("PANIC!!!! no method to update DB info for tx_type update_uri");
+    }));
+
+    Ok(TxFinalizePlan {
+        tx_type,
+        extra_signers: None,
+        update_method,
+    })
+}
+
+async fn handle_claim_tokens(
+    pool: web::Data<sqlx::PgPool>,
+    ctx: &RequestContext,
+    old: OldTxFields,
+) -> ApiResult<TxFinalizePlan> {
+    let tx_type: &'static str = "claim_tokens";
+
+    let premarket_str: String = old.premarket.clone();
+    let premarket_pubkey =
+        Pubkey::from_str(&premarket_str).map_err(|_| ApiError::invalid_premarket_pubkey())?;
+
+    let pool2 = pool.clone();
+    let user_pubkey_str = ctx.user.current_pubkey.to_string();
+    let user_internal_id_str = ctx.user.internal_id.to_string();
+
+    let update_method: UpdateFn = Box::new(move || {
+        let pool2 = pool2.clone();
+        let premarket_str = premarket_str.clone();
+        let user_pubkey_str = user_pubkey_str.clone();
+        let user_internal_id_str = user_internal_id_str.clone();
+
+        Box::pin(async move {
+            premarket_service::user_claimed_token(pool2.get_ref(), &premarket_pubkey, &user_pubkey_str)
+                .await
+                .map_err(|e| {
+                    eprintln!(
+                        "Failed to update DB: claim_token PM {} for user {}({}): {}",
+                        premarket_str, user_internal_id_str, user_pubkey_str, e
+                    );
+                });
+        })
+    });
+
+    Ok(TxFinalizePlan {
+        tx_type,
+        extra_signers: None,
+        update_method,
+    })
+}
+
+async fn handle_finish_premarket(
+    pool: web::Data<sqlx::PgPool>,
+    ctx: &RequestContext,
+    old: OldTxFields,
+) -> ApiResult<TxFinalizePlan> {
+    let tx_type: &'static str = "finish_premarket";
+
+    let premarket_str: String = old.premarket.clone();
+    let premarket_pubkey =
+        Pubkey::from_str(&premarket_str).map_err(|_| ApiError::invalid_premarket_pubkey())?;
+
+    let full = premarket_service::get_full_premarket_info(
+        pool.get_ref(),
+        &premarket_str,
+        PremarketLookupKeyType::BcAddress,
+    )
+    .await
+    .map_err(|e| {
+        eprintln!("get_full_premarket_info error: {e:?}");
+        ApiError::internal_sign_tx_failed_goal()
+    })?
+    .ok_or_else(|| {
+        ApiError::from_field_errors(vec![FieldError {
+            field: "premarket",
+            code: ApiErrorCode::PremarketNotFound,
+            message: "premarket not found",
+        }])
+    })?;
+
+    validate_finish_premarket(&full).map_err(ApiError::from_field_errors)?;
+
+    let mint_kp = get_mint_kp(pool.get_ref(), premarket_pubkey).await.map_err(|e| {
+        eprintln!("mint_kp load error: {e:?}");
+        ApiError::internal_sign_tx_failed()
+    })?;
+
+    let extra_signers = Some(vec![mint_kp]);
+
+    let pool2 = pool.clone();
+    let user_pubkey_str = ctx.user.current_pubkey.to_string();
+    let user_internal_id_str = ctx.user.internal_id.to_string();
+
+    let update_method: UpdateFn = Box::new(move || {
+        let pool2 = pool2.clone();
+        let premarket_str = premarket_str.clone();
+        let user_pubkey_str = user_pubkey_str.clone();
+        let user_internal_id_str = user_internal_id_str.clone();
+
+        Box::pin(async move {
+            premarket_service::set_premarket_state(
+                pool2.get_ref(),
+                &premarket_str,
+                PremarketState::Finished,
+                Some(Utc::now().timestamp()),
+            )
+            .await
+            .map_err(|e| {
+                eprintln!(
+                    "Failed to update DB: finish_premarket '{}' by user {}({}): {}",
+                    premarket_str, user_internal_id_str, user_pubkey_str, e
+                );
+            });
+        })
+    });
+
+    Ok(TxFinalizePlan {
+        tx_type,
+        extra_signers,
+        update_method,
+    })
+}
+
+async fn handle_refund_premarket(
+    pool: web::Data<sqlx::PgPool>,
+    ctx: &RequestContext,
+    old: OldTxFields,
+) -> ApiResult<TxFinalizePlan> {
+    let tx_type: &'static str = "refund_premarket";
+
+    let premarket_str: String = old.premarket.clone();
+    let full = premarket_service::get_full_premarket_info(&pool, &premarket_str, PremarketLookupKeyType::BcAddress)
+        .await
+        .map_err(|e| { eprintln!("get_full_premarket_info error: {e:?}"); ApiError::internal_sign_tx_failed() })?
+        .ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
+            field: "premarket",
+            code: ApiErrorCode::PremarketNotFound,
+            message: "premarket not found",
+        }]))?;
+
+    validate_refund_premarket(&full.main_info).map_err(ApiError::from_field_errors)?;
+
+    let pool2 = pool.clone();
+    let user_pubkey_str = ctx.user.current_pubkey.to_string();
+    let user_internal_id_str = ctx.user.internal_id.to_string();
+
+    let update_method: UpdateFn = Box::new(move || {
+        let pool2 = pool2.clone();
+        let premarket_str = premarket_str.clone();
+        let user_pubkey_str = user_pubkey_str.clone();
+        let user_internal_id_str = user_internal_id_str.clone();
+
+        Box::pin(async move {
+            premarket_service::set_premarket_state(
+                pool2.get_ref(),
+                &premarket_str,
+                PremarketState::Canceled,
+                Some(Utc::now().timestamp()),
+            )
+            .await
+            .map_err(|e| {
+                eprintln!(
+                    "Failed to update DB: refund_premarket '{}' by user {}({}): {}",
+                    premarket_str, user_internal_id_str, user_pubkey_str, e
+                );
+            });
+        })
+    });
+
+    Ok(TxFinalizePlan {
+        tx_type,
+        extra_signers: None,
+        update_method,
+    })
+}
+
+async fn handle_withdraw_vesting(
+    _pool: web::Data<sqlx::PgPool>,
+    ctx: &RequestContext,
+    common: CommonTxFields,
+) -> ApiResult<TxFinalizePlan> {
+    let tx_type: &'static str = "withdraw_vesting";
+
+    let parsed = parse_withdraw_vesting_tx_from_base64(&common.unsigned_tx, ctx.network)
+        .map_err(|e| {
+            eprintln!("parse withdraw_vesting tx error: {e:?}");
+            ApiError::from_field_errors(vec![FieldError {
+                field: "unsigned_tx",
+                code: ApiErrorCode::ValidationError,
+                message: "invalid withdraw_vesting transaction",
+            }])
+        })?;
+
+    if parsed.user != ctx.user.current_pubkey {
+        return Err(ApiError::wrong_user_pubkey_for_user());
+    }
+
+    validate_withdraw_vesting().map_err(ApiError::from_field_errors)?;
+
+    Ok(TxFinalizePlan {
+        tx_type,
+        extra_signers: None,
+        update_method: Box::new(move || Box::pin(async move {})),
+    })
+}
+
 
 pub async fn create_premarket_tx(
     req: HttpRequest,
