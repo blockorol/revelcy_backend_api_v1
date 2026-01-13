@@ -1,6 +1,16 @@
 use serde::{Deserialize, Serialize};
 
+
 // ======= HTTP DTO User =======
+#[derive(Debug, Deserialize)]
+pub struct SetInviteCodeRequestDto {
+    pub invite_code: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SetInviteCodeResponseDto {
+    pub jwt: String,
+}
 
 #[derive(Deserialize)]
 pub struct AddUserNameRequestDto {

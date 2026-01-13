@@ -1,5 +1,5 @@
 use crate::storage::models::UserDbModel;
-use crate::models::user::User;
+use crate::models::user::{ApplyInviteCodeResult, User};
 use sqlx::{PgPool, Row, Result};
 use uuid::Uuid;
 
@@ -78,6 +78,45 @@ pub async fn create_user_with_wallet(pool: &PgPool, wallet_address: &str) -> Res
         avatar_url: user_db.avatar_url,
         wallets: vec![wallet_address.to_string()],
     })
+}
+
+pub async fn apply_invite_code_once(
+    pool: &PgPool,
+    user_id: Uuid,
+    invite_code: &str,
+) -> Result<ApplyInviteCodeResult> {
+    let invite_code_id: Option<Uuid> = sqlx::query_scalar(
+        r#"
+        SELECT id
+        FROM invite_codes
+        WHERE code = $1 AND is_active = TRUE
+        "#
+    )
+    .bind(invite_code)
+    .fetch_optional(pool)
+    .await?;
+
+    let Some(invite_code_id) = invite_code_id else {
+        return Ok(ApplyInviteCodeResult::InviteCodeNotFound);
+    };
+
+    let res = sqlx::query(
+        r#"
+        INSERT INTO user_invites (user_id, invite_code_id)
+        VALUES ($1, $2)
+        ON CONFLICT (user_id) DO NOTHING
+        "#
+    )
+    .bind(user_id)
+    .bind(invite_code_id)
+    .execute(pool)
+    .await?;
+
+    if res.rows_affected() == 0 {
+        return Ok(ApplyInviteCodeResult::AlreadyApplied);
+    }
+
+    Ok(ApplyInviteCodeResult::Applied)
 }
 
 pub async fn update_username(pool: &PgPool, user_id: Uuid, new_username: &str) -> Result<()> {

@@ -1,12 +1,8 @@
-use anyhow::{Context, anyhow, Result};
+use anyhow::{anyhow, Result};
 use std::str::FromStr;
 use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
-use solana_sdk::{
-    pubkey::Pubkey,
-    transaction::Transaction
-};
-use std::{time::Duration, path::Path};
-use solana_transaction_status::UiTransactionEncoding;
+use solana_sdk::pubkey::Pubkey;
+use std::time::Duration;
 
 use crate::models::premarket::{
     GetPremarketDataParams, 

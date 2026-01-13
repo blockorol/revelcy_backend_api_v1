@@ -3,15 +3,14 @@ use actix_multipart::Multipart;
 use sqlx::PgPool;
 use crate::api::user::{
     AddAvatarResponseDto,
-    AddUserNameRequestDto,
-    AddUserNameResponseDto,
-    UserSetInfoRequestDTO,
-    UserSetInfoResponseDTO
+    AddUserNameRequestDto, AddUserNameResponseDto,
+    UserSetInfoRequestDTO, UserSetInfoResponseDTO,
+    SetInviteCodeRequestDto, SetInviteCodeResponseDto,
 };
-use crate::api::errors::{ApiError, ApiResult};
+use crate::api::errors::{ApiError, ApiErrorCode, FieldError, ApiResult};
 use uuid::Uuid;
 
-use crate::models::user::{ScreenInfo, UserFingerprintEventFrontendData, UserFingerprintEventBackendData};
+use crate::models::user::{ApplyInviteCodeResult, ScreenInfo, UserFingerprintEventFrontendData, UserFingerprintEventBackendData};
 use crate::services::jwt_service;
 use crate::services::user_service;
 use futures_util::{StreamExt, TryStreamExt};
@@ -26,9 +25,11 @@ use crate::services::user_info_service;
 pub fn user_scope() -> Scope {
     web::scope("/user")
         .route("/set_additional_info", web::post().to(user_set_info))
+        .route("/set_invite_code", web::post().to(set_invite_code))
         .route("/update_username", web::post().to(update_username))
         .route("/update_avatar", web::post().to(update_avatar))
 }
+
 pub async fn user_set_info(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -115,6 +116,48 @@ pub async fn user_set_info(
     })?;
 
     Ok(HttpResponse::Ok().json(UserSetInfoResponseDTO { ok: true }))
+}
+
+pub async fn set_invite_code(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    payload: web::Json<SetInviteCodeRequestDto>,
+) -> ApiResult<HttpResponse> {
+    let user_info = extract_user_info_from_request(&req)
+        .map_err(|_| ApiError::auth_invalid_token())?;
+
+    let invite_code = payload.invite_code.trim();
+    if invite_code.is_empty() {
+        return Err(ApiError::from_field_errors(vec![FieldError{
+            field: "invite_code",
+            code: ApiErrorCode::ValidationError,
+            message: "invite_code is empty",
+        }]));
+    }
+
+    let result = user_service::set_invite_code_once(pool.clone(), user_info.user_id, invite_code)
+        .await
+        .map_err(|e| {
+            eprintln!("set_invite_code db error: {e:?}");
+            ApiError::internal_update_db_error()
+        })?;
+
+    match result {
+        ApplyInviteCodeResult::Applied => {
+            let token = jwt_service::create_jwt_with_user(
+                user_info.user_id,
+                user_info.current_wallet.as_deref().unwrap_or_default(),
+                Some(user_info.username.clone()),
+                user_info.avatar_url.clone(),
+                &user_info.nonce,
+            );
+            Ok(HttpResponse::Ok().json(SetInviteCodeResponseDto { jwt: token }))
+        }
+
+        ApplyInviteCodeResult::InviteCodeNotFound => Err(ApiError::invite_code_not_found()),
+
+        ApplyInviteCodeResult::AlreadyApplied => Err(ApiError::invite_code_already_applied()),
+    }
 }
 
 
