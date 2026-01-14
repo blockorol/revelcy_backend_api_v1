@@ -6,9 +6,11 @@ use chrono::Utc;
 use actix_web::{web, Error, HttpResponse, HttpRequest, HttpMessage};
 use actix_web::error::ErrorInternalServerError;
 use crate::api::errors::{ApiErrorCode, ApiError, FieldError, ApiResult};
+use crate::constants::{VIRTUAL_SUPPLY_RATIO, VIRTUAL_TOKEN_RATIO};
 
 
 use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signer::Signer;
 use crate::server::premarket_validation::{
     validate_create_premarket, validate_extend_premarket, validate_finish_premarket, validate_join_premarket, validate_refund_premarket, validate_update_uri_premarket, validate_withdraw_vesting
 };
@@ -38,6 +40,7 @@ use crate::models::premarket::{
 use crate::services::{
     jwt_service, premarket_service, ipfs_service
 };
+use crate::storage::premarket_repo;
 use crate::middleware::jwt::JwtMiddleware;
 use crate::services::background_finaliser::{
     background_finalize_action, 
@@ -566,26 +569,152 @@ pub async fn sign_and_send_transaction(
 
         let extra = vec![mint_kp];
         extra_signers =  Some(extra);
+        
         let pool2 = pool.clone();
+        let vesting_ts_start = timestamp_start;
+        let vesting_ts_end = timestamp_end;
+        let vesting_init_unlock = init_unlock;
+        let creator_info = full.main_info.creator.clone();
+        let mint_address = full.main_info.token_info.address.clone();
+        
         update_method = Box::new(move || { 
             let pool2 = pool2.clone();
             let premarket_str = premarket_str.clone();
+            let mint_address = mint_address.clone();
+            let creator_info = creator_info.clone();
+            
             Box::pin(async move {
-            premarket_service::set_premarket_state(
-                pool2.get_ref(),
-                &premarket_str,
-                PremarketState::Finished,
-                Some(Utc::now().timestamp()), // to do: change me to time from tx
-            ).await.map_err(|e| {
-                eprintln!(
-                    "Failed to update DB: finish_premarket '{}' state to 'Finished' by user {}({}): {}",
-                    premarket_str,
-                    ctx.user.internal_id.to_string(),
-                    ctx.user.current_pubkey.to_string(),
-                    e,
-                );
-            });
-        })});
+                // 1) Update premarket state to Finished
+                if let Err(e) = premarket_service::set_premarket_state(
+                    pool2.get_ref(),
+                    &premarket_str,
+                    PremarketState::Finished,
+                    Some(Utc::now().timestamp()), // TODO: change me to time from tx
+                ).await {
+                    eprintln!(
+                        "Failed to update DB: finish_premarket '{}' state to 'Finished' by user {}({}): {}",
+                        premarket_str,
+                        ctx.user.internal_id.to_string(),
+                        ctx.user.current_pubkey.to_string(),
+                        e,
+                    );
+                    return;
+                }
+                
+                // 2) Create vesting_info entry
+                // TODO: Get actual vesting_address PDA from the transaction or derive it
+                let vesting_address = format!("VESTING_{}", mint_address); // MOCK: Replace with actual PDA
+                
+                let vesting_id = match sqlx::query_scalar::<_, Uuid>(
+                    r#"
+                    INSERT INTO vesting_info (
+                        creator_id,
+                        creator_address,
+                        vesting_address,
+                        mint_address,
+                        timestamp_start,
+                        timestamp_end,
+                        init_unlock
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    RETURNING id
+                    "#
+                )
+                .bind(creator_info.id) // May be None if creator not in our system
+                .bind(&creator_info.blockchain_address)
+                .bind(&vesting_address)
+                .bind(&mint_address)
+                .bind(vesting_ts_start)
+                .bind(vesting_ts_end)
+                .bind(vesting_init_unlock as i64)
+                .fetch_one(pool2.get_ref())
+                .await {
+                    Ok(id) => id,
+                    Err(e) => {
+                        eprintln!(
+                            "Failed to create vesting_info for premarket '{}': {}",
+                            premarket_str, e
+                        );
+                        return;
+                    }
+                };
+                
+                eprintln!("✅ Created vesting_info with id: {}", vesting_id);
+                
+                // 3) Get all holders from the premarket
+                let holder_stats = match premarket_repo::get_holders_by_premarket_address(
+                    pool2.get_ref(),
+                    &premarket_str,
+                    9999 // Large limit to get all holders
+                ).await {
+                    Ok(stats) => stats,
+                    Err(e) => {
+                        eprintln!(
+                            "Failed to get holders for premarket '{}': {}",
+                            premarket_str, e
+                        );
+                        return;
+                    }
+                };
+                
+                // 4) Create vesting_holders entries for each holder using bonding curve
+                
+                // Bonding curve calculation function (matches on-chain implementation)
+                let tokens_out_from_sol = |sol_in: u64, virtual_sol_reserves: u64, virtual_token_reserves: u64| -> u64 {
+                    // Do multiplication in u128 to avoid overflow
+                    let numerator: u128 = (virtual_token_reserves as u128) * (sol_in as u128);
+                    let denominator: u128 = (virtual_sol_reserves as u128) + (sol_in as u128);
+                    // Floor division gives the integer token amount
+                    (numerator / denominator) as u64
+                };
+                
+                // Initialize virtual reserves (constants defined in src/constants.rs)
+                let mut vsr = VIRTUAL_SUPPLY_RATIO;
+                let mut vtr = VIRTUAL_TOKEN_RATIO;
+                
+                for holder in &holder_stats.holders {
+                    // Convert from i64 (database) to u64 (chain calculation)
+                    let amount_lamport = holder.amount_lamport as u64;
+                    
+                    // Apply 1.5% pumpfun fee (matches on-chain: lamports * 150 / 10000)
+                    let amount_after_pumpfun_fee = amount_lamport 
+                        - (amount_lamport * 150 / 10000);
+                    
+                    // Calculate tokens using bonding curve formula
+                    let tokens_out = tokens_out_from_sol(amount_after_pumpfun_fee, vsr, vtr);
+                    
+                    // Update virtual reserves (matches on-chain)
+                    vsr = vsr.saturating_add(amount_lamport);
+                    vtr = vtr.saturating_sub(tokens_out);
+                    
+                    if let Err(e) = sqlx::query(
+                        r#"
+                        INSERT INTO vesting_holders (
+                            vesting_info_id,
+                            holder_id,
+                            holder_wallet,
+                            tokens_total,
+                            tokens_claimed
+                        ) VALUES ($1, $2, $3, $4, $5)
+                        "#
+                    )
+                    .bind(vesting_id)
+                    .bind(holder.holder_id) // May be None if holder not in our system
+                    .bind(&holder.holder_wallet)
+                    .bind(tokens_out as i64)
+                    .bind(0i64) // tokens_claimed starts at 0
+                    .execute(pool2.get_ref())
+                    .await {
+                        eprintln!(
+                            "Failed to create vesting_holder for wallet '{}' in premarket '{}': {}",
+                            holder.holder_wallet, premarket_str, e
+                        );
+                    }
+                }
+                
+                eprintln!("✅ Created {} vesting_holders entries for premarket '{}'", 
+                    holder_stats.holders.len(), premarket_str);
+            })
+        });
     }
 
     // tx/kill
@@ -654,12 +783,69 @@ pub async fn sign_and_send_transaction(
         // Validate withdraw_vesting business rules
         validate_withdraw_vesting().map_err(ApiError::from_field_errors)?;
 
-        // No database update needed for withdraw_vesting
-        // Vesting state is stored on-chain
+        let pool2 = pool.clone();
+        let user_wallet = ctx.user.current_pubkey.to_string();
+        let mint_address = parsed.token_mint.to_string();
+        
         update_method = Box::new(move || {
+            let pool2 = pool2.clone();
+            let user_wallet = user_wallet.clone();
+            let mint_address = mint_address.clone();
+            
             Box::pin(async move {
-                // No-op: withdraw_vesting doesn't require database updates
-                // All vesting data is managed on-chain
+                // TODO: Query on-chain vesting account to get actual tokens_claimed amount
+                // For now, we just log the withdrawal attempt
+                // The actual tokens_claimed should be fetched from the VestingData account on-chain
+                
+                // Try to get vesting_info_id for this mint
+                let vesting_info_id_result = sqlx::query_scalar::<_, Uuid>(
+                    "SELECT id FROM vesting_info WHERE mint_address = $1"
+                )
+                .bind(&mint_address)
+                .fetch_optional(pool2.get_ref())
+                .await;
+                
+                let vesting_info_id = match vesting_info_id_result {
+                    Ok(Some(id)) => id,
+                    Ok(None) => {
+                        eprintln!(
+                            "No vesting_info found for mint '{}' during withdraw_vesting",
+                            mint_address
+                        );
+                        return;
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "Failed to query vesting_info for mint '{}': {}",
+                            mint_address, e
+                        );
+                        return;
+                    }
+                };
+                
+                // Update the vesting_holders updated_at timestamp to track activity
+                // TODO: Update tokens_claimed with actual amount from on-chain VestingData
+                if let Err(e) = sqlx::query(
+                    r#"
+                    UPDATE vesting_holders 
+                    SET updated_at = now()
+                    WHERE vesting_info_id = $1 AND holder_wallet = $2
+                    "#
+                )
+                .bind(vesting_info_id)
+                .bind(&user_wallet)
+                .execute(pool2.get_ref())
+                .await {
+                    eprintln!(
+                        "Failed to update vesting_holders for wallet '{}' in vesting '{}': {}",
+                        user_wallet, vesting_info_id, e
+                    );
+                } else {
+                    eprintln!(
+                        "✅ Updated vesting_holders timestamp for wallet '{}' withdrawing from mint '{}'",
+                        user_wallet, mint_address
+                    );
+                }
             })
         });
     }
