@@ -7,10 +7,28 @@ const MAX_JOIN_SOL_LAMPORTS: u64 = 2 * solana_sdk::native_token::LAMPORTS_PER_SO
 
 
 pub fn validate_create_premarket(
+    current_pubkey: &str,
     params: &BuildPremarketTxParams,
+    premarket: &PremarketInfoServiceModel
 ) -> Result<(), Vec<FieldError>> {
     let mut errors = Vec::new();
     let now = Utc::now().timestamp();
+
+    if current_pubkey != premarket.creator.blockchain_address {
+        errors.push(FieldError {
+            field: "creator|current_pubkey",
+            code: ApiErrorCode::PremarketDeadlineTooEarly,
+            message: "creator and current_pubkey should be the same",
+        });
+    }
+
+    if premarket.state != PremarketState::Concept {
+        errors.push(FieldError {
+            field: "state",
+            code: ApiErrorCode::PremarketDeadlineTooEarly,
+            message: "state should be Concept",
+        });
+    }
 
     // deadline
     if params.deadline < now + 60 * 60 - 1 {
@@ -48,6 +66,57 @@ pub fn validate_create_premarket(
 
     // creator allocate
     if params.creator_allocate > params.goal {
+        errors.push(FieldError {
+            field: "creator_allocate_lamp",
+            code: ApiErrorCode::PremarketCreatorAllocateGreaterThanGoal,
+            message: "creator_allocate_lamp must be <= goal_sol_lamp",
+        });
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+
+pub fn validate_create_premarket_base(
+    deadline: i64,
+    goal: u64,
+    creator_allocate: u64,
+) -> Result<(), Vec<FieldError>> {
+    let mut errors = Vec::new();
+    let now = Utc::now().timestamp();
+
+    // deadline
+    if deadline < now + 60 * 60 - 1 {
+        errors.push(FieldError {
+            field: "deadline",
+            code: ApiErrorCode::PremarketDeadlineTooEarly,
+            message: "deadline must be at least +1h from now",
+        });
+    }
+
+    if deadline > now + 60 * 60 * 24 * 31 {
+        errors.push(FieldError {
+            field: "deadline",
+            code: ApiErrorCode::PremarketDeadlineTooLate,
+            message: "deadline must be less than 1 month",
+        });
+    }
+
+    // goal / max
+    if goal == 0 {
+        errors.push(FieldError {
+            field: "goal",
+            code: ApiErrorCode::PremarketGoalOrMaxZero,
+            message: "goal must be > 0",
+        });
+    }
+
+    // creator allocate
+    if creator_allocate > goal {
         errors.push(FieldError {
             field: "creator_allocate_lamp",
             code: ApiErrorCode::PremarketCreatorAllocateGreaterThanGoal,

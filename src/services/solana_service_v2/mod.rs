@@ -27,6 +27,7 @@ pub use solana_methods::{
 
 // tx_* methods:
 pub use tx_create_premarket::{
+    generate_premarket_pda,
     build_create_premarket_tx_unsigned,
     parse_create_premarket_tx_from_base64,
     ParsedCreatePremarketTx,

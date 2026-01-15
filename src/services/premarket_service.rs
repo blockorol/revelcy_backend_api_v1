@@ -1,12 +1,9 @@
 use crate::models::premarket::{
-    PremarketLookupKeyType,
-    CommunityInfoServiceModel, CommunityLink, FullPremarketInfo, HolderInfo,
-    LinkType, PremarketGoal,
-    PremarketInfoServiceModel, PremarketListResult, PremarketOnchainData, PremarketOnchainUser,
-    PremarketState, TokenDynamicInfo, TokenInfo, TokenLinks, TxConfirmationStatusDTO,
-    UserInfoShort,
+    CommunityInfoServiceModel, CommunityLink, CreatePremarketConceptModel, FullPremarketInfo, HolderInfo, LinkType, PremarketGoal, PremarketInfoServiceModel, PremarketListResult, PremarketLookupKeyType, PremarketOnchainData, PremarketOnchainUser, PremarketState, SolanaNetwork, TokenDynamicInfo, TokenInfo, TokenLinks, TxConfirmationStatusDTO, UserInfoShort
 };
 use crate::models::user::UserContextData;
+use crate::services::solana_service_v2::generate_premarket_pda;
+use crate::storage::signing_keys::{acquire_signing_key, update_premarket_pubkey};
 
 use crate::storage::models::{
     CommunityInfoDbModel, CommunityLinkDbModel, HolderDbModel, PremarketInfoDbModel
@@ -15,6 +12,7 @@ use crate::storage::premarket_repo;
 use actix_web::error::ErrorBadRequest;
 use actix_web::error::ErrorInternalServerError;
 use chrono::Utc;
+use solana_sdk::signature::Keypair;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -106,6 +104,26 @@ pub async fn get_full_premarket_info(
     }
 }
 
+pub async fn get_user_concept(
+    pool: &PgPool,
+    creator_id: Uuid,
+) -> Result<Option<PremarketInfoServiceModel>, actix_web::Error> {
+    let data = premarket_repo::get_concept_id_by_creator(pool, bc_address).await
+    .map_err(ErrorInternalServerError)?;
+
+    Ok(data)
+}
+
+pub async fn get_main_premarket_info(
+    pool: &PgPool,
+    bc_address: &str,
+) -> Result<Option<PremarketInfoServiceModel>, actix_web::Error> {
+    let data: Option<PremarketInfoServiceModel> = premarket_repo::get_main_premarket_info_by_bc_address(pool, bc_address).await
+    .map_err(ErrorInternalServerError)?;
+
+    Ok(data)
+}
+
 pub async fn get_list(
     pool: &PgPool,
     cursor: i64,
@@ -169,13 +187,79 @@ pub async fn get_list(
     }))
 }
 
+pub async fn create_concept(
+    pool: &PgPool,
+    network: SolanaNetwork,
+    concept_data: &CreatePremarketConceptModel,
+) -> Result<(uuid::Uuid), actix_web::Error> {
+    let concept = get_user_concept(&pool, ctx.user.internal_id).await.map_err(Err("failed to request concept"))?;
+
+    let pm_uuid = uuid::Uuid::new_v4();
+    let resp = acquire_signing_key(pool, &pm_uuid.to_string()).await.map_err(Err("syka blya"))?;
+    let keypair = match resp{
+        Some(k) => k,
+        None() => Err("No one keypair!")?
+    };
+
+    
+    let pda = generate_premarket_pda(network, &keypair.priv_key).await.map_err(Err("syka blya 2"))?;
+    update_premarket_pubkey(&pool, &pda.to_string(),&pm_uuid).await.map_err(Err("syka blya 3"))?;
+
+    // let premarket_id, blockchain_id = match concept {
+    //     Some(concept) => (concept.id, concept.blockchain_address ),
+    //     None() => (None, )
+    // }
+
+    let premarket = PremarketInfoServiceModel{
+        id: Some(pm_uuid),
+        blockchain_address: pda.to_string(),
+        goal: PremarketGoal{
+            solana_lamp: dto.token_info.goal_sol_lamp.try_into().unwrap(),
+        },
+        deadline_timestamp: dto.token_info.deadline,
+        created_timestamp: Utc::now().timestamp(),
+        finished_timestamp: None,
+        is_extended: false,
+        is_hided: false,
+        state: PremarketState::Concept,
+        short_url_name: None,
+        creator: UserInfoShort{
+            id: Some(ctx.user.internal_id),
+            blockchain_address:ctx.user.current_pubkey.to_string(),
+        },
+        token_info: TokenInfo {
+            address: keypair.pub_key,
+            name: dto.token_info.name,
+            description: dto.token_info.description,
+            symbol: dto.token_info.symbol,
+            image_url: Some(dto.token_info.image_url),
+            data_uri: "".to_string(),
+            links: TokenLinks {
+                telegram: dto.token_info.links.telegram,
+                twitter: dto.token_info.links.twitter,
+                web_site: dto.token_info.links.web_site,
+            }}
+    };
+    let community = CommunityInfoServiceModel{
+        description: "".to_string(),
+        token_banner_url: None,
+        links: None,
+    };
+    premarket_service::create_full_premarket_info(&pool, premarket, community);
+}
+
 pub async fn create_full_premarket_info(
     pool: &PgPool,
     premarket: PremarketInfoServiceModel,
     community: CommunityInfoServiceModel,
-) -> Result<(), actix_web::Error> {
+) -> Result<(uuid::Uuid), actix_web::Error> {
+    let pm_id = match premarket.id {
+        Some(id) => id,
+        None() => uuid::Uuid::new_v4()
+    };
+
     let premarket_db: PremarketInfoDbModel = PremarketInfoDbModel {
-        id: uuid::Uuid::new_v4(),
+        id: pm_id,
         bc_address: premarket.blockchain_address,
         short_url_name: premarket.short_url_name,
         creator_address: premarket.creator.blockchain_address,
@@ -223,7 +307,9 @@ pub async fn create_full_premarket_info(
 
     premarket_repo::create_premarket_and_community(pool, &premarket_db, &community_db, link_db)
         .await
-        .map_err(ErrorInternalServerError)
+        .map_err(ErrorInternalServerError)?;
+    
+    return pm_id;
 }
 
 pub async fn update_availability_info(
@@ -325,16 +411,17 @@ pub async fn set_premarket_state(
     pool: &PgPool,
     premarket_pubkey: &str,
     new_state: PremarketState,
-    premarket_finished: Option<i64>,
+    update_time: i64,
 ) -> Result<(), actix_web::Error> {
-    let affected = premarket_repo::update_premarket_state(
-        pool,
-        premarket_pubkey,
-        &new_state.to_string(),
-        premarket_finished,
-    )
-    .await
-    .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    let affected = match new_state {
+        PremarketState::Canceled | PremarketState::Finished => {
+            premarket_repo::update_premarket_state_to_finish(pool, premarket_pubkey, state_str, update_time).await.map_err(actix_web::error::ErrorInternalServerError)?
+        }
+        PremarketState::Concept | PremarketState::Premarket => {
+            premarket_repo::update_premarket_state_to_start(pool, premarket_pubkey, state_str, update_time).await.map_err(actix_web::error::ErrorInternalServerError)?
+        }
+    };
 
     if affected == 0 {
         return Err(actix_web::error::ErrorNotFound(format!(
@@ -669,6 +756,26 @@ pub async fn update_premarket_links(
     }
 
     Ok(())
+}
+
+pub async fn update_premarket_uri(
+    pool: &PgPool,
+    premarket_id: &Uuid, 
+    new_uri: &String,
+) {
+    let affected = premarket_repo::update_premarket_uri(pool, premarket_id, new_uri)
+        .await
+        .map_err(ErrorInternalServerError)?;
+
+    if affected == 0 {
+        return Err(actix_web::error::ErrorNotFound(format!(
+            "premarket '{}' not found",
+            premarket_pubkey
+        )));
+    }
+
+    Ok(())
+
 }
 
 pub async fn user_claimed_token(

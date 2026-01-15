@@ -159,6 +159,7 @@ impl From<LinkType> for LinkTypeDTO {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TokenState {
+    Concept,
     Premarket,
     Canceled,
     Finished,
@@ -295,18 +296,18 @@ pub enum Network {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CommonTxFields {
-    pub network: Network,
+    pub network: Network, // todo: remove me and set from env
     pub unsigned_tx: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "tx_type", rename_all = "snake_case")]
 pub enum TxToSignRequest {
-    CreatePremarket(CreatePremarketReq),
-
+    CreatePremarket(CommonTxFields),
     JoinPremarket(CommonTxFields),
     OutOfPremarket(CommonTxFields),
 
+    // todo: OldTxFields - fix me to CommonTxFields
     FinishPremarket(OldTxFields),
     ExtendPremarket(OldTxFields),
     UpdateUri(OldTxFields),
@@ -314,13 +315,6 @@ pub enum TxToSignRequest {
     RefundPremarket(OldTxFields),
 
     WithdrawVesting(CommonTxFields),
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct CreatePremarketReq {
-    #[serde(flatten)]
-    pub common: CommonTxFields,
-    pub about_community: CommunityInfoDTO,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -332,7 +326,7 @@ pub struct OldTxFields {
 impl TxToSignRequest {
     pub fn common(&self) -> &CommonTxFields {
         match self {
-            TxToSignRequest::CreatePremarket(x) => &x.common,
+            TxToSignRequest::CreatePremarket(x) => x,
             TxToSignRequest::JoinPremarket(x) => x,
             TxToSignRequest::OutOfPremarket(x) => x,
             TxToSignRequest::FinishPremarket(x) => &x.common,
@@ -367,17 +361,40 @@ pub struct SentTxResponse  {
 }
 
 #[derive(Deserialize)]
-pub struct CreatePremarketTxRequest {
-    pub network: String,         // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,     // base58
+pub struct CreatePremarketConceptTokenInfo{
     pub name: String,
+    pub description: String,
     pub symbol: String,
-    pub uri: String,
+    pub image_url: String,
+    pub links: TokenLinksDTO,
     pub deadline: i64,           // unix sec
     #[serde(with = "string_as_number")]
     pub goal_sol_lamp: u64,
     #[serde(with = "string_as_number")]
     pub max_sol_lamp: u64,
+    #[serde(with = "string_as_number")]
+    pub creator_allocate_lamp: u64,
+}
+
+#[derive(Deserialize)]
+pub struct CreatePremarketConceptRequest {
+    pub network: String,         // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,     // base58
+    pub token_info: CreatePremarketConceptTokenInfo,
+}
+
+#[derive(Serialize)]
+pub struct CreatePremarketConceptResponse {
+    pub premarket_account_pda: String, // base58
+    pub premarket_id: Uuid, 
+}
+
+#[derive(Deserialize)]
+pub struct CreatePremarketTxRequest {
+    pub network: String,         // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,     // base58
+    pub uri: String,
+    pub premarket_pubkey: String,
     #[serde(with = "string_as_number")]
     pub creator_allocate_lamp: u64,
 }

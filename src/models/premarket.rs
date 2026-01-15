@@ -98,6 +98,18 @@ pub enum SolanaNetwork {
     MainnetBeta,
 }
 
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreatePremarketConceptModel {
+    pub short_url_name: Option<String>,
+    pub creator: UserInfoShort,
+    pub token_info: TokenInfo,
+    pub goal: PremarketGoal,
+    pub deadline_timestamp: i64,
+    pub created_timestamp: i64,
+    pub is_hided: bool,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PremarketInfoServiceModel {
     pub id: Option<Uuid>, // Option to create method
@@ -124,6 +136,7 @@ pub struct UserInfoShort {
 #[derive(Serialize, Deserialize, Copy, Debug, Clone,PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum PremarketState {
+    Concept,
     Premarket,
     Canceled,
     Finished,
@@ -131,6 +144,7 @@ pub enum PremarketState {
 impl ToString for PremarketState {
     fn to_string(&self) -> String {
         match self {
+            PremarketState::Concept => "concept",
             PremarketState::Premarket => "premarket",
             PremarketState::Canceled => "canceled",
             PremarketState::Finished => "finished",

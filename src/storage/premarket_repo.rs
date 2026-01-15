@@ -1,7 +1,29 @@
 use crate::storage::models::{HolderDbModel, HolderStats, PremarketInfoDbModel, CommunityInfoDbModel, CommunityLinkDbModel};
+use crate::models::premarket::PremarketInfoServiceModel;
 use sqlx::{PgPool, Result};
 use uuid::Uuid;
 use chrono::Utc;
+
+pub async fn get_user_concept(
+    pool: &PgPool,
+    creator_id: &Uuid
+) -> Result<Option<Uuid>> {
+    let premarket = sqlx::query_as::<_, PremarketInfoDbModel>(
+        r#"
+        SELECT * FROM premarket_info WHERE creator_id = $1 AND state = 'concept' LIMIT 1;
+        "#
+    )
+    .bind(creator_id)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(pm) = premarket {
+        Ok(Some(pm))
+    } else {
+        Ok(None)
+    }
+}
+
 
 pub async fn get_premarket_id_by_bc_address(
     pool: &PgPool,
@@ -9,7 +31,7 @@ pub async fn get_premarket_id_by_bc_address(
 ) -> Result<Option<Uuid>> {
     let premarket = sqlx::query_as::<_, PremarketInfoDbModel>(
         r#"
-        SELECT * FROM premarket_info WHERE bc_address = $1
+        SELECT id FROM premarket_info WHERE bc_address = $1 LIMIT 1;
         "#
     )
     .bind(bc_address)
@@ -123,6 +145,60 @@ pub async fn get_premarket_info_by_bc_address(
     }
 }
 
+
+// right method -> because service works with service model. and shouldn't know about DB model
+pub async fn get_main_premarket_info_by_bc_address(
+    pool: &PgPool,
+    bc_address: &str,
+) -> Result<Option<PremarketInfoServiceModel>> {
+    let pm_db = sqlx::query_as::<_, PremarketInfoDbModel>(
+        r#"SELECT * FROM premarket_info WHERE bc_address = $1"#
+    )
+    .bind(bc_address)
+    .fetch_optional(pool)
+    .await?;
+
+    let pm_db = match pm_db {
+        Some(v) => v,
+        None => return Ok(None),
+    };
+
+    let premarket_info = PremarketInfoServiceModel {
+        id: Some(pm_db.id),
+        blockchain_address: pm_db.bc_address,
+        short_url_name: pm_db.short_url_name,
+        creator: UserInfoShort {
+            id: Some(pm_db.creator_id),
+            blockchain_address: pm_db.creator_address,
+        },
+        token_info: TokenInfo {
+            address: pm_db.mint_address,
+            name: pm_db.name,
+            description: pm_db.description,
+            symbol: pm_db.symbol,
+            image_url: pm_db.image_url,
+            data_uri: pm_db.data_uri,
+            links: TokenLinks {
+                telegram: pm_db.telegram,
+                twitter: pm_db.twitter,
+                web_site: pm_db.web_site,
+            },
+        },
+        state: pm_db.state.into(),
+        goal: PremarketGoal {
+            solana_lamp: pm_db.premarket_goal_sol_lamp,
+        },
+        is_extended: pm_db.is_extended,
+        is_hided: pm_db.is_hided,
+        deadline_timestamp: pm_db.premarket_deadline,
+        created_timestamp: pm_db.premarket_created,
+        finished_timestamp: pm_db.premarket_finished,
+    };
+
+    Ok(Some(premarket_info))
+}
+ 
+
 pub async fn get_list(
     pool: &PgPool,
     user_id_opt: Option<Uuid>,
@@ -137,10 +213,13 @@ pub async fn get_list(
         SELECT COUNT(*)
         FROM premarket_info
         WHERE
-          is_hided = FALSE
-          OR (
-            $1::uuid IS NOT NULL
-            AND creator_id = $1::uuid
+          state != 'concept' 
+          AND (
+            is_hided = FALSE
+            OR (
+                $1::uuid IS NOT NULL
+                AND creator_id = $1::uuid
+            )
           )
         "#,
     )
@@ -153,10 +232,13 @@ pub async fn get_list(
         SELECT *
         FROM premarket_info
         WHERE
-          is_hided = FALSE
-          OR (
-            $1::uuid IS NOT NULL
-            AND creator_id = $1::uuid
+          state != 'concept' 
+          AND (
+            is_hided = FALSE
+            OR (
+                $1::uuid IS NOT NULL
+                AND creator_id = $1::uuid
+            )
           )
         ORDER BY premarket_created DESC, id DESC
         LIMIT $2 OFFSET $3
@@ -356,7 +438,6 @@ pub async fn update_community_info(
     Ok(())
 }
 
-
 pub async fn insert_holder(
     pool: &PgPool,
     premarket_pubkey: &str,
@@ -395,7 +476,6 @@ pub async fn insert_holder(
 
     Err(sqlx::Error::RowNotFound)
 }
-
 
 pub async fn soft_delete_holder(
     pool: &PgPool,
@@ -519,11 +599,11 @@ pub async fn get_holders_by_premarket_id(
     })
 }
 
-pub async fn update_premarket_state(
+pub async fn update_premarket_state_to_finish(
     pool: &PgPool,
     premarket_pubkey: &str,
     new_state: &str,
-    premarket_finished: Option<i64>,
+    update_time: i64,
 ) -> Result<u64> {
     let res = sqlx::query(
         r#"
@@ -536,7 +616,31 @@ pub async fn update_premarket_state(
     )
     .bind(new_state)
     .bind(premarket_pubkey)
-    .bind(premarket_finished)
+    .bind(update_time)
+    .execute(pool)
+    .await?;
+
+    Ok(res.rows_affected())
+}
+
+pub async fn update_premarket_state_to_start(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    new_state: &str,
+    update_time: i64,
+) -> Result<u64> {
+    let res = sqlx::query(
+        r#"
+        UPDATE premarket_info
+        SET 
+            state = $1,
+            premarket_created = $3
+        WHERE bc_address = $2
+        "#,
+    )
+    .bind(new_state)
+    .bind(premarket_pubkey)
+    .bind(update_time)
     .execute(pool)
     .await?;
 
@@ -665,6 +769,27 @@ pub async fn update_all_links_premarket(
 
     Ok(res.rows_affected())
 }
+
+pub async fn update_premarket_uri(
+    pool: &PgPool,
+    premarket_id: &Uuid,
+    new_uri: &String,
+) -> Result<u64> {
+    let res = sqlx::query(
+        r#"
+        UPDATE premarket_info
+            SET data_uri = $2
+        WHERE id = $1
+        "#,
+    )
+    .bind(premarket_id)
+    .bind(new_uri)
+    .execute(pool)
+    .await?;
+
+    Ok(res.rows_affected())
+}
+
 
 pub async fn update_holder_claimed_status(
     pool: &PgPool,
