@@ -50,22 +50,22 @@ pub async fn generate_premarket_pda(
     network: SolanaNetwork,
     mint_priv: &str,
 ) -> Result<Pubkey> {
-    let mint = if let Some(pair) = get_unused_signing_key(pool).await? {
-        let bytes: Vec<u8> =
-            parse_privkey_64(&pair.priv_key).context("signing_keys.priv_key parse failed")?;
-        Keypair::from_bytes(&bytes).context("invalid keypair bytes in signing_keys")?
-    } else {
-        return Err("private kay is broken")
-    };
+    let bytes= parse_privkey_64(mint_priv)
+        .context("mint_priv parse failed")?;
 
+    let mint = Keypair::from_bytes(&bytes)
+        .context("invalid mint keypair bytes")?;
 
     let program_id = program_id_for(network);
     let revelcy = read_revelcy_auth(network);
     let revelcy_pub = revelcy.pubkey();
-    let (premarket_pda, _bump) =
-        Pubkey::find_program_address(&[revelcy_pub.as_ref(), mint_pub.as_ref()], &program_id);
-    return Ok(premarket_pda);
 
+    let (premarket_pda, _bump) = Pubkey::find_program_address(
+        &[revelcy_pub.as_ref(), mint.pubkey().as_ref()],
+        &program_id,
+    );
+
+    Ok(premarket_pda)
 }
 
 pub async fn build_create_premarket_tx_unsigned(

@@ -1,14 +1,16 @@
+use anyhow::{Result, bail};
+
 use crate::storage::models::{HolderDbModel, HolderStats, PremarketInfoDbModel, CommunityInfoDbModel, CommunityLinkDbModel};
 use crate::models::premarket::PremarketInfoServiceModel;
-use sqlx::{PgPool, Result};
+use sqlx::{PgPool};
 use uuid::Uuid;
 use chrono::Utc;
 
 pub async fn get_user_concept(
     pool: &PgPool,
     creator_id: &Uuid
-) -> Result<Option<Uuid>> {
-    let premarket = sqlx::query_as::<_, PremarketInfoDbModel>(
+) -> Result<Option<PremarketInfoServiceModel>> {
+    let premarket_db = sqlx::query_as::<_, PremarketInfoDbModel>(
         r#"
         SELECT * FROM premarket_info WHERE creator_id = $1 AND state = 'concept' LIMIT 1;
         "#
@@ -17,8 +19,9 @@ pub async fn get_user_concept(
     .fetch_optional(pool)
     .await?;
 
-    if let Some(pm) = premarket {
-        Ok(Some(pm))
+    if let Some(pm_db) = premarket_db {
+        let premarket_service: PremarketInfoServiceModel = pm_db.try_into()?;
+        Ok(Some(premarket_service))
     } else {
         Ok(None)
     }
@@ -94,6 +97,8 @@ pub async fn get_premarket_info_by_name(
     }
 }
 
+
+// todo: fix me to return service model with convertor simular to PremarketInfoServiceModel
 pub async fn get_premarket_info_by_bc_address(
     pool: &PgPool,
     bc_address: &str,
@@ -163,37 +168,7 @@ pub async fn get_main_premarket_info_by_bc_address(
         None => return Ok(None),
     };
 
-    let premarket_info = PremarketInfoServiceModel {
-        id: Some(pm_db.id),
-        blockchain_address: pm_db.bc_address,
-        short_url_name: pm_db.short_url_name,
-        creator: UserInfoShort {
-            id: Some(pm_db.creator_id),
-            blockchain_address: pm_db.creator_address,
-        },
-        token_info: TokenInfo {
-            address: pm_db.mint_address,
-            name: pm_db.name,
-            description: pm_db.description,
-            symbol: pm_db.symbol,
-            image_url: pm_db.image_url,
-            data_uri: pm_db.data_uri,
-            links: TokenLinks {
-                telegram: pm_db.telegram,
-                twitter: pm_db.twitter,
-                web_site: pm_db.web_site,
-            },
-        },
-        state: pm_db.state.into(),
-        goal: PremarketGoal {
-            solana_lamp: pm_db.premarket_goal_sol_lamp,
-        },
-        is_extended: pm_db.is_extended,
-        is_hided: pm_db.is_hided,
-        deadline_timestamp: pm_db.premarket_deadline,
-        created_timestamp: pm_db.premarket_created,
-        finished_timestamp: pm_db.premarket_finished,
-    };
+    let premarket_info: PremarketInfoServiceModel = pm_db.try_into()?;
 
     Ok(Some(premarket_info))
 }
@@ -355,6 +330,21 @@ pub async fn create_premarket_and_community(
     Ok(())
 }
 
+pub async fn hard_delete_premarket_by_id(pool: &PgPool, premarket_id: Uuid) -> Result<u64> {
+    let res = sqlx::query(r#"DELETE FROM premarket_info WHERE id = $1"#)
+        .bind(premarket_id)
+        .execute(pool)
+        .await?;
+
+    let affected = res.rows_affected();
+    if affected == 0 {
+        bail!("premarket not found");
+    }
+
+    Ok(affected)
+}
+
+
 pub async fn update_availability_info(
     pool: &PgPool,
     bc_address: &str,
@@ -474,7 +464,7 @@ pub async fn insert_holder(
         return Ok(());
     }
 
-    Err(sqlx::Error::RowNotFound)
+    bail!("premarket not found");
 }
 
 pub async fn soft_delete_holder(
@@ -501,8 +491,7 @@ pub async fn soft_delete_holder(
 
         return Ok(result.rows_affected());
     }
-
-    Err(sqlx::Error::RowNotFound)
+    bail!("premarket not found");
 }
 
 pub async fn get_holders_by_premarket_address(

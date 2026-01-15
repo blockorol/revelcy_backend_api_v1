@@ -111,7 +111,7 @@ pub struct CreatePremarketConceptModel {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PremarketInfoServiceModel {
+pub struct CreatePremarketInfoServiceModel {
     pub id: Option<Uuid>, // Option to create method
     pub blockchain_address: String,
     pub short_url_name: Option<String>,
@@ -127,8 +127,24 @@ pub struct PremarketInfoServiceModel {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PremarketInfoServiceModel {
+    pub id: Uuid,
+    pub blockchain_address: String,
+    pub short_url_name: Option<String>,
+    pub creator: UserInfoShort,
+    pub token_info: TokenInfo,
+    pub goal: PremarketGoal,
+    pub deadline_timestamp: i64,
+    pub created_timestamp: i64,
+    pub finished_timestamp: Option<i64>,
+    pub is_extended: bool,
+    pub is_hided: bool,
+    pub state: PremarketState,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserInfoShort {
-    pub id: Option<Uuid>,
+    pub id: Uuid,
     pub blockchain_address: String,
 }
 
@@ -157,12 +173,12 @@ impl From<String> for PremarketState {
         PremarketState::from_str(&s).unwrap_or(PremarketState::Premarket)
     }
 }
-
 impl FromStr for PremarketState {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
+            "concept" => Ok(PremarketState::Concept),
             "premarket" => Ok(PremarketState::Premarket),
             "canceled" => Ok(PremarketState::Canceled),
             "finished" => Ok(PremarketState::Finished),
