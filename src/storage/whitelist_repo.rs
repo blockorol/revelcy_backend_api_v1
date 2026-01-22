@@ -3,6 +3,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::models::user::User;
+use crate::models::whitelist::WhitelistStatus;
 use crate::storage::models::{WhitelistDbModel, UserDbModel};
 
 /// is user exist in whitelist
@@ -27,6 +28,33 @@ pub async fn exists(
 
     Ok(v)
 }
+
+pub async fn get_status(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    user_id: Uuid,
+) -> Result<Option<WhitelistStatus>> {
+    let status_opt = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT status
+        FROM whitelist
+        WHERE premarket_id = $1
+          AND user_id = $2
+        "#,
+    )
+    .bind(premarket_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let status = match status_opt {
+        Some(s) => Some(WhitelistStatus::from_str(&s)?),
+        None => None,
+    };
+
+    Ok(status)
+}
+
 
 pub async fn list_users_by_premarket(
     pool: &PgPool,
@@ -72,6 +100,51 @@ pub async fn list_users_by_premarket(
 
     Ok((users, total))
 }
+
+pub async fn list_users_by_status(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    status: WhitelistStatus,
+    cursor: i64,
+    limit: i64,
+) -> Result<(Vec<User>, i64)> {
+    let limit = limit.clamp(1, 200);
+    let offset = cursor.max(0);
+
+    let total: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*)
+        FROM whitelist
+        WHERE premarket_id = $1
+          AND status = $2
+        "#,
+    )
+    .bind(premarket_id)
+    .bind(status.as_str())
+    .fetch_one(pool)
+    .await?;
+
+    let rows = sqlx::query_as::<_, User>(
+        r#"
+        SELECT u.id, u.username, u.avatar_url
+        FROM whitelist w
+        JOIN users u ON u.id = w.user_id
+        WHERE w.premarket_id = $1
+          AND w.status = $2
+        ORDER BY w.updated_at DESC
+        LIMIT $3 OFFSET $4
+        "#,
+    )
+    .bind(premarket_id)
+    .bind(status.as_str())
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+
+    Ok((rows, total))
+}
+
 
 /// CREATE: add user to whitelist or get existing record
 pub async fn add(
@@ -153,4 +226,32 @@ pub async fn delete_by_premarket_user(
     .await?;
 
     Ok(res.rows_affected())
+}
+
+pub async fn update_status(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    user_id: Uuid,
+    status: WhitelistStatus,
+) -> Result<()> {
+    let res = sqlx::query(
+        r#"
+        UPDATE whitelist
+        SET status = $1,
+            updated_at = NOW()
+        WHERE premarket_id = $2
+          AND user_id = $3
+        "#,
+    )
+    .bind(status.as_str())
+    .bind(premarket_id)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+
+    if res.rows_affected() == 0 {
+        bail!("whitelist row not found");
+    }
+
+    Ok(())
 }

@@ -8,16 +8,17 @@ use solana_sdk::pubkey::Pubkey;
 use crate::api::errors::{ApiError, ApiResult};
 use crate::api::premarket::Network;
 use crate::api::whitelist::{
+    WhitelistSetStatusRequest, WhitelistSetStatusResponse,
     RemoveWhitelistUserRequest, RemoveWhitelistUserResponse,
     AddWhitelistUserRequest, AddWhitelistUserListRequest,
     GetWhitelistRequest, GetWhitelistResponse,
     WhitelistUserDTO,
 };
 use crate::server::auth_validation::validate_base_request;
-use crate::services::{whitelist_service, premarket_service};
+use crate::services::{premarket_service, user_service, whitelist_service};
 use crate::models::user::User;
 use crate::models::premarket::PremarketLookupKeyType;
-
+use crate::models::whitelist::WhitelistStatus;
 // ─────────────────────────────────────────────────────────────
 // Helper: ensure caller is creator of premarket
 // ─────────────────────────────────────────────────────────────
@@ -52,6 +53,39 @@ async fn ensure_creator(
 
     Ok(())
 }
+
+async fn resolve_user_id_strict(
+    pool: &PgPool,
+    user_id: Option<uuid::Uuid>,
+    user_pubkey: Option<&str>,
+) -> Result<Option<uuid::Uuid>, ApiError> {
+    if let Some(id) = user_id {
+        return Ok(Some(id));
+    }
+
+    let Some(pk) = user_pubkey else {
+        return Err(ApiError::from_field_errors(vec![FieldError {
+            field: "user_id or user_pubkey",
+            code: ApiErrorCode::ValidationError,
+            message: "user_id or user_pubkey required",
+        }]));
+    };
+
+    let pk = Pubkey::from_str(pk)
+        .map_err(|_| ApiError::invalid_pubkey())?
+        .to_string();
+
+    let user_opt = user_service::get_by_wallet_address(pool, &pk)
+        .await
+        .map_err(|e| {
+            eprintln!("[whitelist] user_service::get_by_wallet_address err={:?}", e);
+            ApiError::internal_get_db_error()
+        })?;
+
+    Ok(user_opt.map(|u| u.id))
+}
+
+
 
 fn map_user_to_dto(u: User) -> WhitelistUserDTO {
     WhitelistUserDTO {
@@ -165,10 +199,15 @@ pub async fn get_premarket_whitelist(
 
     // authz: only creator
     ensure_creator(pool.get_ref(), dto.premarket_id, ctx.user.internal_id).await?;
+    let status: Option<WhitelistStatus> = dto.status.map(|s| {
+        WhitelistStatus::from_str(&s)
+            .map_err(|_| ApiError::invalid_whitelist_status())
+    }).transpose()?;
 
     let res = whitelist_service::get_users(
         pool.get_ref(),
         dto.premarket_id,
+        status,
         dto.cursor,
         dto.limit,
     )
@@ -228,4 +267,82 @@ pub async fn remove_whitelist_user(
     })?;
 
     Ok(HttpResponse::Ok().json(RemoveWhitelistUserResponse { removed }))
+}
+// ─────────────────────────────────────────────────────────────
+// POST /whitelist/approve_user
+// ─────────────────────────────────────────────────────────────
+pub async fn whitelist_approve(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    payload: web::Json<WhitelistSetStatusRequest>,
+) -> ApiResult<HttpResponse> {
+    let dto = payload.into_inner();
+    let ctx = validate_base_request(&req, &dto.network.to_string(), None)?;
+
+    ensure_creator(pool.get_ref(), dto.premarket_id, ctx.user.internal_id).await?;
+
+    let uid_opt = resolve_user_id_strict(
+        pool.get_ref(),
+        dto.user_id,
+        dto.user_pubkey.as_deref(),
+    )
+    .await?;
+
+    let Some(user_id) = uid_opt else {
+        return Ok(HttpResponse::Ok().json(WhitelistSetStatusResponse { updated: 0 }));
+    };
+
+    whitelist_service::approve_user(
+        pool.get_ref(),
+        dto.premarket_id,
+        user_id,
+    )
+    .await
+    .map_err(|e| {
+        eprintln!(
+            "[whitelist/approve] Failed premarket_id={} caller={} user_id={} err={:?}",
+            dto.premarket_id, ctx.user.internal_id, user_id, e
+        );
+        ApiError::internal_update_db_error()
+    })?;
+
+    Ok(HttpResponse::Ok().json(WhitelistSetStatusResponse { updated: 1 }))
+}
+
+pub async fn whitelist_reject(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    payload: web::Json<WhitelistSetStatusRequest>,
+) -> ApiResult<HttpResponse> {
+    let dto = payload.into_inner();
+    let ctx = validate_base_request(&req, &dto.network.to_string(), None)?;
+
+    ensure_creator(pool.get_ref(), dto.premarket_id, ctx.user.internal_id).await?;
+
+    let uid_opt = resolve_user_id_strict(
+        pool.get_ref(),
+        dto.user_id,
+        dto.user_pubkey.as_deref(),
+    )
+    .await?;
+
+    let Some(user_id) = uid_opt else {
+        return Ok(HttpResponse::Ok().json(WhitelistSetStatusResponse { updated: 0 }));
+    };
+
+    whitelist_service::reject_user(
+        pool.get_ref(),
+        dto.premarket_id,
+        user_id,
+    )
+    .await
+    .map_err(|e| {
+        eprintln!(
+            "[whitelist/reject] Failed premarket_id={} caller={} user_id={} err={:?}",
+            dto.premarket_id, ctx.user.internal_id, user_id, e
+        );
+        ApiError::internal_update_db_error()
+    })?;
+
+    Ok(HttpResponse::Ok().json(WhitelistSetStatusResponse { updated: 1 }))
 }

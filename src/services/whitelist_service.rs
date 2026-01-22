@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::models::user::User;
-use crate::models::whitelist::WhitelistUsersResult;
+use crate::models::whitelist::{WhitelistUsersResult, WhitelistStatus};
 use crate::services::user_service;
 use crate::storage::whitelist_repo;
 
@@ -77,17 +77,19 @@ pub async fn add_users(
     Ok(())
 }
 
-/// 4) Получить пользователей whitelist с курсором (offset-based):
-/// возвращаем (id, username, avatar_url)
 pub async fn get_users(
     pool: &PgPool,
     premarket_id: Uuid,
+    status: Option<WhitelistStatus>,
     cursor: i64,
     limit: i64,
 ) -> Result<WhitelistUsersResult, actix_web::Error> {
-    let (items, total) = whitelist_repo::list_users_by_premarket(pool, premarket_id, cursor, limit)
-        .await
-        .map_err(ErrorInternalServerError)?;
+    let res = match status {
+        None => whitelist_repo::list_users_by_premarket(pool, premarket_id, cursor, limit).await,
+        Some(s) => whitelist_repo::list_users_by_status(pool, premarket_id, s, cursor, limit).await,
+    };
+    let (items, total) = res.map_err(ErrorInternalServerError)?;
+
 
     Ok(WhitelistUsersResult {
         items,
@@ -121,5 +123,42 @@ pub async fn remove_user(
         .map_err(ErrorInternalServerError)?;
 
     Ok(affected)
+}
+
+pub async fn approve_user(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    user_id: Uuid,
+) -> Result<(), actix_web::Error> {
+    set_user_status(
+        pool,
+        premarket_id,
+        user_id,
+        WhitelistStatus::Approved,
+    )
+}
+
+pub async fn reject_user(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    user_id: Uuid,
+) -> Result<(), actix_web::Error> {
+    set_user_status(
+        pool,
+        premarket_id,
+        user_id,
+        WhitelistStatus::Rejected,
+    )
+}
+
+pub async fn set_user_status(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    user_id: Uuid,
+    status: WhitelistStatus,
+) -> Result<(), actix_web::Error> {
+    whitelist_storage::update_status(pool, premarket_id, user_id, status)
+        .await
+        .map_err(ErrorInternalServerError)
 }
 

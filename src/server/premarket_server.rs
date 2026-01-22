@@ -93,6 +93,8 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/whitelist/add_user_list", web::post().to(add_whitelist_user_list))
         .route("/whitelist/get", web::post().to(get_premarket_whitelist))
         .route("/whitelist/remove_user", web::post().to(remove_whitelist_user))
+        .route("/whitelist/approve", web::post().to(whitelist_approve))
+        .route("/whitelist/reject", web::post().to(whitelist_reject))
 
         .route("/concept/create", web::post().to(create_concept))
        

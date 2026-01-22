@@ -40,6 +40,7 @@ pub struct AddWhitelistUserListRequest {
 pub struct GetWhitelistRequest {
     pub network: Network,
     pub premarket_id: Uuid,
+    pub status: Option<String>,
     pub cursor: i64,
     pub limit: i64,
 }
@@ -55,4 +56,19 @@ pub struct WhitelistUserDTO {
 pub struct GetWhitelistResponse {
     pub items: Vec<WhitelistUserDTO>,
     pub total: Option<i64>,
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WhitelistSetStatusRequest {
+    pub network: Network,
+    pub premarket_id: Uuid,
+
+    pub user_id: Option<Uuid>,
+    pub user_pubkey: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WhitelistSetStatusResponse {
+    pub updated: u64,
 }
