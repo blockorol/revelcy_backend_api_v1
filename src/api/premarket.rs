@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use crate::models::premarket::{CommunityLink, LinkType};
 
 // todo: unlock it and change network to that
 // #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -102,31 +103,63 @@ pub struct AvailabilityInfoDTO {
     pub is_hided: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CommunityInfoDTO {
     pub description: String,
     pub token_banner_url: Option<String>,
     pub links: Option<Vec<CommunityLinkDTO>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CommunityLinkDTO {
     pub text: String,
     pub url: String,
     pub r#type: LinkTypeDTO,
 }
+impl From<CommunityLinkDTO> for CommunityLink {
+    fn from(v: CommunityLinkDTO) -> Self {
+        Self {
+            text: v.text,
+            url: v.url,
+            r#type: v.r#type.into(),
+        }
+    }
+}
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum LinkTypeDTO {
     X,
     Tg,
     Other,
 }
+impl From<LinkTypeDTO> for LinkType {
+    fn from(v: LinkTypeDTO) -> Self {
+        match v {
+            LinkTypeDTO::X => LinkType::X,
+            LinkTypeDTO::Tg => LinkType::Tg,
+            LinkTypeDTO::Other => LinkType::Other,
+        }
+    }
+}
+
+
+// From Service → DTO
+impl From<LinkType> for LinkTypeDTO {
+    fn from(value: LinkType) -> Self {
+        match value {
+            LinkType::X => LinkTypeDTO::X,
+            LinkType::Tg => LinkTypeDTO::Tg,
+            LinkType::Other => LinkTypeDTO::Other,
+        }
+    }
+}
+
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TokenState {
+    Concept,
     Premarket,
     Canceled,
     Finished,
@@ -253,6 +286,74 @@ pub enum TransactionStatus {
     Failed,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub enum Network {
+    #[serde(rename = "devnet")]
+    Devnet,
+    #[serde(rename = "mainnet-beta")]
+    MainnetBeta,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CommonTxFields {
+    pub network: Network, // todo: remove me and set from env
+    pub unsigned_tx: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "tx_type", rename_all = "snake_case")]
+pub enum TxToSignRequest {
+    CreatePremarket(CommonTxFields),
+    JoinPremarket(CommonTxFields),
+    OutOfPremarket(CommonTxFields),
+
+    // todo: OldTxFields - fix me to CommonTxFields
+    FinishPremarket(OldTxFields),
+    ExtendPremarket(OldTxFields),
+    UpdateUri(OldTxFields),
+    ClaimTokens(OldTxFields),
+    RefundPremarket(OldTxFields),
+
+    WithdrawVesting(CommonTxFields),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OldTxFields {
+    #[serde(flatten)]
+    pub common: CommonTxFields,
+    pub premarket: String,
+}
+impl TxToSignRequest {
+    pub fn common(&self) -> &CommonTxFields {
+        match self {
+            TxToSignRequest::CreatePremarket(x) => x,
+            TxToSignRequest::JoinPremarket(x) => x,
+            TxToSignRequest::OutOfPremarket(x) => x,
+            TxToSignRequest::FinishPremarket(x) => &x.common,
+            TxToSignRequest::ExtendPremarket(x) => &x.common,
+            TxToSignRequest::UpdateUri(x) => &x.common,
+            TxToSignRequest::ClaimTokens(x) => &x.common,
+            TxToSignRequest::RefundPremarket(x) => &x.common,
+            TxToSignRequest::WithdrawVesting(x) => x,
+        }
+    }
+
+    pub fn tx_type_str(&self) -> &'static str {
+        match self {
+            TxToSignRequest::CreatePremarket(_) => "create_premarket",
+            TxToSignRequest::JoinPremarket(_) => "join_premarket",
+            TxToSignRequest::OutOfPremarket(_) => "out_of_premarket",
+            TxToSignRequest::FinishPremarket(_) => "finish_premarket",
+            TxToSignRequest::ExtendPremarket(_) => "extend_premarket",
+            TxToSignRequest::UpdateUri(_) => "update_uri",
+            TxToSignRequest::ClaimTokens(_) => "claim_tokens",
+            TxToSignRequest::RefundPremarket(_) => "refund_premarket",
+            TxToSignRequest::WithdrawVesting(_) => "withdraw_vesting",
+        }
+    }
+}
+
+
 #[derive(serde::Serialize)]
 pub struct SentTxResponse  {
     pub signature: String,
@@ -260,25 +361,41 @@ pub struct SentTxResponse  {
 }
 
 #[derive(Deserialize)]
-pub struct TxToSignRequest {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub unsigned_tx: String,      // base64(serialized Transaction)
-    pub tx_type: String,          // "create_premarket" | "join_premarket" | ...
-    pub premarket: Option<String>,
+pub struct CreatePremarketConceptTokenInfo{
+    pub name: String,
+    pub description: String,
+    pub symbol: String,
+    pub image_url: String,
+    pub links: TokenLinksDTO,
+    pub deadline: i64,           // unix sec
+    #[serde(with = "string_as_number")]
+    pub goal_sol_lamp: u64,
+    #[serde(with = "string_as_number")]
+    pub max_sol_lamp: u64,
+    #[serde(with = "string_as_number")]
+    pub creator_allocate_lamp: u64,
+}
+
+#[derive(Deserialize)]
+pub struct CreatePremarketConceptRequest {
+    pub network: String,         // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,     // base58
+    pub token_info: CreatePremarketConceptTokenInfo,
+}
+
+#[derive(Serialize)]
+pub struct CreatePremarketConceptResponse {
+    pub premarket_account_pda: String, // base58
+    pub premarket_id: Uuid, 
 }
 
 #[derive(Deserialize)]
 pub struct CreatePremarketTxRequest {
     pub network: String,         // "devnet" | "mainnet-beta"
     pub user_pubkey: String,     // base58
-    pub name: String,
-    pub symbol: String,
     pub uri: String,
-    pub deadline: i64,           // unix sec
-    #[serde(with = "string_as_number")]
-    pub goal_sol_lamp: u64,
-    #[serde(with = "string_as_number")]
-    pub max_sol_lamp: u64,
+    pub image_url: String,
+    pub premarket_pubkey: String,
     #[serde(with = "string_as_number")]
     pub creator_allocate_lamp: u64,
 }

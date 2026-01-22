@@ -3,7 +3,7 @@ use uuid::Uuid;
 use std::str::FromStr;
 use solana_sdk::pubkey::Pubkey;
 
-use crate::api::premarket::{LinkTypeDTO, TokenDynamicInfoDTO, HolderInfoDTO};
+use crate::api::premarket::{ TokenDynamicInfoDTO, HolderInfoDTO};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PremarketLookupKeyType {
@@ -68,6 +68,8 @@ pub struct GetPremarketDataParams {
 
 #[derive(Debug, Clone)]
 pub struct BuildPremarketTxParams {
+    pub premarket_pda: Pubkey,
+    pub mint: Pubkey,
     pub network: SolanaNetwork,
     pub user: Pubkey,
     pub name: String,
@@ -98,8 +100,20 @@ pub enum SolanaNetwork {
     MainnetBeta,
 }
 
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PremarketInfoServiceModel {
+pub struct CreatePremarketConceptModel {
+    pub short_url_name: Option<String>,
+    pub creator: UserInfoShort,
+    pub token_info: TokenInfo,
+    pub goal: PremarketGoal,
+    pub deadline_timestamp: i64,
+    pub created_timestamp: i64,
+    pub is_hided: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreatePremarketInfoServiceModel {
     pub id: Option<Uuid>, // Option to create method
     pub blockchain_address: String,
     pub short_url_name: Option<String>,
@@ -115,8 +129,24 @@ pub struct PremarketInfoServiceModel {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PremarketInfoServiceModel {
+    pub id: Uuid,
+    pub blockchain_address: String,
+    pub short_url_name: Option<String>,
+    pub creator: UserInfoShort,
+    pub token_info: TokenInfo,
+    pub goal: PremarketGoal,
+    pub deadline_timestamp: i64,
+    pub created_timestamp: i64,
+    pub finished_timestamp: Option<i64>,
+    pub is_extended: bool,
+    pub is_hided: bool,
+    pub state: PremarketState,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserInfoShort {
-    pub id: Option<Uuid>,
+    pub id: Uuid,
     pub blockchain_address: String,
 }
 
@@ -124,6 +154,7 @@ pub struct UserInfoShort {
 #[derive(Serialize, Deserialize, Copy, Debug, Clone,PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum PremarketState {
+    Concept,
     Premarket,
     Canceled,
     Finished,
@@ -131,6 +162,7 @@ pub enum PremarketState {
 impl ToString for PremarketState {
     fn to_string(&self) -> String {
         match self {
+            PremarketState::Concept => "concept",
             PremarketState::Premarket => "premarket",
             PremarketState::Canceled => "canceled",
             PremarketState::Finished => "finished",
@@ -143,12 +175,12 @@ impl From<String> for PremarketState {
         PremarketState::from_str(&s).unwrap_or(PremarketState::Premarket)
     }
 }
-
 impl FromStr for PremarketState {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
+            "concept" => Ok(PremarketState::Concept),
             "premarket" => Ok(PremarketState::Premarket),
             "canceled" => Ok(PremarketState::Canceled),
             "finished" => Ok(PremarketState::Finished),
@@ -184,21 +216,21 @@ pub struct TokenLinks {
     pub web_site: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct CommunityInfoServiceModel {
     pub description: String,
     pub token_banner_url: Option<String>,
     pub links: Option<Vec<CommunityLink>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct CommunityLink {
     pub text: String,
     pub url: String,
     pub r#type: LinkType,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum LinkType {
     X,
@@ -267,29 +299,6 @@ impl From<HolderInfo> for HolderInfoDTO {
             username: holder.username,
             amount_sol_lamp: holder.amount_sol_lamp,
             claimed: holder.claimed,
-        }
-    }
-}
-
-
-// From DTO → Service
-impl From<LinkTypeDTO> for LinkType {
-    fn from(value: LinkTypeDTO) -> Self {
-        match value {
-            LinkTypeDTO::X => LinkType::X,
-            LinkTypeDTO::Tg => LinkType::Tg,
-            LinkTypeDTO::Other => LinkType::Other,
-        }
-    }
-}
-
-// From Service → DTO
-impl From<LinkType> for LinkTypeDTO {
-    fn from(value: LinkType) -> Self {
-        match value {
-            LinkType::X => LinkTypeDTO::X,
-            LinkType::Tg => LinkTypeDTO::Tg,
-            LinkType::Other => LinkTypeDTO::Other,
         }
     }
 }

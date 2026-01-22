@@ -63,13 +63,9 @@ pub async fn user_set_info(
     let sec_ch_ua_platform = extract_header(&req, "sec-ch-ua-platform").unwrap_or_else(|| "default".into());
     let sec_ch_ua_mobile = extract_header(&req, "sec-ch-ua-mobile").unwrap_or_else(|| "default".into());
     let event_type_str = serde_json::to_value(&dto.event_type)
-        .map_err(|e| {
-            eprintln!("user_set_info: serialize event_type error: {e:?}");
-            ApiError::internal_server_error()
-        })?
-        .as_str()
-        .unwrap_or("other")
-        .to_string();
+        .ok()
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "unknown".to_string());
 
     let fe_data: UserFingerprintEventFrontendData = UserFingerprintEventFrontendData {
         user_id: dto.client.user_id,

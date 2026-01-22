@@ -41,6 +41,7 @@ pub enum UserInfoEventType {
     JoinPremarket,
     OutPremarket,
     ClaimToken,
+    CreatePremarket,
     FinishPremarket,
     Other,
 }
