@@ -96,6 +96,7 @@ pub struct UpdateAvailabilityInfoDTO {
     pub premarket_pubkey: String,
     pub token_short_url_name: Option<String>,
     pub is_hided: Option<bool>,
+    pub is_whitelist_enabled: Option<bool>,
     pub network: String,
 }
 
@@ -288,7 +289,7 @@ pub enum TransactionStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Network {
     #[serde(rename = "devnet")]
     Devnet,

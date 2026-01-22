@@ -1,3 +1,6 @@
+use anyhow::{bail};
+
+use std::str::FromStr;
 use serde::{Serialize, Deserialize};
 use crate::models::user::User;
 
@@ -28,7 +31,7 @@ impl WhitelistStatus {
 impl FromStr for WhitelistStatus {
     type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Result<Self> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "REQUESTED" => Ok(Self::Requested),
             "APPROVED" => Ok(Self::Approved),

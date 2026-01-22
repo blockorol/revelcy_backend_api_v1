@@ -76,6 +76,8 @@ use crate::server::whitelist_handlers::{
     add_whitelist_user_list,
     get_premarket_whitelist,
     remove_whitelist_user,
+    whitelist_approve, 
+    whitelist_reject,
 };
 
 pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
@@ -1551,6 +1553,7 @@ pub async fn update_availability(
         pool.get_ref(),
         &premarket_pubkey,
         dto.is_hided,
+        dto.is_whitelist_enabled,
         dto.token_short_url_name.clone(),
     )
     .await

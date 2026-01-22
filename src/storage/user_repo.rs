@@ -44,6 +44,56 @@ pub async fn get_user_by_wallet(pool: &PgPool, wallet_address: &str) -> Result<O
     }
 }
 
+pub async fn search_users_by_username_with_wallets(
+    pool: &PgPool,
+    input: &str,
+    limit: i64,
+) -> Result<Vec<User>> {
+    let limit = limit.clamp(1, 50);
+    let pattern = format!("%{}%", input);
+
+    let users_db = sqlx::query_as::<_, UserDbModel>(
+        r#"
+        SELECT id, username, avatar_url
+        FROM users
+        WHERE username ILIKE $1
+        ORDER BY username
+        LIMIT $2
+        "#,
+    )
+    .bind(&pattern)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+
+    let mut result = Vec::with_capacity(users_db.len());
+
+    for user_db in users_db {
+        let wallets = sqlx::query(
+            r#"
+            SELECT wallet_address
+            FROM wallets
+            WHERE user_id = $1
+            "#
+        )
+        .bind(user_db.id)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(|row| row.get::<String, _>("wallet_address"))
+        .collect();
+
+        result.push(User {
+            id: user_db.id,
+            username: user_db.username,
+            avatar_url: user_db.avatar_url,
+            wallets,
+        });
+    }
+
+    Ok(result)
+}
+
 
 // Создать пользователя и привязать кошелек
 pub async fn create_user_with_wallet(pool: &PgPool, wallet_address: &str) -> Result<User> {

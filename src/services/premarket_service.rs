@@ -68,6 +68,7 @@ pub async fn get_full_premarket_info(
                 },
                 is_extended: pm_db.is_extended,
                 is_hided: pm_db.is_hided,
+                is_whitelist_enabled: pm_db.is_whitelist_enabled,
                 deadline_timestamp: pm_db.premarket_deadline,
                 created_timestamp: pm_db.premarket_created,
                 finished_timestamp: pm_db.premarket_finished,
@@ -179,6 +180,7 @@ pub async fn get_list(
             },
             is_extended: pm_db.is_extended,
             is_hided: pm_db.is_hided,
+            is_whitelist_enabled: pm_db.is_whitelist_enabled,
             deadline_timestamp: pm_db.premarket_deadline,
             created_timestamp: pm_db.premarket_created,
             finished_timestamp: pm_db.premarket_finished,
@@ -234,6 +236,7 @@ pub async fn create_concept(
         finished_timestamp: None,
         is_extended: false,
         is_hided: false,
+        is_whitelist_enabled: false,
         state: PremarketState::Concept,
         short_url_name: None,
         creator: concept_data.creator.clone(),
@@ -288,6 +291,7 @@ pub async fn create_full_premarket_info(
         premarket_finished: premarket.finished_timestamp,
         is_extended: false,
         is_hided: premarket.is_hided,
+        is_whitelist_enabled: premarket.is_whitelist_enabled,
         state: premarket.state.to_string(),
     };
 
@@ -325,12 +329,14 @@ pub async fn update_availability_info(
     pool: &PgPool,
     premarket_pubkey: &str,
     is_hided: Option<bool>,
+    is_whitelist_enabled: Option<bool>,
     short_url_name: Option<String>,
 ) -> Result<(), actix_web::Error> {
     premarket_repo::update_availability_info(
         pool,
         premarket_pubkey,
         is_hided,
+        is_whitelist_enabled,
         short_url_name,
     )
     .await

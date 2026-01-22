@@ -82,6 +82,7 @@ pub struct PremarketInfoDbModel {
     pub premarket_deadline: i64,
     pub is_extended: bool,
     pub is_hided: bool,
+    pub is_whitelist_enabled: bool,
     pub premarket_created: i64,
     pub premarket_finished: Option<i64>,
 
@@ -136,6 +137,7 @@ impl TryFrom<PremarketInfoDbModel> for PremarketInfoServiceModel {
 
             is_extended: pm_db.is_extended,
             is_hided: pm_db.is_hided,
+            is_whitelist_enabled: pm_db.is_whitelist_enabled,
             state,
         })
     }

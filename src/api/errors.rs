@@ -2,6 +2,7 @@
 use actix_web::{HttpResponse, ResponseError};
 use actix_web::http::StatusCode;
 use serde::Serialize;
+use tracing::field;
 use std::fmt;
 
 pub type ApiResult<T> = Result<T, ApiError>;
@@ -183,6 +184,18 @@ impl ApiError {
             },
         }
     }
+    pub fn invalid_pubkey() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "internal_error",
+                code: ApiErrorCode::InternalUnknownError,
+                field: Some("user_pubkey".into()),
+                message: Some("invalid pubkey".into()),
+                errors: None,
+            },
+        }
+    }
+    
 
     pub fn internal_send_tx_failed() -> Self {
         Self {
