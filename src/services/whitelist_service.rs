@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::models::user::User;
 use crate::models::whitelist::WhitelistUsersResult;
 use crate::services::user_service;
-use crate::storage::whitelist_storage;
+use crate::storage::whitelist_repo;
 
 
 pub async fn is_user_whitelisted(
@@ -13,7 +13,7 @@ pub async fn is_user_whitelisted(
     premarket_id: Uuid,
     user_id: Uuid,
 ) -> Result<bool, actix_web::Error> {
-    whitelist_storage::exists(pool, premarket_id, user_id)
+    whitelist_repo::exists(pool, premarket_id, user_id)
         .await
         .map_err(ErrorInternalServerError)
 }
@@ -37,7 +37,7 @@ pub async fn add_user(
         _ => return Err(ErrorBadRequest("user_id or user_wallet_address required")),
     };
 
-    whitelist_storage::add(pool, premarket_id, uid)
+    whitelist_repo::add(pool, premarket_id, uid)
         .await
         .map_err(ErrorInternalServerError)?;
 
@@ -70,7 +70,7 @@ pub async fn add_users(
     ids.sort();
     ids.dedup();
 
-    whitelist_storage::add_many(pool, premarket_id, &ids)
+    whitelist_repo::add_many(pool, premarket_id, &ids)
         .await
         .map_err(ErrorInternalServerError)?;
 
@@ -85,7 +85,7 @@ pub async fn get_users(
     cursor: i64,
     limit: i64,
 ) -> Result<WhitelistUsersResult, actix_web::Error> {
-    let (items, total) = whitelist_storage::list_users_by_premarket(pool, premarket_id, cursor, limit)
+    let (items, total) = whitelist_repo::list_users_by_premarket(pool, premarket_id, cursor, limit)
         .await
         .map_err(ErrorInternalServerError)?;
 
@@ -94,3 +94,32 @@ pub async fn get_users(
         total: Some(total),
     })
 }
+
+pub async fn remove_user(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    user_id: Option<Uuid>,
+    user_wallet_address: Option<&str>,
+) -> Result<u64, actix_web::Error> {
+    let uid = match (user_id, user_wallet_address) {
+        (Some(id), _) => id,
+        (None, Some(addr)) => {
+            let user_opt = user_service::get_by_wallet_address(pool, addr)
+                .await
+                .map_err(ErrorInternalServerError)?;
+
+            match user_opt {
+                Some(u) => u.id,
+                None => return Ok(0),
+            }
+        }
+        _ => return Err(ErrorBadRequest("user_id or user_wallet_address required")),
+    };
+
+    let affected = whitelist_repo::delete_by_premarket_user(pool, premarket_id, uid)
+        .await
+        .map_err(ErrorInternalServerError)?;
+
+    Ok(affected)
+}
+

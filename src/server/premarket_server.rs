@@ -71,6 +71,13 @@ use crate::services::solana_service::{
     get_premarket_data,
 };
 
+use crate::server::whitelist_handlers::{
+    add_whitelist_user,
+    add_whitelist_user_list,
+    get_premarket_whitelist,
+    remove_whitelist_user,
+};
+
 pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
     web::scope("/premarket")
         .wrap(JwtMiddleware)
@@ -81,9 +88,15 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
 
         .route("/update_community", web::post().to(update_community_info))
         .route("/update_availability", web::post().to(update_availability))
+        // Whitelist routes: todo: move to separate file
+        .route("/whitelist/add_user", web::post().to(add_whitelist_user))
+        .route("/whitelist/add_user_list", web::post().to(add_whitelist_user_list))
+        .route("/whitelist/get", web::post().to(get_premarket_whitelist))
+        .route("/whitelist/remove_user", web::post().to(remove_whitelist_user))
 
         .route("/concept/create", web::post().to(create_concept))
-
+       
+        // tx route: todo: move to separate file
         .route("/tx/create", web::post().to(create_premarket_tx))
         .route("/tx/join",   web::post().to(join_premarket_tx))
         .route("/tx/out",    web::post().to(out_premarket_tx))

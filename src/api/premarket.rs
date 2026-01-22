@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::models::premarket::{CommunityLink, LinkType};
+use std::fmt;
+
 
 // todo: unlock it and change network to that
 // #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -292,6 +294,15 @@ pub enum Network {
     Devnet,
     #[serde(rename = "mainnet-beta")]
     MainnetBeta,
+}
+impl fmt::Display for Network {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Network::Devnet => "devnet",
+            Network::MainnetBeta => "mainnet-beta",
+        };
+        write!(f, "{}", s)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

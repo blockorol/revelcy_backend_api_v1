@@ -81,7 +81,7 @@ pub async fn add(
 ) -> Result<()> {
     let id = Uuid::new_v4();
 
-    let row = sqlx::query_as::<_, WhitelistDbModel>(
+    let _row = sqlx::query_as::<_, WhitelistDbModel>(
         r#"
         INSERT INTO whitelist (id, premarket_id, user_id)
         VALUES ($1, $2, $3)

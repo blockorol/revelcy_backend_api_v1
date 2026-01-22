@@ -53,6 +53,7 @@ pub enum ApiErrorCode {
     InternalBuildTxFailed,
     InternalSignTxFailed,
     InternalUpdateFailed,
+    InternalGetFailed,
     InternalUnknownError,
 
     // basic error - about validation
@@ -166,6 +167,18 @@ impl ApiError {
                 code: ApiErrorCode::InternalUpdateFailed,
                 field: None,
                 message: Some("failed to update internal state".into()),
+                errors: None,
+            },
+        }
+    }
+
+    pub fn internal_get_db_error() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "internal_error",
+                code: ApiErrorCode::InternalGetFailed,
+                field: None,
+                message: Some("failed to get internal state".into()),
                 errors: None,
             },
         }
@@ -428,6 +441,7 @@ impl ResponseError for ApiError {
 
             InternalBuildTxFailed
             | InternalUpdateFailed
+            | InternalGetFailed
             | InternalUnknownError
             | InternalSignTxFailed => StatusCode::INTERNAL_SERVER_ERROR,
 

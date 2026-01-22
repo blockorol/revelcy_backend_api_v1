@@ -68,3 +68,10 @@ pub async fn get_or_create_by_wallet_address(
         }
     }
 }
+
+pub async fn get_by_wallet_address(
+    pool: &PgPool,
+    wallet_address: &str,
+) -> Result<Option<User>, actix_web::Error> {
+    user_repo::get_user_by_wallet(pool, wallet_address).await.map_err(ErrorInternalServerError)
+}
