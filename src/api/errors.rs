@@ -218,6 +218,19 @@ impl ApiError {
             },
         }
     }
+
+    pub fn invalid_premarket_mint_pubkey() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "validation_error",
+                code: ApiErrorCode::InvalidPremarketPubkey,
+                field: Some("premarket mint"),
+                message: Some("invalid premarket mint pubkey format".into()),
+                errors: None,
+            },
+        }
+    }
+
     pub fn invalid_premarket_pubkey() -> Self {
         Self {
             response: ApiErrorResponse {

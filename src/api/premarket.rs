@@ -394,6 +394,7 @@ pub struct CreatePremarketTxRequest {
     pub network: String,         // "devnet" | "mainnet-beta"
     pub user_pubkey: String,     // base58
     pub uri: String,
+    pub image_url: String,
     pub premarket_pubkey: String,
     #[serde(with = "string_as_number")]
     pub creator_allocate_lamp: u64,

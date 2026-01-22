@@ -237,6 +237,11 @@ async fn handle_create_premarket(
     if parsed.params.user != ctx.user.current_pubkey {
         return Err(ApiError::wrong_user_pubkey_for_user());
     }
+    println!("parsed premarket_pda: {}", parsed.premarket_pda.to_string());
+    println!("parsed mint: {}", parsed.mint.to_string());
+    println!("parsed revelcy_auth: {}", parsed.revelcy_auth.to_string());
+    println!("parsed user: {}", parsed.user.to_string());
+    println!("parsed params.user: {}", parsed.params.user.to_string());
 
     let premarket_info = match premarket_service::get_main_premarket_info(&pool, &parsed.premarket_pda.to_string()).await {
         Ok(Some(info)) => info,
@@ -789,14 +794,23 @@ pub async fn create_premarket_tx(
             return Err(ApiError::internal_server_error());
         }
     };
+    let premarket_pda = Pubkey::from_str(&dto.premarket_pubkey)
+        .map_err(|_| ApiError::invalid_premarket_pubkey())?;
+
     let uri = dto.uri.clone();
+    let image_url = dto.image_url.clone();
     let pm_id = premarket_info.id;
-    let update_pm_waiter = premarket_service::update_premarket_uri(&pool, &pm_id, &uri);
-    
+    let update_pm_waiter = premarket_service::update_premarket_uri(&pool, &pm_id, &uri, &image_url);
+    let mint = Pubkey::from_str(&premarket_info.token_info.address)
+        .map_err(|_| ApiError::invalid_premarket_mint_pubkey())?;
+
     premarket_info.token_info.data_uri = uri.clone();
+    premarket_info.token_info.image_url = Some(image_url.clone());
     let params = BuildPremarketTxParams {
+        mint: mint.clone(),
+        premarket_pda: premarket_pda.clone(),
         network: ctx.network,
-        user: ctx.user.current_pubkey,
+        user: ctx.user.current_pubkey.clone(),
         name: premarket_info.token_info.name.clone(),
         symbol: premarket_info.token_info.symbol.clone(),
         uri: premarket_info.token_info.data_uri.clone(),
@@ -817,6 +831,24 @@ pub async fn create_premarket_tx(
             eprintln!("build_create_premarket_tx error: {e:?}");
             ApiError::internal_build_tx_failed()
         })?;
+
+    
+    let parsed = parse_create_premarket_tx_from_base64(&res.tx_base64.clone(), ctx.network.clone())
+        .map_err(|e| {
+            eprintln!("parse create_premarket tx error: {e:?}");
+            ApiError::from_field_errors(vec![FieldError {
+                field: "unsigned_tx",
+                code: ApiErrorCode::ValidationError,
+                message: "invalid create_premarket transaction",
+            }])
+        })?;
+
+    println!("dto from create premarket_pda: {}", dto.premarket_pubkey.to_string());
+    println!("parsed from create premarket_pda: {}", parsed.premarket_pda.to_string());
+    println!("parsed from create mint: {}", parsed.mint.to_string());
+    println!("parsed from create revelcy_auth: {}", parsed.revelcy_auth.to_string());
+    println!("parsed from create user: {}", parsed.user.to_string());
+    println!("parsed from create params.user: {}", parsed.params.user.to_string());
 
     let body = CreatePremarketTxResponse {
         transaction: res.tx_base64,
@@ -1458,7 +1490,6 @@ pub async fn get_holder_entry_price(
     Ok(HttpResponse::Ok().json(resp))
 }
 
-
 pub async fn update_availability(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -1474,30 +1505,58 @@ pub async fn update_availability(
         .to_string();
 
     // 2) load premarket
-    let pm = premarket_service::get_full_premarket_info(&pool, &premarket_pubkey, PremarketLookupKeyType::BcAddress)
-        .await
-        .map_err(|_| ApiError::internal_update_db_error())?
-        .ok_or_else(ApiError::missing_premarket)?;
+    let pm = premarket_service::get_full_premarket_info(
+        &pool,
+        &premarket_pubkey,
+        PremarketLookupKeyType::BcAddress,
+    )
+    .await
+    .map_err(|e| {
+        eprintln!(
+            "[update_availability] DB error while loading premarket {}: {:?}",
+            premarket_pubkey, e
+        );
+        ApiError::internal_update_db_error()
+    })?
+    .ok_or_else(ApiError::missing_premarket)?;
 
     // 3) check creator
     if !(pm.main_info.creator.id == ctx.user.internal_id) {
+        eprintln!(
+            "[update_availability] Forbidden: user {} is not creator of premarket {} (creator_id={:?})",
+            ctx.user.internal_id,
+            premarket_pubkey,
+            pm.main_info.creator.id
+        );
         return Err(ApiError::forbidden());
     }
 
-
-    // 4) normalize inputs
-
-    // 5) save
+    // 4) save
     premarket_service::update_availability_info(
         pool.get_ref(),
         &premarket_pubkey,
         dto.is_hided,
-        dto.token_short_url_name,
+        dto.token_short_url_name.clone(),
     )
     .await
-    .map_err(|_| ApiError::internal_update_db_error())?;
-    println!("Update availability Done");
+    .map_err(|e| {
+        eprintln!(
+            "[update_availability] Failed to update availability for premarket {} by user {}. \
+             is_hided={:?}, token_short_url_name={:?}, error={:?}",
+            premarket_pubkey,
+            ctx.user.internal_id,
+            dto.is_hided,
+            dto.token_short_url_name,
+            e
+        );
+        ApiError::internal_update_db_error()
+    })?;
 
+    println!(
+        "[update_availability] OK premarket={} user={}",
+        premarket_pubkey,
+        ctx.user.internal_id
+    );
 
     Ok(HttpResponse::Ok().finish())
 }

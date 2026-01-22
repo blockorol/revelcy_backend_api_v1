@@ -75,23 +75,12 @@ pub async fn build_create_premarket_tx_unsigned(
     let program_id = program_id_for(params.network);
     let rpc = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
 
-    let mint = if let Some(pair) = get_unused_signing_key(pool).await? {
-        let bytes: Vec<u8> =
-            parse_privkey_64(&pair.priv_key).context("signing_keys.priv_key parse failed")?;
-        Keypair::from_bytes(&bytes).context("invalid keypair bytes in signing_keys")?
-    } else {
-        Keypair::new()
-    };
-
-    let mint_pub = mint.pubkey().to_string();
-    delete_signing_key_by_pubkey(pool, &mint_pub).await?; // should be looked instead of "delete"
-
     let revelcy = read_revelcy_auth(params.network);
     let revelcy_pub = revelcy.pubkey();
-    let (premarket_pda, _bump) =
-        Pubkey::find_program_address(&[revelcy_pub.as_ref(), mint.pubkey().as_ref()], &program_id);
+    let mint_pub = params.mint.to_string();
+    let premarket_pda = params.premarket_pda.clone();
 
-    let priv_b58 = bs58::encode(mint.to_bytes()).into_string();
+    let priv_b58 = bs58::encode(params.mint.to_bytes()).into_string();
     insert_mint_signing_key(pool, &premarket_pda.to_string(), &mint_pub, &priv_b58)
         .await
         .context("failed to insert mint key into signing_keys")?;
@@ -115,7 +104,7 @@ pub async fn build_create_premarket_tx_unsigned(
         let accounts = vec![
             AccountMeta::new(revelcy_pub, true),
             AccountMeta::new(premarket_pda, false),
-            AccountMeta::new_readonly(mint.pubkey(), false),
+            AccountMeta::new_readonly(params.mint, false),
             AccountMeta::new(params.user, true),
             AccountMeta::new_readonly(system_program::ID, false),
         ];
@@ -144,15 +133,6 @@ pub async fn build_create_premarket_tx_unsigned(
         })
     }
     .await;
-
-    if let Err(ref e) = result {
-        if let Err(clean_err) = delete_signing_key_by_pubkey(pool, &mint_pub).await {
-            eprintln!(
-                "cleanup: failed to delete signing_key for pub_key {}: {clean_err:?} (root error: {e:?})",
-                mint_pub
-            );
-        }
-    }
 
     result
 }
@@ -190,6 +170,8 @@ pub fn parse_create_premarket_tx_from_base64(
     let user = resolve_account(msg, ix.accounts[3] as usize)?;
 
     let params = BuildPremarketTxParams {
+        mint,
+        premarket_pda,
         network,
         user,
         deadline: args.end_timestamp,

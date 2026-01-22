@@ -68,6 +68,8 @@ pub struct GetPremarketDataParams {
 
 #[derive(Debug, Clone)]
 pub struct BuildPremarketTxParams {
+    pub premarket_pda: Pubkey,
+    pub mint: Pubkey,
     pub network: SolanaNetwork,
     pub user: Pubkey,
     pub name: String,

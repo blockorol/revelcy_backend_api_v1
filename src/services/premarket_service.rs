@@ -24,7 +24,7 @@ use std::str::FromStr;
 pub async fn get_full_premarket_info(
     pool: &PgPool,
     key: &str,
-    key_type: PremarketLookupKeyType,
+    key_type: PremarketLookupKeyType
 ) -> Result<Option<FullPremarketInfo>, actix_web::Error> {
     let data = match key_type {
         PremarketLookupKeyType::BcAddress => {
@@ -767,8 +767,9 @@ pub async fn update_premarket_uri(
     pool: &PgPool,
     premarket_id: &Uuid, 
     new_uri: &String,
+    new_image_url: &String,
 ) -> Result<(), actix_web::Error>  {
-    let affected = premarket_repo::update_premarket_uri(pool, premarket_id, new_uri)
+    let affected = premarket_repo::update_premarket_uri(pool, premarket_id, new_uri, new_image_url)
         .await
         .map_err(ErrorInternalServerError)?;
 
@@ -780,7 +781,6 @@ pub async fn update_premarket_uri(
     }
 
     Ok(())
-
 }
 
 pub async fn user_claimed_token(

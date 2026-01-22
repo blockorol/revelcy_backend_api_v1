@@ -30,22 +30,14 @@ pub async fn get_user_concept(
 
 pub async fn get_premarket_id_by_bc_address(
     pool: &PgPool,
-    bc_address: &str
+    bc_address: &str,
 ) -> Result<Option<Uuid>> {
-    let premarket = sqlx::query_as::<_, PremarketInfoDbModel>(
-        r#"
-        SELECT id FROM premarket_info WHERE bc_address = $1 LIMIT 1;
-        "#
-    )
+    let id = sqlx::query_scalar::<_, Uuid>(r#"SELECT id FROM premarket_info WHERE bc_address = $1 LIMIT 1;"#)
     .bind(bc_address)
     .fetch_optional(pool)
     .await?;
 
-    if let Some(pm) = premarket {
-        Ok(Some(pm.id))
-    } else {
-        Ok(None)
-    }
+    Ok(id)
 }
 pub async fn get_premarket_info_by_name(
     pool: &PgPool,
@@ -101,7 +93,7 @@ pub async fn get_premarket_info_by_name(
 // todo: fix me to return service model with convertor simular to PremarketInfoServiceModel
 pub async fn get_premarket_info_by_bc_address(
     pool: &PgPool,
-    bc_address: &str,
+    bc_address: &str
 ) -> Result<Option<(PremarketInfoDbModel, CommunityInfoDbModel, Vec<CommunityLinkDbModel>)>> {
     let premarket = sqlx::query_as::<_, PremarketInfoDbModel>(
         r#"
@@ -763,16 +755,20 @@ pub async fn update_premarket_uri(
     pool: &PgPool,
     premarket_id: &Uuid,
     new_uri: &String,
+    new_image_url: &String,
 ) -> Result<u64> {
     let res = sqlx::query(
         r#"
         UPDATE premarket_info
-            SET data_uri = $2
+            SET 
+                data_uri = $2, 
+                image_url = $3
         WHERE id = $1
         "#,
     )
     .bind(premarket_id)
     .bind(new_uri)
+    .bind(new_image_url)
     .execute(pool)
     .await?;
 
