@@ -51,8 +51,8 @@ pub async fn create_user_with_wallet(pool: &PgPool, wallet_address: &str) -> Res
 
     let user_db = sqlx::query_as::<_, UserDbModel>(
         r#"
-        INSERT INTO users (username, avatar_url)
-        VALUES (NULL, NULL)
+        INSERT INTO users (username, avatar_url, status)
+        VALUES (NULL, NULL, 'INITIALISED')
         RETURNING id, username, avatar_url
         "#
     )
@@ -123,7 +123,9 @@ pub async fn update_username(pool: &PgPool, user_id: Uuid, new_username: &str) -
     sqlx::query(
         r#"
         UPDATE users
-        SET username = $1
+        SET
+            username = $1,
+            status = 'REGISTERED'
         WHERE id = $2
         "#
     )

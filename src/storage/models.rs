@@ -4,8 +4,15 @@ use serde::{Serialize, Deserialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 use std::convert::TryFrom;
+use crate::models::user::User;
+use crate::models::premarket::{ UserInfoShort, PremarketInfoServiceModel, PremarketGoal, TokenLinks, TokenInfo, PremarketState};
 
-use crate::models::premarket::{UserInfoShort, PremarketInfoServiceModel, PremarketGoal, TokenLinks, TokenInfo, PremarketState};
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct WhitelistDbModel {
+    pub id: Uuid,
+    pub premarket_id: Uuid,
+    pub user_id: Uuid,
+}
 
 
 #[derive(FromRow, Debug, Clone, Serialize, Deserialize)]
@@ -23,6 +30,19 @@ pub struct SigningKeyPair {
     pub priv_key: String,
 }
 
+
+impl TryFrom<UserDbModel> for User {
+    type Error = anyhow::Error;
+
+    fn try_from(u: UserDbModel) -> Result<Self> {
+        Ok(Self {
+            id: u.id,
+            username: u.username,
+            avatar_url: u.avatar_url,
+            wallets: vec![],
+        })
+    }
+}
 #[derive(sqlx::FromRow, Serialize, Deserialize)]
 pub struct UserDbModel {
     pub id: Uuid,

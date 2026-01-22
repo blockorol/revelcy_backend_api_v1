@@ -33,6 +33,10 @@ pub async fn get_full_premarket_info(
         PremarketLookupKeyType::Name => {
             premarket_repo::get_premarket_info_by_name(pool, key).await
         }
+        PremarketLookupKeyType::Id => {
+            let pm_id = Uuid::parse_str(key).map_err(|_| ErrorBadRequest("Invalid UUID format for premarket ID"))?;
+            premarket_repo::get_premarket_info_by_id(pool, &pm_id).await
+        }
     };
 
     match data {

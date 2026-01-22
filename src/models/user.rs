@@ -12,7 +12,7 @@ pub enum ApplyInviteCodeResult {
 }
 
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: Uuid,
     pub username: Option<String>,

@@ -9,6 +9,7 @@ use crate::api::premarket::{ TokenDynamicInfoDTO, HolderInfoDTO};
 pub enum PremarketLookupKeyType {
     BcAddress,
     Name,
+    Id
 }
 
 
