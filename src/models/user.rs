@@ -11,7 +11,6 @@ pub enum ApplyInviteCodeResult {
     AlreadyApplied,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: Uuid,

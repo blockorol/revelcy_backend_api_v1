@@ -4,8 +4,9 @@ use sqlx::PgPool;
 use crate::api::user::{
     AddAvatarResponseDto,
     AddUserNameRequestDto, AddUserNameResponseDto,
-    UserSetInfoRequestDTO, UserSetInfoResponseDTO,
+    SearchUsersRequestDto, SearchUsersResponseDto,
     SetInviteCodeRequestDto, SetInviteCodeResponseDto,
+    UserDto, UserSetInfoRequestDTO, UserSetInfoResponseDTO
 };
 use crate::api::errors::{ApiError, ApiErrorCode, FieldError, ApiResult};
 use uuid::Uuid;
@@ -28,6 +29,7 @@ pub fn user_scope() -> Scope {
         .route("/set_invite_code", web::post().to(set_invite_code))
         .route("/update_username", web::post().to(update_username))
         .route("/update_avatar", web::post().to(update_avatar))
+        .route("/search", web::post().to(search_users))
 }
 
 pub async fn user_set_info(
@@ -114,24 +116,26 @@ pub async fn user_set_info(
     Ok(HttpResponse::Ok().json(UserSetInfoResponseDTO { ok: true }))
 }
 
-pub async fn set_invite_code(
+async fn set_invite_code(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     payload: web::Json<SetInviteCodeRequestDto>,
 ) -> ApiResult<HttpResponse> {
+    let dto = payload.into_inner();
+
     let user_info = extract_user_info_from_request(&req)
         .map_err(|_| ApiError::auth_invalid_token())?;
 
-    let invite_code = payload.invite_code.trim();
+    let invite_code = dto.invite_code.trim();
     if invite_code.is_empty() {
-        return Err(ApiError::from_field_errors(vec![FieldError{
+        return Err(ApiError::from_field_errors(vec![FieldError {
             field: "invite_code",
             code: ApiErrorCode::ValidationError,
             message: "invite_code is empty",
         }]));
     }
 
-    let result = user_service::set_invite_code_once(pool.clone(), user_info.user_id, invite_code)
+    let result = user_service::set_invite_code_once(pool.get_ref(), user_info.user_id, invite_code)
         .await
         .map_err(|e| {
             eprintln!("set_invite_code db error: {e:?}");
@@ -149,117 +153,121 @@ pub async fn set_invite_code(
             );
             Ok(HttpResponse::Ok().json(SetInviteCodeResponseDto { jwt: token }))
         }
-
         ApplyInviteCodeResult::InviteCodeNotFound => Err(ApiError::invite_code_not_found()),
-
         ApplyInviteCodeResult::AlreadyApplied => Err(ApiError::invite_code_already_applied()),
     }
 }
 
 
-async fn update_username(
-    pool: web::Data<PgPool>,
+pub async fn update_username(
     req: HttpRequest,
-    payload: web::Json<AddUserNameRequestDto>
-) -> HttpResponse {
-    let user_info = match extract_user_info_from_request(&req) {
-        Ok(user_info) => user_info,
-        Err(response) => return response,
-    };
+    pool: web::Data<PgPool>,
+    payload: web::Json<AddUserNameRequestDto>,
+) -> ApiResult<HttpResponse> {
+    let dto = payload.into_inner();
 
-    if let Err(err) = user_service::set_username(pool, user_info.user_id, &payload.username).await {
-        return HttpResponse::Unauthorized().body(format!("err in creation: {}", err));
+    let user_info = extract_user_info_from_request(&req)
+        .map_err(|_| ApiError::auth_invalid_token())?;
+
+    let username = dto.username.trim();
+    if username.is_empty() {
+        return Err(ApiError::from_field_errors(vec![FieldError {
+            field: "username",
+            code: ApiErrorCode::ValidationError,
+            message: "username is empty",
+        }]));
     }
+
+    user_service::set_username(pool.get_ref(), user_info.user_id, username)
+        .await
+        .map_err(|e| {
+            eprintln!("update_username db error: {e:?}");
+            ApiError::internal_update_db_error()
+        })?;
+
     let token = jwt_service::create_jwt_with_user(
         user_info.user_id,
-        user_info
-            .current_wallet
-            .as_deref()
-            .unwrap_or_default(),
-        Some(payload.username.clone()),
+        user_info.current_wallet.as_deref().unwrap_or_default(),
+        Some(username.to_string()),
         user_info.avatar_url.clone(),
         &user_info.nonce,
     );
 
-
-    let response = AddUserNameResponseDto {
-        username: payload.username.to_string(),
+    Ok(HttpResponse::Ok().json(AddUserNameResponseDto {
+        username: username.to_string(),
         jwt: token,
-    };
-    HttpResponse::Ok().json(response)
+    }))
 }
 
-async fn update_avatar(
-    pool: web::Data<PgPool>,
+pub async fn update_avatar(
     req: HttpRequest,
+    pool: web::Data<PgPool>,
     mut payload: Multipart,
-) -> HttpResponse {
-    println!("🔄 [UPDATE_AVATAR] Starting avatar update request");
-    
-    // Extract user info from JWT token
-    let user_info = match extract_user_info_from_request(&req) {
-        Ok(user_info) => {
-            println!("✅ [UPDATE_AVATAR] Successfully extracted user info - User ID: {}, Username: {:?}, Wallet: {:?}", 
-                user_info.user_id, 
-                user_info.username, 
-                user_info.current_wallet
-            );
-            user_info
-        },
-        Err(response) => {
-            println!("❌ [UPDATE_AVATAR] Failed to extract user info from request");
-            return response;
-        },
-    };
+) -> ApiResult<HttpResponse> {
+    let user_info = extract_user_info_from_request(&req)
+        .map_err(|_| ApiError::auth_invalid_token())?;
 
-    // Extract image file from multipart payload
-    println!("📁 [UPDATE_AVATAR] Extracting image file from multipart payload");
-    let bytes = match extract_single_png_from_multipart(&mut payload).await {
-        Ok(bytes) => {
-            println!("✅ [UPDATE_AVATAR] Successfully extracted image file - Size: {} bytes", bytes.len());
-            bytes
-        },
-        Err(resp) => {
-            println!("❌ [UPDATE_AVATAR] Failed to extract image file from multipart payload - Response: {:?}", resp);
-            return resp;
-        },
-    };
+    let bytes = extract_single_png_from_multipart(&mut payload).await
+        .map_err(|_| ApiError::from_field_errors(vec![FieldError {
+            field: "avatar",
+            code: ApiErrorCode::ValidationError,
+            message: "invalid image upload".into(),
+        }]))?;
 
-    // Save avatar to storage
-    println!("💾 [UPDATE_AVATAR] Saving avatar to storage for user ID: {}", user_info.user_id);
-    let avatar_url = match user_service::set_avatar(pool.clone(), user_info.user_id, &bytes).await {
-        Ok(url) => {
-            println!("✅ [UPDATE_AVATAR] Successfully saved avatar - URL: {}", url);
-            url
-        },
-        Err(err) => {
-            println!("❌ [UPDATE_AVATAR] Failed to save avatar - Error: {}", err);
-            return HttpResponse::InternalServerError()
-                .body(format!("Avatar saving failed: {}", err));
-        },
-    };
+    let avatar_url = user_service::set_avatar(pool.get_ref(), user_info.user_id, &bytes)
+        .await
+        .map_err(|e| {
+            eprintln!("update_avatar save error: {e:?}");
+            ApiError::internal_update_db_error()
+        })?;
 
-    // Create new JWT token with updated avatar
-    println!("🔐 [UPDATE_AVATAR] Creating new JWT token with updated avatar");
     let token = jwt_service::create_jwt_with_user(
         user_info.user_id,
-        user_info
-            .current_wallet
-            .as_deref()
-            .unwrap_or_default(),
+        user_info.current_wallet.as_deref().unwrap_or_default(),
         Some(user_info.username.clone()),
         Some(avatar_url.clone()),
         &user_info.nonce,
     );
 
-    let response = AddAvatarResponseDto {
-        avatar_url: avatar_url.to_string(),
+    Ok(HttpResponse::Ok().json(AddAvatarResponseDto {
+        avatar_url,
         jwt: token,
-    };
-    
-    println!("✅ [UPDATE_AVATAR] Successfully completed avatar update - Final avatar URL: {}", response.avatar_url);
-    HttpResponse::Ok().json(response)
+    }))
 }
+
+pub async fn search_users(
+    _req: HttpRequest,
+    pool: web::Data<PgPool>,
+    payload: web::Json<SearchUsersRequestDto>,
+) -> ApiResult<HttpResponse> {
+    let dto = payload.into_inner();
+    let input = dto.input.trim();
+    let limit = dto.limit.clamp(1, 50);
+
+    if input.is_empty() {
+        return Ok(HttpResponse::Ok().json(SearchUsersResponseDto { items: vec![] }));
+    }
+
+    let users = user_service::search_by_username(pool.get_ref(), input, limit)
+        .await
+        .map_err(|e| {
+            eprintln!("search_username db error: {e:?}");
+            ApiError::internal_get_db_error()
+        })?;
+
+    let items = users
+        .into_iter()
+        .map(|u| UserDto {
+            id: u.id.to_string(),
+            username: u.username,
+            avatar_url: u.avatar_url,
+            wallets: u.wallets,
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(SearchUsersResponseDto { items }))
+}
+
 
 pub fn extract_user_info_from_request(req: &HttpRequest) -> Result<jwt_service::TokenWithUserInfo, HttpResponse> {
     let token = req

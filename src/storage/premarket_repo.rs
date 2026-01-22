@@ -394,6 +394,7 @@ pub async fn update_availability_info(
     pool: &PgPool,
     bc_address: &str,
     is_hided: Option<bool>,
+    is_whitelist_enabled: Option<bool>,
     short_url_name: Option<String>,
 ) -> Result<()> {
     let id_option = get_premarket_id_by_bc_address(pool, bc_address).await?;
@@ -403,14 +404,16 @@ pub async fn update_availability_info(
         r#"
         UPDATE premarket_info
             SET
-                is_hided = COALESCE($1, is_hided),
-                short_url_name = COALESCE($2, short_url_name)
-            WHERE id = $3
+                is_hided = COALESCE($2, is_hided),
+                short_url_name = COALESCE($3, short_url_name)
+                is_whitelist_enabled = COALESCE($4, is_whitelist_enabled)
+            WHERE id = $1
         "#,
     )
+    .bind(premarket_info_id)
     .bind(is_hided)
     .bind(short_url_name)
-    .bind(premarket_info_id)
+    .bind(is_whitelist_enabled)
     .execute(pool)
     .await?;
 

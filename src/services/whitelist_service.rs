@@ -135,7 +135,7 @@ pub async fn approve_user(
         premarket_id,
         user_id,
         WhitelistStatus::Approved,
-    )
+    ).await
 }
 
 pub async fn reject_user(
@@ -148,7 +148,7 @@ pub async fn reject_user(
         premarket_id,
         user_id,
         WhitelistStatus::Rejected,
-    )
+    ).await
 }
 
 pub async fn set_user_status(
@@ -157,7 +157,7 @@ pub async fn set_user_status(
     user_id: Uuid,
     status: WhitelistStatus,
 ) -> Result<(), actix_web::Error> {
-    whitelist_storage::update_status(pool, premarket_id, user_id, status)
+    whitelist_repo::update_status(pool, premarket_id, user_id, status)
         .await
         .map_err(ErrorInternalServerError)
 }

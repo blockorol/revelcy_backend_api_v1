@@ -5,7 +5,7 @@ use actix_web::error::ErrorInternalServerError;
 use sqlx::PgPool;
 use solana_sdk::pubkey::Pubkey;
 
-use crate::api::errors::{ApiError, ApiResult};
+use crate::api::errors::{ApiError, ApiErrorCode,FieldError, ApiResult};
 use crate::api::premarket::Network;
 use crate::api::whitelist::{
     WhitelistSetStatusRequest, WhitelistSetStatusResponse,
@@ -201,7 +201,11 @@ pub async fn get_premarket_whitelist(
     ensure_creator(pool.get_ref(), dto.premarket_id, ctx.user.internal_id).await?;
     let status: Option<WhitelistStatus> = dto.status.map(|s| {
         WhitelistStatus::from_str(&s)
-            .map_err(|_| ApiError::invalid_whitelist_status())
+            .map_err(|_| ApiError::from_field_errors(vec![FieldError {
+                field: "status",
+                code: ApiErrorCode::ValidationError,
+                message: "invalid status value".into(),
+            }]))
     }).transpose()?;
 
     let res = whitelist_service::get_users(

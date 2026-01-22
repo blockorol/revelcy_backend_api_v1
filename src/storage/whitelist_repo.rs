@@ -1,4 +1,5 @@
 use anyhow::{Result, bail};
+use std::str::FromStr;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -124,7 +125,7 @@ pub async fn list_users_by_status(
     .fetch_one(pool)
     .await?;
 
-    let rows = sqlx::query_as::<_, User>(
+    let rows: Vec<UserDbModel> = sqlx::query_as::<_, UserDbModel>(
         r#"
         SELECT u.id, u.username, u.avatar_url
         FROM whitelist w
@@ -142,7 +143,13 @@ pub async fn list_users_by_status(
     .fetch_all(pool)
     .await?;
 
-    Ok((rows, total))
+    // DB -> Service mapping inside storage layer
+    let users: Vec<User> = rows
+        .into_iter()
+        .map(User::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok((users, total))
 }
 
 

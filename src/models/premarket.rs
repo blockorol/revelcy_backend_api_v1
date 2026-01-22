@@ -126,6 +126,7 @@ pub struct CreatePremarketInfoServiceModel {
     pub finished_timestamp: Option<i64>,
     pub is_extended: bool,
     pub is_hided: bool,
+    pub is_whitelist_enabled: bool,
     pub state: PremarketState,
 }
 
@@ -142,6 +143,7 @@ pub struct PremarketInfoServiceModel {
     pub finished_timestamp: Option<i64>,
     pub is_extended: bool,
     pub is_hided: bool,
+    pub is_whitelist_enabled: bool,
     pub state: PremarketState,
 }
 
