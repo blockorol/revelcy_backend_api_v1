@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 
 use crate::config;
-use crate::models::user::ApplyInviteCodeResult;
+use crate::models::user::{ApplyInviteCodeResult, User};
 use crate::storage::user_repo;
 use crate::services::file_service;
 
@@ -49,4 +49,22 @@ pub async fn set_avatar(
         .await
         .map_err(ErrorInternalServerError)?;
     Ok(url)
+}
+
+pub async fn get_or_create_by_wallet_address(
+    pool: &PgPool,
+    wallet_address: &str,
+) -> Result<User, actix_web::Error> {
+    match user_repo::get_user_by_wallet(pool, wallet_address)
+        .await
+        .map_err(ErrorInternalServerError)?
+    {
+        Some(user) => Ok(user),
+        None => {
+            let user = user_repo::create_user_with_wallet(pool, wallet_address)
+                .await
+                .map_err(ErrorInternalServerError)?;
+            Ok(user)
+        }
+    }
 }
