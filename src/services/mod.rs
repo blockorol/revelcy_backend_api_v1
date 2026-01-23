@@ -9,4 +9,5 @@ pub mod solana_service_v2;
 pub mod background_finaliser;
 pub mod ipfs_service;
 pub mod user_info_service;
+pub mod vesting_service;
 

@@ -23,7 +23,7 @@ bincode = "1.3"
 borsh = "0.10.4"
 bs58 = "0.5"
 sha2 = "0.10"
-chrono = { version = "0.4", features = ["clock"] }
+chrono = { version = "0.4", features = ["clock", "serde"] }
 futures-util = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -31,7 +31,7 @@ jsonwebtoken = "9.0"
 rand = "0.8"
 base64 = "0.21"
 dotenvy = "0.15"
-sqlx = { version = "0.6", default-features = false, features = ["runtime-tokio-rustls", "postgres", "macros", "migrate","uuid"] }
+sqlx = { version = "0.6", default-features = false, features = ["runtime-tokio-rustls", "postgres", "macros", "migrate","uuid", "chrono"] }
 tokio = { version = "1.28", features = ["macros", "rt-multi-thread"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 solana-client = "2.3.1"

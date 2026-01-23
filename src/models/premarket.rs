@@ -406,3 +406,41 @@ pub struct PythResponse {
     pub parsed: Vec<PythParsedData>,
 }
 
+// Vesting Service Models
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VestingInfo {
+    pub vesting_id: Uuid,
+    pub vesting_address: String,
+    pub premarket_id: Uuid,
+    pub premarket_address: String,
+    pub mint_address: String,
+    pub creator_id: Uuid,
+    pub creator_address: String,
+    pub vesting_period: i64,
+    pub init_unlock: i64,
+    pub timestamp_start: Option<i64>,
+    pub timestamp_end: Option<i64>,
+    pub is_active: bool,
+    pub token_name: String,
+    pub token_symbol: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VestingHolderInfo {
+    pub holder_id: Option<Uuid>,
+    pub holder_wallet: String,
+    pub tokens_total: i64,
+    pub tokens_claimed: i64,
+    pub tokens_available: i64,
+    pub username: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FullVestingInfo {
+    pub vesting_info: VestingInfo,
+    pub holders: Vec<VestingHolderInfo>,
+    pub total_holders: usize,
+    pub total_tokens: i64,
+    pub total_tokens_claimed: i64,
+}

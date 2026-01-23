@@ -46,6 +46,7 @@ pub enum ApiErrorCode {
     PremarketAlreadyFinished,
 
     // Vesting validation
+    VestingNotFound,
     InvalidTimestamp,
     InvalidPercentage,
 
@@ -380,6 +381,7 @@ impl ResponseError for ApiError {
             | PremarketFinishGoalNotReached
             | PremarketAlreadyFinished
             | MissingPremarket
+            | VestingNotFound
             | InvalidTimestamp
             | InvalidPercentage
             | MissingField

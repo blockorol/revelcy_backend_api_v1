@@ -203,9 +203,6 @@ pub struct FinishPremarketTxRequest {
     pub network: String,          // "devnet" | "mainnet-beta"
     pub user_pubkey: String,      // base58
     pub premarket_account: String, // base58
-    pub timestamp_start: i64,     // vesting start timestamp
-    pub timestamp_end: i64,       // vesting end timestamp
-    pub init_unlock: u64,         // initial unlock percentage (0-100)
 }
 
 #[derive(serde::Deserialize)]
@@ -311,10 +308,6 @@ pub struct TxToSignRequest {
     pub unsigned_tx: String,      // base64(serialized Transaction)
     pub tx_type: String,          // "create_premarket" | "join_premarket" | ...
     pub premarket: Option<String>,
-    // Vesting parameters (required when tx_type == "finish_premarket")
-    pub timestamp_start: Option<i64>,
-    pub timestamp_end: Option<i64>,
-    pub init_unlock: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -331,6 +324,10 @@ pub struct CreatePremarketTxRequest {
     pub max_sol_lamp: u64,
     #[serde(with = "string_as_number")]
     pub creator_allocate_lamp: u64,
+    #[serde(with = "string_as_number")]
+    pub vesting_period: i64,
+    #[serde(with = "string_as_number")]
+    pub init_unlock: i64,
 }
 
 #[derive(Serialize)]
@@ -430,4 +427,56 @@ pub struct CheckTxResponse {
     pub creator_allocate_lamp: Option<u64>,
     pub premarket: Option<String>,
     pub lamports_in: Option<u64>,
+}
+
+// Vesting API DTOs
+#[derive(Deserialize)]
+pub struct GetVestingInfoQuery {
+    pub lookup_type: String, // "premarket_id" | "premarket_address" | "vesting_address" | "mint_address"
+    pub key: String,
+}
+
+#[derive(Serialize)]
+pub struct VestingInfoDTO {
+    pub vesting_id: String,
+    pub vesting_address: String,
+    pub premarket_id: String,
+    pub premarket_address: String,
+    pub mint_address: String,
+    pub creator_id: String,
+    pub creator_address: String,
+    #[serde(with = "string_as_number")]
+    pub vesting_period: i64,
+    #[serde(with = "string_as_number")]
+    pub init_unlock: i64,
+    pub timestamp_start: Option<i64>,
+    pub timestamp_end: Option<i64>,
+    pub is_active: bool,
+    pub token_name: String,
+    pub token_symbol: String,
+}
+
+#[derive(Serialize)]
+pub struct VestingHolderDTO {
+    pub holder_id: Option<String>,
+    pub holder_wallet: String,
+    #[serde(with = "string_as_number")]
+    pub tokens_total: i64,
+    #[serde(with = "string_as_number")]
+    pub tokens_claimed: i64,
+    #[serde(with = "string_as_number")]
+    pub tokens_available: i64,
+    pub username: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct FullVestingInfoDTO {
+    pub vesting_info: VestingInfoDTO,
+    pub holders: Vec<VestingHolderDTO>,
+    pub total_holders: usize,
+    #[serde(with = "string_as_number")]
+    pub total_tokens: i64,
+    #[serde(with = "string_as_number")]
+    pub total_tokens_claimed: i64,
 }

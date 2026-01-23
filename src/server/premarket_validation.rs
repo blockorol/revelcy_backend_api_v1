@@ -227,7 +227,7 @@ pub fn validate_finish_premarket(
         });
     }
 
-    if timestamp_end <= timestamp_start {
+    if timestamp_end < timestamp_start {
         errors.push(FieldError {
             field: "timestamp_end",
             code: ApiErrorCode::InvalidTimestamp,
@@ -235,21 +235,14 @@ pub fn validate_finish_premarket(
         });
     }
 
-    // Reasonable vesting duration: at least 1 hour, max 5 years
+    // Reasonable vesting duration: at least 1 hour, max 1 year
     let vesting_duration = timestamp_end - timestamp_start;
-    if vesting_duration < 60 * 60 {
-        errors.push(FieldError {
-            field: "timestamp_end",
-            code: ApiErrorCode::InvalidTimestamp,
-            message: "vesting duration must be at least 1 hour",
-        });
-    }
 
-    if vesting_duration > 60 * 60 * 24 * 365 * 5 {
+    if vesting_duration > 60 * 60 * 24 * 365{
         errors.push(FieldError {
             field: "timestamp_end",
             code: ApiErrorCode::InvalidTimestamp,
-            message: "vesting duration cannot exceed 5 years",
+            message: "vesting duration cannot exceed 1 years",
         });
     }
 
