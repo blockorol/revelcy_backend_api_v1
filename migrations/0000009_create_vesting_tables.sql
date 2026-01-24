@@ -7,8 +7,8 @@ CREATE TABLE IF NOT EXISTS vesting_info (
   vesting_address text NOT NULL UNIQUE,
   vesting_period bigint NOT NULL,
   init_unlock bigint NOT NULL,
-  timestamp_start bigint NULL,
-  timestamp_end bigint NULL,
+  timestamp_start bigint DEFAULT NULL,
+  timestamp_end bigint DEFAULT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -19,41 +19,38 @@ CREATE INDEX IF NOT EXISTS idx_vesting_info_premarket_id
 CREATE INDEX IF NOT EXISTS idx_vesting_info_vesting_address 
   ON vesting_info(vesting_address);
 
-CREATE TABLE IF NOT EXISTS vesting_holders (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  vesting_info_id uuid NOT NULL REFERENCES vesting_info(id) ON DELETE CASCADE,
-  holder_id uuid NULL REFERENCES users(id),
-  holder_wallet text NOT NULL,
-  tokens_total bigint NOT NULL DEFAULT 0,
-  tokens_claimed bigint NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE(vesting_info_id, holder_wallet)
-);
+-- Add vesting-related fields to premarket_holders
+ALTER TABLE premarket_holders 
+  ADD COLUMN IF NOT EXISTS amount_token BIGINT DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS claimed_amount_token BIGINT DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
 
-CREATE INDEX IF NOT EXISTS idx_vesting_holders_vesting_info_id 
-  ON vesting_holders(vesting_info_id);
+-- Update holder_id to have foreign key constraint
+ALTER TABLE premarket_holders 
+  DROP CONSTRAINT IF EXISTS premarket_holders_holder_id_fkey;
 
-CREATE INDEX IF NOT EXISTS idx_vesting_holders_holder_id 
-  ON vesting_holders(holder_id);
+ALTER TABLE premarket_holders 
+  ADD CONSTRAINT premarket_holders_holder_id_fkey 
+  FOREIGN KEY (holder_id) REFERENCES users(id) ON DELETE CASCADE;
 
-CREATE INDEX IF NOT EXISTS idx_vesting_holders_holder_wallet 
-  ON vesting_holders(holder_wallet);
-
--- Composite index for common queries
-CREATE INDEX IF NOT EXISTS idx_vesting_holders_vesting_holder 
-  ON vesting_holders(vesting_info_id, holder_wallet);
+-- Add index for holder_id
+CREATE INDEX IF NOT EXISTS idx_premarket_holders_holder_id 
+  ON premarket_holders(holder_id);
 
 -- +goose StatementEnd
 
 -- +goose Down
 -- +goose StatementBegin
 
-DROP INDEX IF EXISTS idx_vesting_holders_vesting_holder;
-DROP INDEX IF EXISTS idx_vesting_holders_holder_wallet;
-DROP INDEX IF EXISTS idx_vesting_holders_holder_id;
-DROP INDEX IF EXISTS idx_vesting_holders_vesting_info_id;
-DROP TABLE IF EXISTS vesting_holders;
+DROP INDEX IF EXISTS idx_premarket_holders_holder_id;
+
+ALTER TABLE premarket_holders 
+  DROP CONSTRAINT IF EXISTS premarket_holders_holder_id_fkey;
+
+ALTER TABLE premarket_holders 
+  DROP COLUMN IF EXISTS updated_at,
+  DROP COLUMN IF EXISTS claimed_amount_token,
+  DROP COLUMN IF EXISTS amount_token;
 
 DROP INDEX IF EXISTS idx_vesting_info_vesting_address;
 DROP INDEX IF EXISTS idx_vesting_info_premarket_id;

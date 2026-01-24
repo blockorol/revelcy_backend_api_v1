@@ -429,9 +429,10 @@ pub struct VestingInfo {
 pub struct VestingHolderInfo {
     pub holder_id: Option<Uuid>,
     pub holder_wallet: String,
-    pub tokens_total: i64,
-    pub tokens_claimed: i64,
-    pub tokens_available: i64,
+    pub amount_sol_lamp: i64,
+    pub amount_tokens: Option<i64>,
+    pub claimed_tokens: Option<i64>,
+    pub available_tokens: Option<i64>,
     pub username: Option<String>,
     pub avatar_url: Option<String>,
 }

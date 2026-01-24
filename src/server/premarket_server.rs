@@ -521,122 +521,7 @@ pub async fn sign_and_send_transaction(
     }
 
     if tx_type == "finish_premarket" {
-        // todo: get premarket_pub from tx!!!! 
-        let premarket_str: String = dto.premarket.clone().ok_or_else(ApiError::missing_premarket)?;
-        let premarket_pubkey = Pubkey::from_str(&premarket_str)
-            .map_err(|_| ApiError::invalid_premarket_pubkey())?;
 
-        // 1) DB validation (same as build) - get premarket info to calculate vesting parameters
-        let full = premarket_service::get_full_premarket_info(pool.get_ref(), &premarket_str, PremarketLookupKeyType::BcAddress)
-            .await
-            .map_err(|e| { eprintln!("get_full_premarket_info error: {e:?}"); ApiError::internal_sign_tx_failed_goal() })?
-            .ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
-                field: "premarket",
-                code: ApiErrorCode::PremarketNotFound,
-                message: "premarket not found",
-            }]))?;
-
-        // Get vesting info from DB to get vesting_period and init_unlock
-        let vesting_info = vesting_service::get_full_vesting_info(
-                pool.get_ref(),
-                &premarket_str,
-                vesting_service::VestingLookupType::PremarketAddress
-            )
-            .await
-            .map_err(|e| {
-                eprintln!("get_vesting_info error: {e:?}");
-                ApiError::internal_build_tx_failed()
-            })?
-            .ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
-                field: "vesting",
-                code: ApiErrorCode::VestingNotFound,
-                message: "vesting not found for this premarket",
-            }]))?;
-
-        // Calculate vesting timestamps from database values
-        let now = Utc::now().timestamp();
-        let timestamp_start = now;
-        let timestamp_end = now + vesting_info.vesting_info.vesting_period;
-        let init_unlock = vesting_info.vesting_info.init_unlock as u64;
-
-        validate_finish_premarket(&full, timestamp_start, timestamp_end, init_unlock)
-            .map_err(ApiError::from_field_errors)?;
-
-        // 2) optional: parse tx and ensure correct accounts
-        // TODO: parse_finish_premarket_tx_from_base64(&dto.unsigned_tx, ctx.network)
-        //   - check parsed.user == ctx.user.current_pubkey
-        //   - check parsed.premarket == premarket_pub
-
-        // 3) load mint key + sign
-        let mint_kp = get_mint_kp(pool.get_ref(), premarket_pubkey).await.map_err(|e| {
-            eprintln!("mint_kp load error: {e:?}");
-            ApiError::internal_sign_tx_failed()
-        })?;
-
-        let extra = vec![mint_kp];
-        extra_signers =  Some(extra);
-        
-        let pool2 = pool.clone();
-        let vesting_ts_start = timestamp_start;
-        let vesting_ts_end = timestamp_end;
-        
-        update_method = Box::new(move || { 
-            let pool2 = pool2.clone();
-            let premarket_str = premarket_str.clone();
-            let vesting_ts_start = vesting_ts_start;
-            let vesting_ts_end = vesting_ts_end;
-            
-            Box::pin(async move {
-                // 1) Update premarket state to Finished
-                if let Err(e) = premarket_service::set_premarket_state(
-                    pool2.get_ref(),
-                    &premarket_str,
-                    PremarketState::Finished,
-                    Some(Utc::now().timestamp()), // TODO: change me to time from tx
-                ).await {
-                    eprintln!(
-                        "Failed to update DB: finish_premarket '{}' state to 'Finished' by user {}({}): {}",
-                        premarket_str,
-                        ctx.user.internal_id.to_string(),
-                        ctx.user.current_pubkey.to_string(),
-                        e,
-                    );
-                    return;
-                }
-                
-                // 2) Get vesting_info_id by premarket address
-                let vesting_info = match vesting_repo::get_vesting_info_by_premarket_address(
-                    pool2.get_ref(),
-                    &premarket_str
-                ).await {
-                    Ok(Some(vi)) => vi,
-                    Ok(None) => {
-                        eprintln!("❌ No vesting_info found for premarket '{}'", premarket_str);
-                        return;
-                    }
-                    Err(e) => {
-                        eprintln!("❌ Failed to get vesting_info for premarket '{}': {}", premarket_str, e);
-                        return;
-                    }
-                };
-                
-                // 3) Update vesting_info timestamps
-                if let Err(e) = vesting_repo::update_vesting_timestamps(
-                    pool2.get_ref(),
-                    vesting_info.vesting_id,
-                    vesting_ts_start,
-                    vesting_ts_end,
-                ).await {
-                    eprintln!(
-                        "❌ Failed to update vesting timestamps for premarket '{}': {}",
-                        premarket_str, e
-                    );
-                    return;
-                }
-
-                // 4) TO-DO: ADD VESTING HOLDERS!!!
-            })
-        });
     }
 
     // tx/kill
@@ -978,8 +863,8 @@ pub async fn finish_premarket_tx(
     // Calculate vesting timestamps from database values
     let now = Utc::now().timestamp();
     let timestamp_start = now;
-    let timestamp_end = now + vesting_info.vesting_info.vesting_period;
-    let init_unlock = vesting_info.vesting_info.init_unlock as u64;
+    let timestamp_end = now + vesting_info.vesting_period;
+    let init_unlock = vesting_info.init_unlock as u64;
 
     // 3) validate finish business rules
     validate_finish_premarket(&premarket_info, timestamp_start, timestamp_end, init_unlock)

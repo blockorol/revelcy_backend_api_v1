@@ -2,7 +2,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::models::{
-    FullVestingInfoDbModel, VestingHolderDbModel, VestingHolderWithUserDbModel,
+    FullVestingInfoDbModel, HolderDbModel,
     VestingInfoDbModel,
 };
 
@@ -130,31 +130,35 @@ pub async fn get_vesting_info_by_premarket_address(
     .await
 }
 
-/// Get all vesting holders for a vesting_info_id with user information
-pub async fn get_vesting_holders_by_vesting_id(
+/// Get all vesting holders (from premarket_holders) for a premarket_id with user information
+pub async fn get_vesting_holders_by_premarket_id(
     pool: &PgPool,
-    vesting_info_id: Uuid,
-) -> Result<Vec<VestingHolderWithUserDbModel>, sqlx::Error> {
-    sqlx::query_as::<_, VestingHolderWithUserDbModel>(
+    premarket_id: Uuid,
+) -> Result<Vec<HolderDbModel>, sqlx::Error> {
+    sqlx::query_as::<_, HolderDbModel>(
         r#"
         SELECT 
-            vh.id,
-            vh.vesting_info_id,
-            vh.holder_id,
-            vh.holder_wallet,
-            vh.tokens_total,
-            vh.tokens_claimed,
-            vh.created_at,
-            vh.updated_at,
+            ph.id,
+            ph.premarket_info_id,
+            ph.holder_id,
+            ph.holder_wallet,
+            ph.amount_lamport,
+            ph.join_timestamp,
+            ph.out_timestamp,
+            ph.claimed,
             u.username,
-            u.avatar_url
-        FROM vesting_holders vh
-        LEFT JOIN users u ON vh.holder_id = u.id
-        WHERE vh.vesting_info_id = $1
-        ORDER BY vh.tokens_total DESC
+            u.avatar_url,
+            ph.amount_token,
+            ph.claimed_amount_token,
+            ph.updated_at
+        FROM premarket_holders ph
+        LEFT JOIN users u ON ph.holder_id = u.id
+        WHERE ph.premarket_info_id = $1
+          AND ph.out_timestamp IS NULL
+        ORDER BY ph.amount_token DESC NULLS LAST, ph.amount_lamport DESC
         "#
     )
-    .bind(vesting_info_id)
+    .bind(premarket_id)
     .fetch_all(pool)
     .await
 }
@@ -208,81 +212,80 @@ pub async fn update_vesting_timestamps(
     Ok(())
 }
 
-/// Create or update vesting holder
-pub async fn upsert_vesting_holder(
+/// Update holder's token amounts (amount_token and claimed_amount_token) in premarket_holders
+pub async fn update_holder_token_amounts(
     pool: &PgPool,
-    vesting_info_id: Uuid,
+    premarket_id: Uuid,
     holder_wallet: &str,
-    holder_id: Option<Uuid>,
-    tokens_total: i64,
-) -> Result<VestingHolderDbModel, sqlx::Error> {
-    sqlx::query_as::<_, VestingHolderDbModel>(
-        r#"
-        INSERT INTO vesting_holders (vesting_info_id, holder_wallet, holder_id, tokens_total)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (vesting_info_id, holder_wallet) 
-        DO UPDATE SET 
-            tokens_total = $4,
-            holder_id = COALESCE($3, vesting_holders.holder_id),
-            updated_at = now()
-        RETURNING id, vesting_info_id, holder_id, holder_wallet, tokens_total, tokens_claimed, created_at, updated_at
-        "#
-    )
-    .bind(vesting_info_id)
-    .bind(holder_wallet)
-    .bind(holder_id)
-    .bind(tokens_total)
-    .fetch_one(pool)
-    .await
-}
-
-/// Update tokens claimed for a holder
-pub async fn update_tokens_claimed(
-    pool: &PgPool,
-    vesting_info_id: Uuid,
-    holder_wallet: &str,
-    tokens_claimed: i64,
+    amount_token: i64,
+    claimed_amount_token: i64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
-        UPDATE vesting_holders 
-        SET tokens_claimed = $3, updated_at = now()
-        WHERE vesting_info_id = $1 AND holder_wallet = $2
+        UPDATE premarket_holders 
+        SET amount_token = $3, claimed_amount_token = $4, updated_at = now()
+        WHERE premarket_info_id = $1 AND holder_wallet = $2
         "#
     )
-    .bind(vesting_info_id)
+    .bind(premarket_id)
     .bind(holder_wallet)
-    .bind(tokens_claimed)
+    .bind(amount_token)
+    .bind(claimed_amount_token)
     .execute(pool)
     .await?;
     Ok(())
 }
 
-/// Get vesting holder by wallet
-pub async fn get_vesting_holder_by_wallet(
+/// Update tokens claimed for a holder
+pub async fn update_tokens_claimed(
     pool: &PgPool,
-    vesting_info_id: Uuid,
+    premarket_id: Uuid,
     holder_wallet: &str,
-) -> Result<Option<VestingHolderWithUserDbModel>, sqlx::Error> {
-    sqlx::query_as::<_, VestingHolderWithUserDbModel>(
+    claimed_amount_token: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
         r#"
-        SELECT 
-            vh.id,
-            vh.vesting_info_id,
-            vh.holder_id,
-            vh.holder_wallet,
-            vh.tokens_total,
-            vh.tokens_claimed,
-            vh.created_at,
-            vh.updated_at,
-            u.username,
-            u.avatar_url
-        FROM vesting_holders vh
-        LEFT JOIN users u ON vh.holder_id = u.id
-        WHERE vh.vesting_info_id = $1 AND vh.holder_wallet = $2
+        UPDATE premarket_holders 
+        SET claimed_amount_token = $3, updated_at = now()
+        WHERE premarket_info_id = $1 AND holder_wallet = $2
         "#
     )
-    .bind(vesting_info_id)
+    .bind(premarket_id)
+    .bind(holder_wallet)
+    .bind(claimed_amount_token)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Get holder by wallet from premarket_holders
+pub async fn get_holder_by_wallet(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    holder_wallet: &str,
+) -> Result<Option<HolderDbModel>, sqlx::Error> {
+    sqlx::query_as::<_, HolderDbModel>(
+        r#"
+        SELECT 
+            ph.id,
+            ph.premarket_info_id,
+            ph.holder_id,
+            ph.holder_wallet,
+            ph.amount_lamport,
+            ph.join_timestamp,
+            ph.out_timestamp,
+            ph.claimed,
+            u.username,
+            u.avatar_url,
+            ph.amount_token,
+            ph.claimed_amount_token,
+            ph.updated_at
+        FROM premarket_holders ph
+        LEFT JOIN users u ON ph.holder_id = u.id
+        WHERE ph.premarket_info_id = $1 AND ph.holder_wallet = $2
+        "#
+    )
+    .bind(premarket_id)
     .bind(holder_wallet)
     .fetch_optional(pool)
     .await

@@ -1,4 +1,4 @@
-use crate::models::premarket::{FullVestingInfo, VestingHolderInfo, VestingInfo};
+use crate::models::premarket::{VestingHolderInfo, VestingInfo};
 use crate::storage::vesting_repo;
 use actix_web::error::{ErrorInternalServerError, ErrorNotFound};
 use chrono::Utc;
@@ -14,7 +14,7 @@ pub enum VestingLookupType {
     MintAddress,
 }
 
-/// Get full vesting info with all holders
+/// Get vesting info (without holders)
 /// 
 /// # Arguments
 /// * `pool` - Database connection pool
@@ -22,12 +22,12 @@ pub enum VestingLookupType {
 /// * `lookup_type` - Type of lookup to perform
 ///
 /// # Returns
-/// Full vesting information including holders, or None if not found
+/// Vesting information, or None if not found
 pub async fn get_full_vesting_info(
     pool: &PgPool,
     key: &str,
     lookup_type: VestingLookupType,
-) -> Result<Option<FullVestingInfo>, actix_web::Error> {
+) -> Result<Option<VestingInfo>, actix_web::Error> {
     // Get vesting info based on lookup type
     let vesting_db = match lookup_type {
         VestingLookupType::PremarketId => {
@@ -53,16 +53,11 @@ pub async fn get_full_vesting_info(
         None => return Ok(None),
     };
 
-    // Get all holders for this vesting
-    let holders_db = vesting_repo::get_vesting_holders_by_vesting_id(pool, vesting_db.vesting_id)
-        .await
-        .map_err(|e| ErrorInternalServerError(format!("Database error fetching holders: {}", e)))?;
-
     // Calculate if vesting is active
     let is_active = vesting_db.timestamp_start.is_some() 
         && vesting_db.timestamp_end.is_some();
 
-    // Convert to service models
+    // Convert to service model
     let vesting_info = VestingInfo {
         vesting_id: vesting_db.vesting_id,
         vesting_address: vesting_db.vesting_address,
@@ -80,47 +75,7 @@ pub async fn get_full_vesting_info(
         token_symbol: vesting_db.symbol,
     };
 
-    let now = Utc::now().timestamp();
-    let mut total_tokens = 0i64;
-    let mut total_tokens_claimed = 0i64;
-
-    let holders: Vec<VestingHolderInfo> = holders_db
-        .into_iter()
-        .map(|h| {
-            total_tokens += h.tokens_total;
-            total_tokens_claimed += h.tokens_claimed;
-
-            // Calculate available tokens based on vesting schedule
-            let tokens_available = calculate_available_tokens(
-                h.tokens_total,
-                h.tokens_claimed,
-                vesting_db.timestamp_start,
-                vesting_db.timestamp_end,
-                vesting_db.init_unlock,
-                now,
-            );
-
-            VestingHolderInfo {
-                holder_id: h.holder_id,
-                holder_wallet: h.holder_wallet,
-                tokens_total: h.tokens_total,
-                tokens_claimed: h.tokens_claimed,
-                tokens_available,
-                username: h.username,
-                avatar_url: h.avatar_url,
-            }
-        })
-        .collect();
-
-    let total_holders = holders.len();
-
-    Ok(Some(FullVestingInfo {
-        vesting_info,
-        holders,
-        total_holders,
-        total_tokens,
-        total_tokens_claimed,
-    }))
+    Ok(Some(vesting_info))
 }
 
 /// Calculate available tokens for a holder based on vesting schedule
@@ -137,10 +92,10 @@ pub fn calculate_available_tokens(
     end: Option<i64>,
     init_unlock_percent: i64,
     now: i64,
-) -> i64 {
+) -> Option<i64> {
     // If vesting hasn't started, no tokens available
     if start.is_none() || end.is_none() {
-        return 0;
+        return Some(0);
     }
 
     let start_ts = start.unwrap();
@@ -148,16 +103,16 @@ pub fn calculate_available_tokens(
 
     // If current time is before start, no tokens available
     if now < start_ts {
-        return 0;
+        return Some(0);
+    }
+
+    // If current time is after end, all tokens available
+    if now >= end_ts {
+        return Some(total - claimed);
     }
 
     // Calculate initial unlock amount
     let init_unlock_amount = (total * init_unlock_percent) / 100;
-
-    // If current time is after end, all tokens available
-    if now >= end_ts {
-        return total - claimed;
-    }
 
     // Linear vesting calculation
     let vesting_duration = end_ts - start_ts;
@@ -175,45 +130,51 @@ pub fn calculate_available_tokens(
 
     // Total available = initial unlock + vested amount - already claimed
     let total_available = init_unlock_amount + vested_amount;
+    let available = total_available - claimed;
     
-    // Ensure we don't return negative or more than unclaimed
-    (total_available - claimed).max(0).min(total - claimed)
+    // Ensure we don't return negative
+    Some(available.max(0))
 }
 
-/// Get vesting info for a specific holder
+/// Get vesting info for a specific holder (from premarket_holders)
 pub async fn get_vesting_holder_info(
     pool: &PgPool,
-    vesting_id: Uuid,
+    premarket_id: Uuid,
     holder_wallet: &str,
 ) -> Result<Option<VestingHolderInfo>, actix_web::Error> {
-    let holder_db = vesting_repo::get_vesting_holder_by_wallet(pool, vesting_id, holder_wallet)
+    let holder_db = vesting_repo::get_holder_by_wallet(pool, premarket_id, holder_wallet)
         .await
         .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))?;
 
     match holder_db {
         Some(h) => {
             // Get vesting info to calculate available tokens
-            let vesting_db = vesting_repo::get_vesting_info_by_premarket_id(pool, vesting_id)
+            let vesting_db = vesting_repo::get_vesting_info_by_premarket_id(pool, premarket_id)
                 .await
                 .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))?
                 .ok_or_else(|| ErrorNotFound("Vesting not found"))?;
 
             let now = Utc::now().timestamp();
-            let tokens_available = calculate_available_tokens(
-                h.tokens_total,
-                h.tokens_claimed,
-                vesting_db.timestamp_start,
-                vesting_db.timestamp_end,
-                vesting_db.init_unlock,
-                now,
-            );
+            let available_tokens = if let (Some(total), Some(claimed)) = (h.amount_token, h.claimed_amount_token) {
+                calculate_available_tokens(
+                    total,
+                    claimed,
+                    vesting_db.timestamp_start,
+                    vesting_db.timestamp_end,
+                    vesting_db.init_unlock,
+                    now,
+                )
+            } else {
+                None
+            };
 
             Ok(Some(VestingHolderInfo {
                 holder_id: h.holder_id,
                 holder_wallet: h.holder_wallet,
-                tokens_total: h.tokens_total,
-                tokens_claimed: h.tokens_claimed,
-                tokens_available,
+                amount_sol_lamp: h.amount_lamport,
+                amount_tokens: h.amount_token,
+                claimed_tokens: h.claimed_amount_token,
+                available_tokens,
                 username: h.username,
                 avatar_url: h.avatar_url,
             }))
@@ -221,4 +182,3 @@ pub async fn get_vesting_holder_info(
         None => Ok(None),
     }
 }
-

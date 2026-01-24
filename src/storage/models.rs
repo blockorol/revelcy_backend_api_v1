@@ -93,7 +93,10 @@ pub struct HolderDbModel {
     pub claimed: bool,
     pub avatar_url: Option<String>, // Just to response with join
     pub username: Option<String>,   // Just to response with join
-
+    // Vesting-related fields
+    pub amount_token: Option<i64>,
+    pub claimed_amount_token: Option<i64>,
+    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 pub struct HolderStats {
@@ -115,33 +118,6 @@ pub struct VestingInfoDbModel {
     pub timestamp_end: Option<i64>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
-pub struct VestingHolderDbModel {
-    pub id: Uuid,
-    pub vesting_info_id: Uuid,
-    pub holder_id: Option<Uuid>,
-    pub holder_wallet: String,
-    pub tokens_total: i64,
-    pub tokens_claimed: i64,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-// Extended model with user info joined
-#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
-pub struct VestingHolderWithUserDbModel {
-    pub id: Uuid,
-    pub vesting_info_id: Uuid,
-    pub holder_id: Option<Uuid>,
-    pub holder_wallet: String,
-    pub tokens_total: i64,
-    pub tokens_claimed: i64,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
-    pub username: Option<String>,
-    pub avatar_url: Option<String>,
 }
 
 // Full vesting info with premarket data

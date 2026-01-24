@@ -324,10 +324,6 @@ pub struct CreatePremarketTxRequest {
     pub max_sol_lamp: u64,
     #[serde(with = "string_as_number")]
     pub creator_allocate_lamp: u64,
-    #[serde(with = "string_as_number")]
-    pub vesting_period: i64,
-    #[serde(with = "string_as_number")]
-    pub init_unlock: i64,
 }
 
 #[derive(Serialize)]
@@ -442,9 +438,6 @@ pub struct VestingInfoDTO {
     pub vesting_address: String,
     pub premarket_id: String,
     pub premarket_address: String,
-    pub mint_address: String,
-    pub creator_id: String,
-    pub creator_address: String,
     #[serde(with = "string_as_number")]
     pub vesting_period: i64,
     #[serde(with = "string_as_number")]
@@ -452,8 +445,6 @@ pub struct VestingInfoDTO {
     pub timestamp_start: Option<i64>,
     pub timestamp_end: Option<i64>,
     pub is_active: bool,
-    pub token_name: String,
-    pub token_symbol: String,
 }
 
 #[derive(Serialize)]
@@ -461,11 +452,10 @@ pub struct VestingHolderDTO {
     pub holder_id: Option<String>,
     pub holder_wallet: String,
     #[serde(with = "string_as_number")]
-    pub tokens_total: i64,
-    #[serde(with = "string_as_number")]
-    pub tokens_claimed: i64,
-    #[serde(with = "string_as_number")]
-    pub tokens_available: i64,
+    pub amount_sol_lamp: i64,
+    pub amount_tokens: Option<i64>,
+    pub claimed_tokens: Option<i64>,
+    pub available_tokens: Option<i64>,
     pub username: Option<String>,
     pub avatar_url: Option<String>,
 }

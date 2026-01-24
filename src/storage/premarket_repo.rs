@@ -374,9 +374,12 @@ pub async fn insert_holder(
                 amount_lamport,
                 join_timestamp,
                 out_timestamp,
-                claimed
+                claimed,
+                amount_token,
+                claimed_amount_token,
+                updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
             "#,
         )
         .bind(holder.id)
@@ -387,6 +390,8 @@ pub async fn insert_holder(
         .bind(holder.join_timestamp)
         .bind(holder.out_timestamp)
         .bind(holder.claimed)
+        .bind(&holder.amount_token)
+        .bind(&holder.claimed_amount_token)
         .execute(pool)
         .await?;
 
@@ -461,7 +466,10 @@ pub async fn get_holders_by_premarket_id(
             ph.out_timestamp,
             ph.claimed,
             u.avatar_url,
-            u.username
+            u.username,
+            ph.amount_token,
+            ph.claimed_amount_token,
+            ph.updated_at
         FROM premarket_holders ph
         LEFT JOIN users u ON u.id = ph.holder_id
         WHERE ph.premarket_info_id = $1
