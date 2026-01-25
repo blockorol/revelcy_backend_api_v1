@@ -644,6 +644,9 @@ async fn handle_finish_premarket(
 ) -> ApiResult<TxFinalizePlan> {
     let tx_type: &'static str = "finish_premarket";
 
+    // todo: parse and validate tx content:
+    // premarket_str, vesting_info(timestamp_start, timestamp_end, init_unlock)
+
     let premarket_str: String = old.premarket.clone();
     let premarket_pubkey =
         Pubkey::from_str(&premarket_str).map_err(|_| ApiError::invalid_premarket_pubkey())?;
@@ -666,7 +669,29 @@ async fn handle_finish_premarket(
         }])
     })?;
 
-    validate_finish_premarket(&full).map_err(ApiError::from_field_errors)?;
+    let vesting_info = vesting_service::get_full_vesting_info(
+            pool.get_ref(),
+            &dto.premarket_account,
+            vesting_service::VestingLookupType::PremarketAddress
+        )
+        .await
+        .map_err(|e| {
+            eprintln!("get_vesting_info error: {e:?}");
+            ApiError::internal_build_tx_failed()
+        })?
+        .ok_or_else(|| ApiError::from_field_errors(vec![FieldError{
+            field: "vesting",
+            code: ApiErrorCode::VestingNotFound,
+            message: "vesting not found for this premarket",
+        }]))?;
+
+    // Calculate vesting timestamps from database values
+    let now = Utc::now().timestamp();
+    let timestamp_start = now;
+    let timestamp_end = now + vesting_info.vesting_period;
+    let init_unlock = vesting_info.init_unlock as u64;
+
+    validate_finish_premarket(&full, timestamp_start, timestamp_end, init_unlock).map_err(ApiError::from_field_errors)?;
 
     let mint_kp = get_mint_kp(pool.get_ref(), premarket_pubkey).await.map_err(|e| {
         eprintln!("mint_kp load error: {e:?}");
