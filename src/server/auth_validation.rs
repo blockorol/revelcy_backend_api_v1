@@ -2,8 +2,6 @@
 
 use actix_web::{HttpRequest, HttpMessage};
 use solana_sdk::pubkey::Pubkey;
-use uuid::Uuid;
-use serde::{Serialize, Deserialize};
 
 use crate::api::errors::ApiError;
 use crate::services::jwt_service;

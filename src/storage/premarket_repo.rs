@@ -1,26 +1,43 @@
+use anyhow::{Result, bail};
+
 use crate::storage::models::{HolderDbModel, HolderStats, PremarketInfoDbModel, CommunityInfoDbModel, CommunityLinkDbModel};
-use sqlx::{PgPool, Result};
+use crate::models::premarket::PremarketInfoServiceModel;
+use sqlx::{PgPool};
 use uuid::Uuid;
 use chrono::Utc;
 
-pub async fn get_premarket_id_by_bc_address(
+pub async fn get_user_concept(
     pool: &PgPool,
-    bc_address: &str
-) -> Result<Option<Uuid>> {
-    let premarket = sqlx::query_as::<_, PremarketInfoDbModel>(
+    creator_id: &Uuid
+) -> Result<Option<PremarketInfoServiceModel>> {
+    let premarket_db = sqlx::query_as::<_, PremarketInfoDbModel>(
         r#"
-        SELECT * FROM premarket_info WHERE bc_address = $1
+        SELECT * FROM premarket_info WHERE creator_id = $1 AND state = 'concept' LIMIT 1;
         "#
     )
+    .bind(creator_id)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(pm_db) = premarket_db {
+        let premarket_service: PremarketInfoServiceModel = pm_db.try_into()?;
+        Ok(Some(premarket_service))
+    } else {
+        Ok(None)
+    }
+}
+
+
+pub async fn get_premarket_id_by_bc_address(
+    pool: &PgPool,
+    bc_address: &str,
+) -> Result<Option<Uuid>> {
+    let id = sqlx::query_scalar::<_, Uuid>(r#"SELECT id FROM premarket_info WHERE bc_address = $1 LIMIT 1;"#)
     .bind(bc_address)
     .fetch_optional(pool)
     .await?;
 
-    if let Some(pm) = premarket {
-        Ok(Some(pm.id))
-    } else {
-        Ok(None)
-    }
+    Ok(id)
 }
 pub async fn get_premarket_info_by_name(
     pool: &PgPool,
@@ -72,9 +89,11 @@ pub async fn get_premarket_info_by_name(
     }
 }
 
+
+// todo: fix me to return service model with convertor simular to PremarketInfoServiceModel
 pub async fn get_premarket_info_by_bc_address(
     pool: &PgPool,
-    bc_address: &str,
+    bc_address: &str
 ) -> Result<Option<(PremarketInfoDbModel, CommunityInfoDbModel, Vec<CommunityLinkDbModel>)>> {
     let premarket = sqlx::query_as::<_, PremarketInfoDbModel>(
         r#"
@@ -123,6 +142,83 @@ pub async fn get_premarket_info_by_bc_address(
     }
 }
 
+
+// todo: fix me to return service model with convertor simular to PremarketInfoServiceModel
+pub async fn get_premarket_info_by_id(
+    pool: &PgPool,
+    premarket_id: &Uuid
+) -> Result<Option<(PremarketInfoDbModel, CommunityInfoDbModel, Vec<CommunityLinkDbModel>)>> {
+    let premarket = sqlx::query_as::<_, PremarketInfoDbModel>(
+        r#"
+        SELECT * FROM premarket_info WHERE id = $1
+        "#
+    )
+    .bind(premarket_id)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(pm) = &premarket {
+        let community = sqlx::query_as::<_, CommunityInfoDbModel>(
+    r#"
+    SELECT * FROM community_info WHERE id = $1
+    "#
+)
+            .bind(pm.id)
+            .fetch_optional(pool)
+            .await?;
+
+            let (community, links_db) = if let Some(cm) = community {
+                let links = sqlx::query_as::<_, CommunityLinkDbModel>(
+                    r#"SELECT * FROM community_links WHERE community_info_id = $1"#
+                )
+                .bind(cm.id)
+                .fetch_all(pool)
+                .await?;
+
+                (cm, links)
+            } else {
+                println!("community not found! set dummy");
+                (
+                    CommunityInfoDbModel {
+                        id: pm.id,
+                        description: "".to_string(),
+                        token_banner_url: None,
+                    },
+                    vec![],
+                )
+            };
+
+
+        Ok(Some((pm.clone(), community, links_db)))
+    } else {
+        Ok(None)
+    }
+}
+
+
+// right method -> because service works with service model. and shouldn't know about DB model
+pub async fn get_main_premarket_info_by_bc_address(
+    pool: &PgPool,
+    bc_address: &str,
+) -> Result<Option<PremarketInfoServiceModel>> {
+    let pm_db = sqlx::query_as::<_, PremarketInfoDbModel>(
+        r#"SELECT * FROM premarket_info WHERE bc_address = $1"#
+    )
+    .bind(bc_address)
+    .fetch_optional(pool)
+    .await?;
+
+    let pm_db = match pm_db {
+        Some(v) => v,
+        None => return Ok(None),
+    };
+
+    let premarket_info: PremarketInfoServiceModel = pm_db.try_into()?;
+
+    Ok(Some(premarket_info))
+}
+ 
+
 pub async fn get_list(
     pool: &PgPool,
     user_id_opt: Option<Uuid>,
@@ -137,10 +233,13 @@ pub async fn get_list(
         SELECT COUNT(*)
         FROM premarket_info
         WHERE
-          is_hided = FALSE
-          OR (
-            $1::uuid IS NOT NULL
-            AND creator_id = $1::uuid
+          state != 'concept' 
+          AND (
+            is_hided = FALSE
+            OR (
+                $1::uuid IS NOT NULL
+                AND creator_id = $1::uuid
+            )
           )
         "#,
     )
@@ -153,10 +252,13 @@ pub async fn get_list(
         SELECT *
         FROM premarket_info
         WHERE
-          is_hided = FALSE
-          OR (
-            $1::uuid IS NOT NULL
-            AND creator_id = $1::uuid
+          state != 'concept' 
+          AND (
+            is_hided = FALSE
+            OR (
+                $1::uuid IS NOT NULL
+                AND creator_id = $1::uuid
+            )
           )
         ORDER BY premarket_created DESC, id DESC
         LIMIT $2 OFFSET $3
@@ -273,10 +375,26 @@ pub async fn create_premarket_and_community(
     Ok(())
 }
 
+pub async fn hard_delete_premarket_by_id(pool: &PgPool, premarket_id: Uuid) -> Result<u64> {
+    let res = sqlx::query(r#"DELETE FROM premarket_info WHERE id = $1"#)
+        .bind(premarket_id)
+        .execute(pool)
+        .await?;
+
+    let affected = res.rows_affected();
+    if affected == 0 {
+        bail!("premarket not found");
+    }
+
+    Ok(affected)
+}
+
+
 pub async fn update_availability_info(
     pool: &PgPool,
     bc_address: &str,
     is_hided: Option<bool>,
+    is_whitelist_enabled: Option<bool>,
     short_url_name: Option<String>,
 ) -> Result<()> {
     let id_option = get_premarket_id_by_bc_address(pool, bc_address).await?;
@@ -286,14 +404,16 @@ pub async fn update_availability_info(
         r#"
         UPDATE premarket_info
             SET
-                is_hided = COALESCE($1, is_hided),
-                short_url_name = COALESCE($2, short_url_name)
-            WHERE id = $3
+                is_hided = COALESCE($2, is_hided),
+                short_url_name = COALESCE($3, short_url_name)
+                is_whitelist_enabled = COALESCE($4, is_whitelist_enabled)
+            WHERE id = $1
         "#,
     )
+    .bind(premarket_info_id)
     .bind(is_hided)
     .bind(short_url_name)
-    .bind(premarket_info_id)
+    .bind(is_whitelist_enabled)
     .execute(pool)
     .await?;
 
@@ -356,7 +476,6 @@ pub async fn update_community_info(
     Ok(())
 }
 
-
 pub async fn insert_holder(
     pool: &PgPool,
     premarket_pubkey: &str,
@@ -398,9 +517,8 @@ pub async fn insert_holder(
         return Ok(());
     }
 
-    Err(sqlx::Error::RowNotFound)
+    bail!("premarket not found");
 }
-
 
 pub async fn soft_delete_holder(
     pool: &PgPool,
@@ -426,8 +544,7 @@ pub async fn soft_delete_holder(
 
         return Ok(result.rows_affected());
     }
-
-    Err(sqlx::Error::RowNotFound)
+    bail!("premarket not found");
 }
 
 pub async fn get_holders_by_premarket_address(
@@ -527,11 +644,11 @@ pub async fn get_holders_by_premarket_id(
     })
 }
 
-pub async fn update_premarket_state(
+pub async fn update_premarket_state_to_finish(
     pool: &PgPool,
     premarket_pubkey: &str,
     new_state: &str,
-    premarket_finished: Option<i64>,
+    update_time: i64,
 ) -> Result<u64> {
     let res = sqlx::query(
         r#"
@@ -544,7 +661,31 @@ pub async fn update_premarket_state(
     )
     .bind(new_state)
     .bind(premarket_pubkey)
-    .bind(premarket_finished)
+    .bind(update_time)
+    .execute(pool)
+    .await?;
+
+    Ok(res.rows_affected())
+}
+
+pub async fn update_premarket_state_to_start(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    new_state: &str,
+    update_time: i64,
+) -> Result<u64> {
+    let res = sqlx::query(
+        r#"
+        UPDATE premarket_info
+        SET 
+            state = $1,
+            premarket_created = $3
+        WHERE bc_address = $2
+        "#,
+    )
+    .bind(new_state)
+    .bind(premarket_pubkey)
+    .bind(update_time)
     .execute(pool)
     .await?;
 
@@ -673,6 +814,31 @@ pub async fn update_all_links_premarket(
 
     Ok(res.rows_affected())
 }
+
+pub async fn update_premarket_uri(
+    pool: &PgPool,
+    premarket_id: &Uuid,
+    new_uri: &String,
+    new_image_url: &String,
+) -> Result<u64> {
+    let res = sqlx::query(
+        r#"
+        UPDATE premarket_info
+            SET 
+                data_uri = $2, 
+                image_url = $3
+        WHERE id = $1
+        "#,
+    )
+    .bind(premarket_id)
+    .bind(new_uri)
+    .bind(new_image_url)
+    .execute(pool)
+    .await?;
+
+    Ok(res.rows_affected())
+}
+
 
 pub async fn update_holder_claimed_status(
     pool: &PgPool,

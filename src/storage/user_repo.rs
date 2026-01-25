@@ -1,5 +1,5 @@
 use crate::storage::models::UserDbModel;
-use crate::models::user::User;
+use crate::models::user::{ApplyInviteCodeResult, User};
 use sqlx::{PgPool, Row, Result};
 use uuid::Uuid;
 
@@ -44,6 +44,56 @@ pub async fn get_user_by_wallet(pool: &PgPool, wallet_address: &str) -> Result<O
     }
 }
 
+pub async fn search_users_by_username_with_wallets(
+    pool: &PgPool,
+    input: &str,
+    limit: i64,
+) -> Result<Vec<User>> {
+    let limit = limit.clamp(1, 50);
+    let pattern = format!("%{}%", input);
+
+    let users_db = sqlx::query_as::<_, UserDbModel>(
+        r#"
+        SELECT id, username, avatar_url
+        FROM users
+        WHERE username ILIKE $1
+        ORDER BY username
+        LIMIT $2
+        "#,
+    )
+    .bind(&pattern)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+
+    let mut result = Vec::with_capacity(users_db.len());
+
+    for user_db in users_db {
+        let wallets = sqlx::query(
+            r#"
+            SELECT wallet_address
+            FROM wallets
+            WHERE user_id = $1
+            "#
+        )
+        .bind(user_db.id)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(|row| row.get::<String, _>("wallet_address"))
+        .collect();
+
+        result.push(User {
+            id: user_db.id,
+            username: user_db.username,
+            avatar_url: user_db.avatar_url,
+            wallets,
+        });
+    }
+
+    Ok(result)
+}
+
 
 // Создать пользователя и привязать кошелек
 pub async fn create_user_with_wallet(pool: &PgPool, wallet_address: &str) -> Result<User> {
@@ -51,8 +101,8 @@ pub async fn create_user_with_wallet(pool: &PgPool, wallet_address: &str) -> Res
 
     let user_db = sqlx::query_as::<_, UserDbModel>(
         r#"
-        INSERT INTO users (username, avatar_url)
-        VALUES (NULL, NULL)
+        INSERT INTO users (username, avatar_url, status)
+        VALUES (NULL, NULL, 'INITIALISED')
         RETURNING id, username, avatar_url
         "#
     )
@@ -80,11 +130,52 @@ pub async fn create_user_with_wallet(pool: &PgPool, wallet_address: &str) -> Res
     })
 }
 
+pub async fn apply_invite_code_once(
+    pool: &PgPool,
+    user_id: Uuid,
+    invite_code: &str,
+) -> Result<ApplyInviteCodeResult> {
+    let invite_code_id: Option<Uuid> = sqlx::query_scalar(
+        r#"
+        SELECT id
+        FROM invite_codes
+        WHERE code = $1 AND is_active = TRUE
+        "#
+    )
+    .bind(invite_code)
+    .fetch_optional(pool)
+    .await?;
+
+    let Some(invite_code_id) = invite_code_id else {
+        return Ok(ApplyInviteCodeResult::InviteCodeNotFound);
+    };
+
+    let res = sqlx::query(
+        r#"
+        INSERT INTO user_invites (user_id, invite_code_id)
+        VALUES ($1, $2)
+        ON CONFLICT (user_id) DO NOTHING
+        "#
+    )
+    .bind(user_id)
+    .bind(invite_code_id)
+    .execute(pool)
+    .await?;
+
+    if res.rows_affected() == 0 {
+        return Ok(ApplyInviteCodeResult::AlreadyApplied);
+    }
+
+    Ok(ApplyInviteCodeResult::Applied)
+}
+
 pub async fn update_username(pool: &PgPool, user_id: Uuid, new_username: &str) -> Result<()> {
     sqlx::query(
         r#"
         UPDATE users
-        SET username = $1
+        SET
+            username = $1,
+            status = 'REGISTERED'
         WHERE id = $2
         "#
     )

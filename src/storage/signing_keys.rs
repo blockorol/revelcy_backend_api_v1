@@ -81,3 +81,50 @@ pub async fn get_unused_signing_key(pool: &PgPool) -> Result<Option<SigningKeyPa
 
     Ok(row)
 }
+
+pub async fn acquire_signing_key(
+    pool: &PgPool,
+    premarket_uuid: &str,
+) -> Result<Option<SigningKeyPair>> {
+    let key = sqlx::query_as::<_, SigningKeyPair>(
+        r#"
+        UPDATE signing_keys
+        SET premarket_pubkey = $1
+        WHERE id = (
+            SELECT id
+            FROM signing_keys
+            WHERE premarket_pubkey = 'does_not_exist'
+            ORDER BY id
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+        )
+        RETURNING pub_key, priv_key
+        "#
+    )
+    .bind(premarket_uuid)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(key)
+}
+
+pub async fn update_premarket_pubkey(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    premarket_uuid: &Uuid
+) -> Result<u64> {
+    let res = sqlx::query(
+        r#"
+        UPDATE signing_keys
+        SET premarket_pubkey = $1
+        WHERE id = $2
+        "#
+    )
+    .bind(premarket_pubkey)
+    .bind(premarket_uuid)
+    .execute(pool)
+    .await?;
+
+
+    Ok(res.rows_affected())
+}

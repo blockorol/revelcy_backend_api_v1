@@ -1,7 +1,36 @@
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+
 
 // ======= HTTP DTO User =======
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SearchUsersRequestDto {
+    pub input: String,
+    pub limit: i64,
+}
+
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchUsersResponseDto {
+    pub items: Vec<UserDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserDto {
+    pub id: String,
+    pub username: Option<String>,
+    pub avatar_url: Option<String>,
+    pub wallets: Vec<String>,
+}
+#[derive(Debug, Deserialize)]
+pub struct SetInviteCodeRequestDto {
+    pub invite_code: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SetInviteCodeResponseDto {
+    pub jwt: String,
+}
 
 #[derive(Deserialize)]
 pub struct AddUserNameRequestDto {
@@ -32,6 +61,7 @@ pub enum UserInfoEventType {
     JoinPremarket,
     OutPremarket,
     ClaimToken,
+    CreatePremarket,
     FinishPremarket,
     Other,
 }

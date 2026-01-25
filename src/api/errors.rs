@@ -2,6 +2,7 @@
 use actix_web::{HttpResponse, ResponseError};
 use actix_web::http::StatusCode;
 use serde::Serialize;
+use tracing::field;
 use std::fmt;
 
 pub type ApiResult<T> = Result<T, ApiError>;
@@ -17,6 +18,10 @@ pub enum ApiErrorCode {
     AuthMissingWallet,
     AuthInvalidToken,
     ForbiddenAction,
+
+    // Invite code
+    InviteCodeNotFound,
+    InviteCodeAlreadyApplied,
 
     // Premarket creation-validation
     PremarketDeadlineTooEarly,
@@ -54,6 +59,7 @@ pub enum ApiErrorCode {
     InternalBuildTxFailed,
     InternalSignTxFailed,
     InternalUpdateFailed,
+    InternalGetFailed,
     InternalUnknownError,
 
     // basic error - about validation
@@ -101,6 +107,30 @@ pub struct ApiError {
 }
 
 impl ApiError {
+    pub fn invite_code_not_found() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "validation_error",
+                code: ApiErrorCode::InviteCodeNotFound,
+                field: Some("invite_code"),
+                message: Some("invite code not found or inactive".into()),
+                errors: None,
+            },
+        }
+    }
+
+    pub fn invite_code_already_applied() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "validation_error",
+                code: ApiErrorCode::InviteCodeAlreadyApplied,
+                field: Some("invite_code"),
+                message: Some("invite code already applied".into()),
+                errors: None,
+            },
+        }
+    }
+
     pub fn invalid_token_mint() -> Self {
         Self {
             response: ApiErrorResponse {
@@ -149,6 +179,30 @@ impl ApiError {
         }
     }
 
+    pub fn internal_get_db_error() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "internal_error",
+                code: ApiErrorCode::InternalGetFailed,
+                field: None,
+                message: Some("failed to get internal state".into()),
+                errors: None,
+            },
+        }
+    }
+    pub fn invalid_pubkey() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "internal_error",
+                code: ApiErrorCode::InternalUnknownError,
+                field: Some("user_pubkey".into()),
+                message: Some("invalid pubkey".into()),
+                errors: None,
+            },
+        }
+    }
+    
+
     pub fn internal_send_tx_failed() -> Self {
         Self {
             response: ApiErrorResponse {
@@ -196,6 +250,19 @@ impl ApiError {
             },
         }
     }
+
+    pub fn invalid_premarket_mint_pubkey() -> Self {
+        Self {
+            response: ApiErrorResponse {
+                error: "validation_error",
+                code: ApiErrorCode::InvalidPremarketPubkey,
+                field: Some("premarket mint"),
+                message: Some("invalid premarket mint pubkey format".into()),
+                errors: None,
+            },
+        }
+    }
+
     pub fn invalid_premarket_pubkey() -> Self {
         Self {
             response: ApiErrorResponse {
@@ -385,7 +452,11 @@ impl ResponseError for ApiError {
             | InvalidTimestamp
             | InvalidPercentage
             | MissingField
+            | InviteCodeNotFound
             => StatusCode::BAD_REQUEST,
+
+            InviteCodeAlreadyApplied 
+            => StatusCode::CONFLICT,
             
             WrongUserPubkeyForUser 
             | ForbiddenAction => StatusCode::FORBIDDEN,
@@ -393,6 +464,7 @@ impl ResponseError for ApiError {
 
             InternalBuildTxFailed
             | InternalUpdateFailed
+            | InternalGetFailed
             | InternalUnknownError
             | InternalSignTxFailed => StatusCode::INTERNAL_SERVER_ERROR,
 

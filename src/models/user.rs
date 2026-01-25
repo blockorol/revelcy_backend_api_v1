@@ -4,7 +4,14 @@ use serde_json::Value;
 use solana_sdk::pubkey::Pubkey;
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+pub enum ApplyInviteCodeResult {
+    Applied,
+    InviteCodeNotFound,
+    AlreadyApplied,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: Uuid,
     pub username: Option<String>,
