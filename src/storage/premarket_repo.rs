@@ -642,7 +642,6 @@ pub async fn get_holders_by_premarket_id(
     })
 }
 
-
 pub async fn get_holder_entry_by_premarket_id(
     pool: &PgPool,
     premarket_info_id: Uuid,
@@ -662,12 +661,19 @@ pub async fn get_holder_entry_by_premarket_id(
             h.amount_lamport AS holder_amount,
             h.claimed AS is_claimed,
             (
-                SELECT COALESCE(SUM(ph.amount_lamport), 0)
+                SELECT COALESCE(SUM(ph.amount_lamport), 0)::BIGINT
                 FROM premarket_holders ph
                 WHERE ph.premarket_info_id = $1
                   AND ph.out_timestamp IS NULL
                   AND ph.join_timestamp < h.join_timestamp
-            ) AS total_amount
+            ) AS total_amount,
+            (
+                SELECT COUNT(*)::BIGINT
+                FROM premarket_holders ph
+                WHERE ph.premarket_info_id = $1
+                  AND ph.out_timestamp IS NULL
+                  AND ph.join_timestamp < h.join_timestamp
+            ) AS rank
         FROM holder h
         "#
     )
@@ -690,6 +696,7 @@ pub async fn get_holder_entry_by_premarket_id(
         amount_sol_lamp: holder_amount as u64,
         before_amount_sol_lamp: row.total_amount as u64,
         is_claimed: row.is_claimed,
+        rank: row.rank as i64,
     }))
 }
 

@@ -40,10 +40,11 @@ pub async fn get_user_entry(
                 total_dec: holder_entry_info.token.total_dec, 
                 vested_dec: holder_entry_info.token.vested_dec, 
                 claimed_dec: holder_entry_info.token.claimed_dec, 
-            }
+            },
+            rank: holder_entry_info.rank,
         },
         None => {
-            return Ok(HttpResponse::NotFound().finish());
+            return Ok(HttpResponse::Ok().json({}));
         }
     };
 

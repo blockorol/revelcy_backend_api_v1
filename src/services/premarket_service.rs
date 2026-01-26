@@ -17,10 +17,11 @@ use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::premarket::PythResponse;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
+
+use crate::services::solana_price_service;
 
 pub const VIRTUAL_SUPPLY_RATIO: u64 = 30_000_000_000;
 pub const VIRTUAL_TOKEN_RATIO: u64 = 1_073_000_000_000_000;
@@ -455,6 +456,7 @@ pub async fn get_holder_entry_info(
             vested_dec: token_amount_dec,
             claimed_dec: claimed_dec,
         },
+        rank: holder_entry_data.rank,
     }))
 }
 
@@ -523,42 +525,7 @@ pub async fn remove_holder(
 }
 
 pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
-    let url = match std::env::var("PYTH_MAINNET_URL") {
-        Ok(url) => url,
-        Err(_) => {
-            println!("PYTH_MAINNET_URL environment variable not set");
-            return 0.0;
-        }
-    };
-
-    let current_sol_price = match reqwest::get(&url).await {
-        Ok(response) => {
-            match response.json::<PythResponse>().await {
-                Ok(pyth_response) => {
-                    //println!("Pyth API response: {:?}", pyth_response);
-                    if let Some(parsed_data) = pyth_response.parsed.first() {
-                        // Parse the price string and apply the exponent
-                        let price_str = &parsed_data.price.price;
-                        let expo = parsed_data.price.expo;
-                        let price_value: f64 = price_str.parse().unwrap_or(0.0);
-                        let price = price_value * 10_f64.powi(expo);
-                        price
-                    } else {
-                        println!("No parsed data found in Pyth response");
-                        0.0
-                    }
-                }
-                Err(e) => {
-                    println!("Pyth JSON parsing error: {:?}", e);
-                    0.0
-                }
-            }
-        }
-        Err(e) => {
-            println!("Pyth HTTP request error: {:?}", e);
-            0.0
-        }
-    };
+    let current_sol_price = solana_price_service::get_sol_price().await;
 
     let real_sol_amount: f64 = real_lamp_amount as f64 / 1_000_000_000.0;
 
@@ -705,45 +672,16 @@ pub async fn get_holder_entry_price(
         premarket_repo::get_lamports_before_timestamp(pool, premarket_pubkey, join_timestamp)
             .await
             .map_err(ErrorInternalServerError)?;
+    let final_price = calculate_entry_price(lamports_before_join as u64).await;
 
-    // Use the same price calculation as get_price_by_market_cap
-    let url = match std::env::var("PYTH_MAINNET_URL") {
-        Ok(url) => url,
-        Err(_) => {
-            println!("PYTH_MAINNET_URL environment variable not set");
-            return Ok(Some(0.0));
-        }
-    };
+    println!("Entry price: {}", final_price);
 
-    let current_sol_price = match reqwest::get(&url).await {
-        Ok(response) => {
-            println!("Pyth API response status: {}", response.status());
-            match response.json::<PythResponse>().await {
-                Ok(pyth_response) => {
-                    if let Some(parsed_data) = pyth_response.parsed.first() {
-                        let price_str = &parsed_data.price.price;
-                        let expo = parsed_data.price.expo;
-                        let price_value: f64 = price_str.parse().unwrap_or(0.0);
-                        let price = price_value * 10_f64.powi(expo);
-                        price
-                    } else {
-                        println!("No parsed data found in Pyth response");
-                        0.0
-                    }
-                }
-                Err(e) => {
-                    println!("Pyth JSON parsing error: {:?}", e);
-                    0.0
-                }
-            }
-        }
-        Err(e) => {
-            println!("Pyth HTTP request error: {:?}", e);
-            0.0
-        }
-    };
+    Ok(Some(final_price))
+}
 
-    let real_lamp_amount = lamports_before_join as u64;
+async fn calculate_entry_price(real_lamp_amount: u64) -> f64 {
+    let current_sol_price = solana_price_service::get_sol_price().await;
+    
     let real_sol_amount: f64 = real_lamp_amount as f64 / 1_000_000_000.0;
 
     let real_token_bought_amount: u64 =
@@ -755,9 +693,7 @@ pub async fn get_holder_entry_price(
 
     let price = virtual_lamp_amount / virtual_token_amount as f64 * current_sol_price;
     let final_price = (price * 1_000_000_000.0).round() / 1_000_000_000.0;
-    println!("Entry price: {}", final_price);
-
-    Ok(Some(final_price))
+    final_price
 }
 
 pub async fn update_premarket_deadline(

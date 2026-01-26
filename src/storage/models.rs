@@ -190,4 +190,5 @@ pub struct BondingPostionDbModel {
     pub holder_amount: Option<i64>,
     pub total_amount: i64,
     pub is_claimed: bool,
+    pub rank: i64,
 }
