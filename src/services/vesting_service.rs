@@ -71,8 +71,6 @@ pub async fn get_full_vesting_info(
         timestamp_start: vesting_db.timestamp_start,
         timestamp_end: vesting_db.timestamp_end,
         is_active,
-        token_name: vesting_db.name,
-        token_symbol: vesting_db.symbol,
     };
 
     Ok(Some(vesting_info))

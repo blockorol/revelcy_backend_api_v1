@@ -1,10 +1,12 @@
 use sqlx::PgPool;
 use uuid::Uuid;
+use anyhow::Result;
 
 use super::models::{
     FullVestingInfoDbModel, HolderDbModel,
     VestingInfoDbModel,
 };
+use crate::models::premarket::VestingInfo;
 
 /// Get vesting info by premarket_id
 pub async fn get_vesting_info_by_premarket_id(
@@ -92,6 +94,7 @@ pub async fn get_vesting_info_by_mint_address(
         FROM vesting_info vi
         INNER JOIN premarket_info pi ON vi.premarket_id = pi.id
         WHERE pi.mint_address = $1
+        LIMIT 1
         "#
     )
     .bind(mint_address)
@@ -123,6 +126,7 @@ pub async fn get_vesting_info_by_premarket_address(
         FROM vesting_info vi
         INNER JOIN premarket_info pi ON vi.premarket_id = pi.id
         WHERE pi.bc_address = $1
+        LIMIT 1
         "#
     )
     .bind(premarket_address)
@@ -164,6 +168,7 @@ pub async fn get_vesting_holders_by_premarket_id(
 }
 
 /// Create vesting info record
+/// Returns service model VestingInfo
 pub async fn create_vesting_info(
     pool: &PgPool,
     premarket_id: Uuid,
@@ -172,7 +177,8 @@ pub async fn create_vesting_info(
     init_unlock: i64,
     timestamp_start: Option<i64>,
     timestamp_end: Option<i64>,
-) -> Result<VestingInfoDbModel, sqlx::Error> {
+) -> Result<VestingInfo> {
+    // Insert vesting info
     sqlx::query_as::<_, VestingInfoDbModel>(
         r#"
         INSERT INTO vesting_info (premarket_id, vesting_address, vesting_period, init_unlock, timestamp_start, timestamp_end)
@@ -188,6 +194,16 @@ pub async fn create_vesting_info(
     .bind(timestamp_end)
     .fetch_one(pool)
     .await
+    .map_err(|e| anyhow::anyhow!("Failed to create vesting info: {}", e))?;
+
+    // Fetch full vesting info with premarket data
+    let full_vesting_db = get_vesting_info_by_premarket_id(pool, premarket_id)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to fetch vesting info: {}", e))?
+        .ok_or_else(|| anyhow::anyhow!("Vesting info not found after creation"))?;
+
+    // Convert to service model
+    full_vesting_db.try_into()
 }
 
 /// Update vesting timestamps (when vesting starts)

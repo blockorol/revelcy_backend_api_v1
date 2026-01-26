@@ -675,7 +675,7 @@ async fn handle_finish_premarket(
 
     let vesting_info = vesting_service::get_full_vesting_info(
             pool.get_ref(),
-            &dto.premarket_account,
+            &premarket_str,
             vesting_service::VestingLookupType::PremarketAddress
         )
         .await

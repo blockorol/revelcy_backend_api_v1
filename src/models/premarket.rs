@@ -408,8 +408,6 @@ pub struct VestingInfo {
     pub timestamp_start: Option<i64>,
     pub timestamp_end: Option<i64>,
     pub is_active: bool,
-    pub token_name: String,
-    pub token_symbol: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -29,9 +29,6 @@ ALTER TABLE premarket_holders
 ALTER TABLE premarket_holders 
   DROP CONSTRAINT IF EXISTS premarket_holders_holder_id_fkey;
 
-ALTER TABLE premarket_holders 
-  ADD CONSTRAINT premarket_holders_holder_id_fkey 
-  FOREIGN KEY (holder_id) REFERENCES users(id) ON DELETE CASCADE;
 
 -- Add index for holder_id
 CREATE INDEX IF NOT EXISTS idx_premarket_holders_holder_id 
