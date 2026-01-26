@@ -35,7 +35,7 @@ pub async fn get_user_entry(
     };
     let resp = match holder_entry_info_opt  {
         Some(holder_entry_info) => GetHolderEntryInfoResponse {
-            amount_sol: holder_entry_info.amount_sol_lamp,
+            amount_sol_lamp: holder_entry_info.amount_sol_lamp,
             token: TokenEntryInfo{
                 total_dec: holder_entry_info.token.total_dec, 
                 vested_dec: holder_entry_info.token.vested_dec, 

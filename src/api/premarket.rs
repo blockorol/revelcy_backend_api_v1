@@ -178,7 +178,7 @@ pub struct GetHolderEntryInfoQuery {
 #[derive(Serialize)]
 pub struct GetHolderEntryInfoResponse {
     #[serde(with = "string_as_number")]
-    pub amount_sol: u64,
+    pub amount_sol_lamp: u64,
     pub token: TokenEntryInfo,
     pub rank: i64,
 }
