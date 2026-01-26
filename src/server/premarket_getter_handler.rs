@@ -1,6 +1,7 @@
 use std::str::FromStr;
 use sqlx::{PgPool};
 use solana_sdk::pubkey::Pubkey;
+use actix_web::{web, Error, HttpResponse};
 use crate::api::premarket::{
     GetHolderEntryInfoQuery, GetHolderEntryInfoResponse, TokenEntryInfo
 };
@@ -42,8 +43,7 @@ pub async fn get_user_entry(
             }
         },
         None => {
-            eprintln!("Error fetching premarket info: {:?}", err);
-            return Ok(HttpResponse::InternalServerError().finish());
+            return Ok(HttpResponse::NotFound().finish());
         }
     };
 

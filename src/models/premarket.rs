@@ -268,18 +268,18 @@ pub struct HolderEntryInfo {
     pub token: TokenEntryInfo,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Copy, Debug, Clone)]
 pub struct BondingPostion {
     pub amount_sol_lamp: u64,
     pub before_amount_sol_lamp: u64,
-    pub is_claimed: boolean
+    pub is_claimed: bool
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Copy, Debug, Clone)]
 pub struct TokenEntryInfo {
     pub total_dec: u64,
     pub claimed_dec: u64,
-    pub vested_dec: Option<u64>,
+    pub vested_dec: u64,
 }
 
 

@@ -452,7 +452,7 @@ pub async fn get_holder_entry_info(
         amount_sol_lamp: holder_entry_data.amount_sol_lamp,
         token: TokenEntryInfo {
             total_dec: token_amount_dec,
-            vested_dec: None,
+            vested_dec: token_amount_dec,
             claimed_dec: claimed_dec,
         },
     }))
@@ -860,7 +860,6 @@ fn calculate_token_amount(input: BondingPostion ) -> u64 {
     let mut vsr = VIRTUAL_SUPPLY_RATIO;
     let mut vtr = VIRTUAL_TOKEN_RATIO;
 
-    let mut tokens_out: u64 = 0;
     let user_tokens_before = tokens_out_from_sol(before_amount_sol_in_curve_lamp, vsr, vtr);
 
     vsr = vsr.saturating_add(before_amount_sol_in_curve_lamp);
@@ -874,7 +873,7 @@ fn get_in_curve(amount: u64) -> u64 {
 }
 
 fn get_after_pump_fee(amount: u64) -> u64 {
-    return input.amount_sol_lamp
+    return amount
         .checked_mul(985)
         .unwrap()
         .checked_div(1000)
@@ -882,7 +881,7 @@ fn get_after_pump_fee(amount: u64) -> u64 {
 }
 
 fn get_after_revelcy_fee(amount: u64) -> u64 {
-    return input.amount_sol_lamp
+    return amount
         .checked_mul(985)
         .unwrap()
         .checked_div(1000)

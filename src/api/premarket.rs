@@ -175,7 +175,7 @@ pub struct GetHolderEntryInfoQuery {
     pub holder_wallet: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize)]
 pub struct GetHolderEntryInfoResponse {
     #[serde(with = "string_as_number")]
     pub amount_sol: u64,
@@ -187,7 +187,7 @@ pub struct TokenEntryInfo {
     #[serde(with = "string_as_number")]
     pub total_dec: u64,  
     #[serde(with = "string_as_number")]
-    pub vested_dec: Option<u64>,
+    pub vested_dec: u64,
     #[serde(with = "string_as_number")]
     pub claimed_dec: u64,
 }
