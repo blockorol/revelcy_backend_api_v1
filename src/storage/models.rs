@@ -184,3 +184,10 @@ pub struct HolderStats {
     pub reserved_sol_lamp: i64,
     pub reserved_sol_24h_before_lamp: i64,
 }
+
+#[derive(sqlx::FromRow)]
+pub struct BondingPostionDbModel {
+    pub holder_amount: Option<i64>,
+    pub total_amount: i64,
+    pub is_claimed: bool,
+}

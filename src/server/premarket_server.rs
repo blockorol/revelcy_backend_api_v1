@@ -79,10 +79,14 @@ use crate::server::whitelist_handlers::{
     whitelist_approve, 
     whitelist_reject,
 };
+use crate::server::premarket_getter_handler::{
+    get_user_entry
+};
 
 pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
     web::scope("/premarket")
         .wrap(JwtMiddleware)
+        .route("/get_user_entry", web::get().to(get_user_entry))
         .route("/get_main_info", web::get().to(get_main_info))
         .route("/get_list", web::get().to(get_list_main_info))
         .route("/get_dynamic_info", web::get().to(get_dynamic_info))
