@@ -1,7 +1,13 @@
 use anyhow::{Result, bail};
 
-use crate::storage::models::{HolderDbModel, HolderStats, PremarketInfoDbModel, CommunityInfoDbModel, CommunityLinkDbModel};
-use crate::models::premarket::PremarketInfoServiceModel;
+use crate::storage::models::{
+    BondingPostionDbModel,
+    HolderDbModel, HolderStats, PremarketInfoDbModel, CommunityInfoDbModel, CommunityLinkDbModel
+};
+use crate::models::premarket::{
+    PremarketInfoServiceModel,
+    BondingPostion
+};
 use sqlx::{PgPool};
 use uuid::Uuid;
 use chrono::Utc;
@@ -635,6 +641,65 @@ pub async fn get_holders_by_premarket_id(
         reserved_sol_24h_before_lamp,
     })
 }
+
+pub async fn get_holder_entry_by_premarket_id(
+    pool: &PgPool,
+    premarket_info_id: Uuid,
+    holder_wallet: &str,
+) -> Result<Option<BondingPostion>> {
+    let row: Option<BondingPostionDbModel> = sqlx::query_as::<_, BondingPostionDbModel>(
+        r#"
+        WITH holder AS (
+            SELECT amount_lamport, join_timestamp, claimed
+            FROM premarket_holders
+            WHERE premarket_info_id = $1
+              AND holder_wallet = $2
+              AND out_timestamp IS NULL
+            LIMIT 1
+        )
+        SELECT
+            h.amount_lamport AS holder_amount,
+            h.claimed AS is_claimed,
+            (
+                SELECT COALESCE(SUM(ph.amount_lamport), 0)::BIGINT
+                FROM premarket_holders ph
+                WHERE ph.premarket_info_id = $1
+                  AND ph.out_timestamp IS NULL
+                  AND ph.join_timestamp < h.join_timestamp
+            ) AS total_amount,
+            (
+                SELECT COUNT(*)::BIGINT
+                FROM premarket_holders ph
+                WHERE ph.premarket_info_id = $1
+                  AND ph.out_timestamp IS NULL
+                  AND ph.join_timestamp < h.join_timestamp
+            ) AS rank
+        FROM holder h
+        "#
+    )
+    .bind(premarket_info_id)
+    .bind(holder_wallet)
+    .fetch_optional(pool)
+    .await?;
+
+    let row = match row {
+        Some(r) => r,
+        None => return Ok(None),
+    };
+
+    let holder_amount = match row.holder_amount {
+        Some(v) => v,
+        None => return Ok(None),
+    };
+
+    Ok(Some(BondingPostion {
+        amount_sol_lamp: holder_amount as u64,
+        before_amount_sol_lamp: row.total_amount as u64,
+        is_claimed: row.is_claimed,
+        rank: row.rank as i64,
+    }))
+}
+
 
 pub async fn update_premarket_state_to_finish(
     pool: &PgPool,

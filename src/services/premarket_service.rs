@@ -1,4 +1,5 @@
 use crate::models::premarket::{
+    BondingPostion, HolderEntryInfo, TokenEntryInfo,
     CreatePremarketInfoServiceModel,
     CommunityInfoServiceModel, CommunityLink, CreatePremarketConceptModel, FullPremarketInfo, HolderInfo, LinkType, PremarketGoal, PremarketInfoServiceModel, PremarketListResult, PremarketLookupKeyType, PremarketOnchainData, PremarketOnchainUser, PremarketState, SolanaNetwork, TokenDynamicInfo, TokenInfo, TokenLinks, TxConfirmationStatusDTO, UserInfoShort
 };
@@ -16,10 +17,14 @@ use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::premarket::PythResponse;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
+
+use crate::services::solana_price_service;
+
+pub const VIRTUAL_SUPPLY_RATIO: u64 = 30_000_000_000;
+pub const VIRTUAL_TOKEN_RATIO: u64 = 1_073_000_000_000_000;
 
 pub async fn get_full_premarket_info(
     pool: &PgPool,
@@ -422,6 +427,39 @@ pub async fn get_dynamic_info(
     })
 }
 
+pub async fn get_holder_entry_info(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    holder_pubkey: &str,
+) -> Result<Option<HolderEntryInfo>, actix_web::Error> {
+    let premarket_id = match premarket_repo::get_premarket_id_by_bc_address(pool, premarket_pubkey).await.map_err(ErrorInternalServerError)? {
+        Some(id) => id,
+        None => return Err(ErrorBadRequest("premarket not found"))
+    };
+
+    let holder_entry_data = match
+        premarket_repo::get_holder_entry_by_premarket_id(pool, premarket_id, holder_pubkey)
+            .await
+            .map_err(ErrorInternalServerError)? {
+                Some(d) => d,
+                None => return Ok(None)
+            };
+
+    let token_amount_dec = calculate_token_amount(holder_entry_data);
+    let claimed_dec = if holder_entry_data.is_claimed { token_amount_dec } else { 0 };
+
+
+    Ok(Some(HolderEntryInfo {
+        amount_sol_lamp: holder_entry_data.amount_sol_lamp,
+        token: TokenEntryInfo {
+            total_dec: token_amount_dec,
+            vested_dec: token_amount_dec,
+            claimed_dec: claimed_dec,
+        },
+        rank: holder_entry_data.rank,
+    }))
+}
+
 pub async fn set_premarket_state(
     pool: &PgPool,
     premarket_pubkey: &str,
@@ -487,42 +525,7 @@ pub async fn remove_holder(
 }
 
 pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
-    let url = match std::env::var("PYTH_MAINNET_URL") {
-        Ok(url) => url,
-        Err(_) => {
-            println!("PYTH_MAINNET_URL environment variable not set");
-            return 0.0;
-        }
-    };
-
-    let current_sol_price = match reqwest::get(&url).await {
-        Ok(response) => {
-            match response.json::<PythResponse>().await {
-                Ok(pyth_response) => {
-                    //println!("Pyth API response: {:?}", pyth_response);
-                    if let Some(parsed_data) = pyth_response.parsed.first() {
-                        // Parse the price string and apply the exponent
-                        let price_str = &parsed_data.price.price;
-                        let expo = parsed_data.price.expo;
-                        let price_value: f64 = price_str.parse().unwrap_or(0.0);
-                        let price = price_value * 10_f64.powi(expo);
-                        price
-                    } else {
-                        println!("No parsed data found in Pyth response");
-                        0.0
-                    }
-                }
-                Err(e) => {
-                    println!("Pyth JSON parsing error: {:?}", e);
-                    0.0
-                }
-            }
-        }
-        Err(e) => {
-            println!("Pyth HTTP request error: {:?}", e);
-            0.0
-        }
-    };
+    let current_sol_price = solana_price_service::get_sol_price().await;
 
     let real_sol_amount: f64 = real_lamp_amount as f64 / 1_000_000_000.0;
 
@@ -669,45 +672,16 @@ pub async fn get_holder_entry_price(
         premarket_repo::get_lamports_before_timestamp(pool, premarket_pubkey, join_timestamp)
             .await
             .map_err(ErrorInternalServerError)?;
+    let final_price = calculate_entry_price(lamports_before_join as u64).await;
 
-    // Use the same price calculation as get_price_by_market_cap
-    let url = match std::env::var("PYTH_MAINNET_URL") {
-        Ok(url) => url,
-        Err(_) => {
-            println!("PYTH_MAINNET_URL environment variable not set");
-            return Ok(Some(0.0));
-        }
-    };
+    println!("Entry price: {}", final_price);
 
-    let current_sol_price = match reqwest::get(&url).await {
-        Ok(response) => {
-            println!("Pyth API response status: {}", response.status());
-            match response.json::<PythResponse>().await {
-                Ok(pyth_response) => {
-                    if let Some(parsed_data) = pyth_response.parsed.first() {
-                        let price_str = &parsed_data.price.price;
-                        let expo = parsed_data.price.expo;
-                        let price_value: f64 = price_str.parse().unwrap_or(0.0);
-                        let price = price_value * 10_f64.powi(expo);
-                        price
-                    } else {
-                        println!("No parsed data found in Pyth response");
-                        0.0
-                    }
-                }
-                Err(e) => {
-                    println!("Pyth JSON parsing error: {:?}", e);
-                    0.0
-                }
-            }
-        }
-        Err(e) => {
-            println!("Pyth HTTP request error: {:?}", e);
-            0.0
-        }
-    };
+    Ok(Some(final_price))
+}
 
-    let real_lamp_amount = lamports_before_join as u64;
+async fn calculate_entry_price(real_lamp_amount: u64) -> f64 {
+    let current_sol_price = solana_price_service::get_sol_price().await;
+    
     let real_sol_amount: f64 = real_lamp_amount as f64 / 1_000_000_000.0;
 
     let real_token_bought_amount: u64 =
@@ -719,9 +693,7 @@ pub async fn get_holder_entry_price(
 
     let price = virtual_lamp_amount / virtual_token_amount as f64 * current_sol_price;
     let final_price = (price * 1_000_000_000.0).round() / 1_000_000_000.0;
-    println!("Entry price: {}", final_price);
-
-    Ok(Some(final_price))
+    final_price
 }
 
 pub async fn update_premarket_deadline(
@@ -815,4 +787,61 @@ pub async fn user_claimed_token(
     }
 
     Ok(())
+}
+
+fn calculate_token_amount(input: BondingPostion ) -> u64 {
+    let amount_sol_in_curve_lamp = get_in_curve(input.amount_sol_lamp);
+    let before_amount_sol_in_curve_lamp = get_in_curve(input.before_amount_sol_lamp);
+
+    let mut vsr = VIRTUAL_SUPPLY_RATIO;
+    let mut vtr = VIRTUAL_TOKEN_RATIO;
+
+    let user_tokens_before = tokens_out_from_sol(before_amount_sol_in_curve_lamp, vsr, vtr);
+
+    vsr = vsr.saturating_add(before_amount_sol_in_curve_lamp);
+    vtr = vtr.saturating_sub(user_tokens_before);
+
+    tokens_out_from_sol(amount_sol_in_curve_lamp, vsr, vtr)
+}
+
+fn get_in_curve(amount: u64) -> u64 {
+    return get_after_pump_fee(get_after_revelcy_fee((amount)));
+}
+
+fn get_after_pump_fee(amount: u64) -> u64 {
+    return amount
+        .checked_mul(985)
+        .unwrap()
+        .checked_div(1000)
+        .unwrap();
+}
+
+fn get_after_revelcy_fee(amount: u64) -> u64 {
+    return amount
+        .checked_mul(985)
+        .unwrap()
+        .checked_div(1000)
+        .unwrap();
+}
+
+/// Given:
+/// - `sol_in`               = incoming SOL in lamports (u64)
+/// - `virtual_sol_reserves` = SOL-side reserve in lamports (u64)
+/// - `virtual_token_reserves` = token-side reserve in smallest units (u64)
+/// Returns how many tokens (in smallest units) you’ll receive.
+/// ΔY = Y * ΔX / (X + ΔX)
+///   where:
+///     X  = virtual_sol_reserves (SOL‐side reserve, in lamports)
+///     Y  = virtual_token_reserves (token‐side reserve, in smallest units)
+///     ΔX = sol_in (incoming SOL, in lamports)
+fn tokens_out_from_sol(
+    sol_in: u64,
+    virtual_sol_reserves: u64,
+    virtual_token_reserves: u64,
+) -> u64 {
+    // Do multiplication in u128 to avoid overflow
+    let numerator: u128 = (virtual_token_reserves as u128) * (sol_in as u128);
+    let denominator: u128 = (virtual_sol_reserves as u128) + (sol_in as u128);
+    // Floor division gives the integer token amount
+    (numerator / denominator) as u64
 }
