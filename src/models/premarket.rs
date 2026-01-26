@@ -265,6 +265,30 @@ pub struct TokenDynamicInfo {
     pub holders: Vec<HolderInfo>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct HolderEntryInfo {
+    pub amount_sol_lamp: u64,
+    pub token: TokenEntryInfo,
+    pub rank: i64,
+}
+
+#[derive(Serialize, Deserialize, Copy, Debug, Clone)]
+pub struct BondingPostion {
+    pub amount_sol_lamp: u64,
+    pub before_amount_sol_lamp: u64,
+    pub is_claimed: bool,
+    pub rank: i64,
+}
+
+#[derive(Serialize, Deserialize, Copy, Debug, Clone)]
+pub struct TokenEntryInfo {
+    pub total_dec: u64,
+    pub claimed_dec: u64,
+    pub vested_dec: u64,
+
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TxConfirmationStatusDTO {
     Pending,

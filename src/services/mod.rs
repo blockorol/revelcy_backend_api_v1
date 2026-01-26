@@ -11,4 +11,5 @@ pub mod ipfs_service;
 pub mod user_info_service;
 pub mod whitelist_service;
 pub mod vesting_service;
+pub mod solana_price_service;
 

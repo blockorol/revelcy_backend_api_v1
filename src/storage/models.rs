@@ -188,6 +188,14 @@ pub struct HolderStats {
     pub reserved_sol_24h_before_lamp: i64,
 }
 
+#[derive(sqlx::FromRow)]
+pub struct BondingPostionDbModel {
+    pub holder_amount: Option<i64>,
+    pub total_amount: i64,
+    pub is_claimed: bool,
+    pub rank: i64,
+}
+
 // Vesting Models
 #[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
 pub struct VestingInfoDbModel {

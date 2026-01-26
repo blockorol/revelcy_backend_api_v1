@@ -170,6 +170,30 @@ pub enum TokenState {
 
 
 #[derive(Deserialize)]
+pub struct GetHolderEntryInfoQuery {
+    pub premarket_id: String,
+    pub holder_wallet: String,
+}
+
+#[derive(Serialize)]
+pub struct GetHolderEntryInfoResponse {
+    #[serde(with = "string_as_number")]
+    pub amount_sol_lamp: u64,
+    pub token: TokenEntryInfo,
+    pub rank: i64,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct TokenEntryInfo {
+    #[serde(with = "string_as_number")]
+    pub total_dec: u64,  
+    #[serde(with = "string_as_number")]
+    pub vested_dec: u64,
+    #[serde(with = "string_as_number")]
+    pub claimed_dec: u64,
+}
+
+#[derive(Deserialize)]
 pub struct GetDynamicInfoQuery {
     pub premarket_id: String,
 }
