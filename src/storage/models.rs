@@ -5,7 +5,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use std::convert::TryFrom;
 use crate::models::user::User;
-use crate::models::premarket::{ UserInfoShort, PremarketInfoServiceModel, PremarketGoal, TokenLinks, TokenInfo, PremarketState};
+use crate::models::premarket::{ UserInfoShort, PremarketInfoServiceModel, PremarketGoal, TokenLinks, TokenInfo, PremarketState, VestingInfo};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct WhitelistDbModel {
@@ -175,7 +175,10 @@ pub struct HolderDbModel {
     pub claimed: bool,
     pub avatar_url: Option<String>, // Just to response with join
     pub username: Option<String>,   // Just to response with join
-
+    // Vesting-related fields
+    pub amount_token: Option<i64>,
+    pub claimed_amount_token: Option<i64>,
+    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 pub struct HolderStats {
@@ -191,4 +194,62 @@ pub struct BondingPostionDbModel {
     pub total_amount: i64,
     pub is_claimed: bool,
     pub rank: i64,
+}
+
+// Vesting Models
+#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
+pub struct VestingInfoDbModel {
+    pub id: Uuid,
+    pub premarket_id: Uuid,
+    pub vesting_address: String,
+    pub vesting_period: i64,
+    pub init_unlock: i64,
+    pub timestamp_start: Option<i64>,
+    pub timestamp_end: Option<i64>,
+    pub created_at: Option<i64>,
+    pub updated_at: Option<i64>,
+}
+
+// Full vesting info with premarket data
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct FullVestingInfoDbModel {
+    // Vesting info fields
+    pub vesting_id: Uuid,
+    pub vesting_address: String,
+    pub timestamp_start: Option<i64>,
+    pub timestamp_end: Option<i64>,
+    // Premarket fields needed for vesting
+    pub premarket_id: Uuid,
+    pub premarket_address: String,
+    pub mint_address: String,
+    pub creator_id: Uuid,
+    pub creator_address: String,
+    pub vesting_period: i64,
+    pub init_unlock: i64,
+    pub name: String,
+    pub symbol: String,
+}
+
+impl TryFrom<FullVestingInfoDbModel> for VestingInfo {
+    type Error = anyhow::Error;
+
+    fn try_from(db: FullVestingInfoDbModel) -> Result<Self> {
+        // Calculate is_active: vesting is active if both timestamps are set
+        let is_active = db.timestamp_start.is_some() && db.timestamp_end.is_some();
+
+        Ok(Self {
+            vesting_id: db.vesting_id,
+            vesting_address: db.vesting_address,
+            premarket_id: db.premarket_id,
+            premarket_address: db.premarket_address,
+            mint_address: db.mint_address,
+            creator_id: db.creator_id,
+            creator_address: db.creator_address,
+            vesting_period: db.vesting_period,
+            init_unlock: db.init_unlock,
+            timestamp_start: db.timestamp_start,
+            timestamp_end: db.timestamp_end,
+            is_active,
+        })
+    }
 }

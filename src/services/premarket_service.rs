@@ -502,6 +502,9 @@ pub async fn add_holder(
         claimed: false,
         avatar_url: None,
         username: None,
+        amount_token: None,
+        claimed_amount_token: None,
+        updated_at: None,
     };
     premarket_repo::insert_holder(pool, premarket_pubkey, &holder)
         .await
@@ -805,7 +808,7 @@ fn calculate_token_amount(input: BondingPostion ) -> u64 {
 }
 
 fn get_in_curve(amount: u64) -> u64 {
-    return get_after_pump_fee(get_after_revelcy_fee((amount)));
+    return get_after_pump_fee(get_after_revelcy_fee(amount));
 }
 
 fn get_after_pump_fee(amount: u64) -> u64 {

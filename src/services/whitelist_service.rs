@@ -2,7 +2,6 @@ use actix_web::error::{ErrorBadRequest, ErrorInternalServerError};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::user::User;
 use crate::models::whitelist::{WhitelistUsersResult, WhitelistStatus};
 use crate::services::user_service;
 use crate::storage::whitelist_repo;

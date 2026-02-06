@@ -240,9 +240,12 @@ pub fn validate_extend_premarket(
 
 pub fn validate_finish_premarket(
     premarket: &FullPremarketInfo,
+    timestamp_start: i64,
+    timestamp_end: i64,
+    init_unlock: u64,
 ) -> Result<(), Vec<FieldError>> {
     let mut errors = Vec::new();
-    // let now = Utc::now().timestamp();
+    let now = Utc::now().timestamp();
 
     // 1) state
     if premarket.main_info.state != PremarketState::Premarket {
@@ -283,6 +286,43 @@ pub fn validate_finish_premarket(
     //         message: "premarket goal not reached",
     //     });
     // }
+
+    // 5) Vesting timestamp validation
+    if timestamp_start < now {
+        errors.push(FieldError {
+            field: "timestamp_start",
+            code: ApiErrorCode::InvalidTimestamp,
+            message: "vesting start timestamp must be in the future",
+        });
+    }
+
+    if timestamp_end < timestamp_start {
+        errors.push(FieldError {
+            field: "timestamp_end",
+            code: ApiErrorCode::InvalidTimestamp,
+            message: "vesting end timestamp must be after start timestamp",
+        });
+    }
+
+    // Reasonable vesting duration: at least 1 hour, max 1 year
+    let vesting_duration = timestamp_end - timestamp_start;
+
+    if vesting_duration > 60 * 60 * 24 * 365{
+        errors.push(FieldError {
+            field: "timestamp_end",
+            code: ApiErrorCode::InvalidTimestamp,
+            message: "vesting duration cannot exceed 1 years",
+        });
+    }
+
+    // 6) init_unlock validation (should be 0-100 as percentage)
+    if init_unlock > 100 {
+        errors.push(FieldError {
+            field: "init_unlock",
+            code: ApiErrorCode::InvalidPercentage,
+            message: "init_unlock must be between 0 and 100 (percentage)",
+        });
+    }
 
     if errors.is_empty() { Ok(()) } else { Err(errors) }
 }

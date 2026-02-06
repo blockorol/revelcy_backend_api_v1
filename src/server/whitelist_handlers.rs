@@ -1,12 +1,10 @@
 use std::str::FromStr;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use actix_web::error::ErrorInternalServerError;
 use sqlx::PgPool;
 use solana_sdk::pubkey::Pubkey;
 
 use crate::api::errors::{ApiError, ApiErrorCode,FieldError, ApiResult};
-use crate::api::premarket::Network;
 use crate::api::whitelist::{
     WhitelistSetStatusRequest, WhitelistSetStatusResponse,
     RemoveWhitelistUserRequest, RemoveWhitelistUserResponse,

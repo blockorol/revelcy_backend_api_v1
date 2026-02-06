@@ -16,6 +16,8 @@ use spl_associated_token_account::get_associated_token_address;
 use spl_associated_token_account::ID as associated_token_program_id;
 use spl_token::ID as token_program_id;
 
+use crate::services::solana_service_v2::vesting::generate_vesting_pda;
+
 use crate::models::premarket::{BuildWithdrawVestingTxParams, BuiltTx, SolanaNetwork};
 
 use super::constants::WITHDRAW_VESTING_METHOD_NAME;
@@ -36,12 +38,7 @@ pub async fn build_withdraw_vesting_tx_unsigned(params: BuildWithdrawVestingTxPa
     let revelcy_auth = read_revelcy_auth(params.network);
 
     // Calculate vesting_account PDA: seeds = ["vesting", token_mint]
-    let vesting_seed = b"vesting";
-    let (vesting_account, _vesting_bump) = Pubkey::find_program_address(
-        &[vesting_seed, params.token_mint.as_ref()],
-        &program_id,
-    );
-
+    let vesting_account =  generate_vesting_pda(params.network, params.token_mint);
     // Get associated token accounts
     let vesting_ata = get_associated_token_address(&vesting_account, &params.token_mint);
     let user_ata = get_associated_token_address(&params.user, &params.token_mint);
@@ -156,9 +153,8 @@ pub fn parse_withdraw_vesting_tx_from_base64(
     }
 
     // Validate vesting_account PDA
-    let vesting_seed = b"vesting";
-    let (expected_vesting_account, _bump) =
-        Pubkey::find_program_address(&[vesting_seed, token_mint.as_ref()], &program_id);
+    let expected_vesting_account =  generate_vesting_pda(network, token_mint);
+
 
     if vesting_account != expected_vesting_account {
         return Err(anyhow!(

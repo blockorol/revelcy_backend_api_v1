@@ -2,7 +2,6 @@
 use actix_web::{HttpResponse, ResponseError};
 use actix_web::http::StatusCode;
 use serde::Serialize;
-use tracing::field;
 use std::fmt;
 
 pub type ApiResult<T> = Result<T, ApiError>;
@@ -22,6 +21,9 @@ pub enum ApiErrorCode {
     // Invite code
     InviteCodeNotFound,
     InviteCodeAlreadyApplied,
+
+    // Vesting
+    InvalidVestingPeriod,
 
     // Premarket creation-validation
     PremarketDeadlineTooEarly,
@@ -50,6 +52,11 @@ pub enum ApiErrorCode {
     PremarketFinishGoalNotReached,
     PremarketAlreadyFinished,
 
+    // Vesting validation
+    VestingNotFound,
+    InvalidTimestamp,
+    InvalidPercentage,
+
     // Internal Error
     InternalBuildTxFailed,
     InternalSignTxFailed,
@@ -62,6 +69,7 @@ pub enum ApiErrorCode {
     InvalidTxType,
     InvalidPremarketPubkey,
     MissingPremarket,
+    MissingField,
 }
 
 /// Описание ошибки конкретного поля.
@@ -430,6 +438,7 @@ impl ResponseError for ApiError {
             | InvalidTxType
             | InvalidPremarketPubkey 
             | PremarketAmountZero
+            | InvalidVestingPeriod
             | PremarketJoinAmountTooLarge
             | InvalidTokenMintPubkey
             | PremarketAlreadyExtended
@@ -442,6 +451,10 @@ impl ResponseError for ApiError {
             | PremarketFinishGoalNotReached
             | PremarketAlreadyFinished
             | MissingPremarket
+            | VestingNotFound
+            | InvalidTimestamp
+            | InvalidPercentage
+            | MissingField
             | InviteCodeNotFound
             => StatusCode::BAD_REQUEST,
 

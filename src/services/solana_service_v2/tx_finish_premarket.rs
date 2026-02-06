@@ -72,6 +72,12 @@ pub async fn build_finish_premarket_tx_unsigned(
 
     let revelcy = read_revelcy_auth(params.network);
     let revelcy_pub = revelcy.pubkey();
+    let revelcy_ata = get_associated_token_address(&revelcy_pub, &mint_pub);
+    
+    // Vesting account PDA and ATA
+    let (vesting_account, _) = pda(&program_id, &[b"vesting", mint_pub.as_ref()]);
+    let vesting_ata = get_associated_token_address(&vesting_account, &mint_pub);
+
     let associated_user_ata = get_associated_token_address(&revelcy_pub, &mint_pub);
 
     let (creator_vault, _) = pda(
@@ -90,35 +96,43 @@ pub async fn build_finish_premarket_tx_unsigned(
     ];
     let (fee_config, _) = Pubkey::find_program_address(&[seed1, &seed2], &fee_program);
 
-    // discriminator only
-    let mut data = Vec::with_capacity(8);
+    // Serialize discriminator + args
+    let mut data = Vec::with_capacity(32);
     data.extend_from_slice(&anchor_sighash_global(FINISH_METHOD_NAME));
+    
+    // Serialize FinishPremarketArgs: timestamp_start (i64), timestamp_end (i64), init_unlock (u64)
+    data.extend_from_slice(&params.timestamp_start.to_le_bytes());
+    data.extend_from_slice(&params.timestamp_end.to_le_bytes());
+    data.extend_from_slice(&params.init_unlock.to_le_bytes());
 
-    // IDL порядок
+    // IDL порядок (based on finish_premarket instruction)
     let accounts = vec![
-        AccountMeta::new(revelcy_pub, true),                  // 1
-        AccountMeta::new(params.premarket, false),            // 2
-        AccountMeta::new(mint_pub, true),                     // 3
-        AccountMeta::new_readonly(mint_auth, false),          // 4
-        AccountMeta::new(bonding_curve, false),               // 5
-        AccountMeta::new(bonding_curve_ata, false),           // 6
-        AccountMeta::new(pumpfun_global, false),              // 7
-        AccountMeta::new(metaplex_program, false), // 8 (как у тебя; хотя обычно readonly)
-        AccountMeta::new(metadata, false),         // 9
-        AccountMeta::new(params.user, true),       // 10
-        AccountMeta::new_readonly(system_program::ID, false), // 11
-        AccountMeta::new_readonly(token_program_id, false), // 12
-        AccountMeta::new_readonly(associated_token_program_id, false), // 13
-        AccountMeta::new_readonly(rent_sysvar, false), // 14
-        AccountMeta::new(event_auth, false),       // 15
-        AccountMeta::new_readonly(pump_fun_program_id, false), // 16
-        AccountMeta::new(fee_recipient, false),    // 17
-        AccountMeta::new(associated_user_ata, false), // 18
-        AccountMeta::new(creator_vault, false),    // 19
-        AccountMeta::new(global_volume_accum, false), // 20
-        AccountMeta::new(user_volume_accum, false), // 21
-        AccountMeta::new(fee_config, false),       // 22
-        AccountMeta::new(fee_program, false),      // 23
+        AccountMeta::new(revelcy_pub, true),                  // 1. revelcy_auth
+        AccountMeta::new(revelcy_ata, false),                 // 2. revelcy_ata
+        AccountMeta::new(vesting_account, false),             // 3. vesting_account (PDA)
+        AccountMeta::new(vesting_ata, false),                 // 4. vesting_ata
+        AccountMeta::new(params.premarket, false),            // 5. premarket_account
+        AccountMeta::new(mint_pub, true),                     // 6. token_mint (writable, signer)
+        AccountMeta::new_readonly(mint_auth, false),          // 7. mint_auth
+        AccountMeta::new(bonding_curve, false),               // 8. bonding_curve
+        AccountMeta::new(bonding_curve_ata, false),           // 9. bonding_curve_ata
+        AccountMeta::new(pumpfun_global, false),              // 10. global
+        AccountMeta::new(metaplex_program, false),            // 11. mpl_token_metadata
+        AccountMeta::new(metadata, false),                    // 12. metadata
+        AccountMeta::new(params.user, true),                  // 13. user (writable, signer)
+        AccountMeta::new_readonly(system_program::ID, false), // 14. system_program
+        AccountMeta::new_readonly(token_program_id, false),   // 15. token_program
+        AccountMeta::new_readonly(associated_token_program_id, false), // 16. associated_token_program
+        AccountMeta::new_readonly(rent_sysvar, false),        // 17. rent
+        AccountMeta::new(event_auth, false),                  // 18. event_auth
+        AccountMeta::new_readonly(pump_fun_program_id, false), // 19. pump_fun_program_id
+        AccountMeta::new(fee_recipient, false),               // 20. fee_recipient
+        AccountMeta::new(associated_user_ata, false),         // 21. associated_user
+        AccountMeta::new(creator_vault, false),               // 22. creator_vault
+        AccountMeta::new(global_volume_accum, false),         // 23. global_volume_accumulator
+        AccountMeta::new(user_volume_accum, false),           // 24. user_volume_accumulator
+        AccountMeta::new(fee_config, false),                  // 25. fee_config
+        AccountMeta::new(fee_program, false),                 // 26. fee_program
     ];
 
     let ix_finish = Instruction {

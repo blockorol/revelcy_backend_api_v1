@@ -9,6 +9,7 @@ mod proxy;
 mod auth_validation;
 mod whitelist_handlers;
 mod premarket_getter_handler;
+mod vesing_server_handler;
 
 pub fn init_servers(cfg: &mut web::ServiceConfig) {
     cfg

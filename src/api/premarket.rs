@@ -257,7 +257,17 @@ pub struct OutPremarketTxRequest {
 pub struct FinishPremarketTxRequest {
     pub network: String,          // "devnet" | "mainnet-beta"
     pub user_pubkey: String,      // base58
-    pub premarket_account: String // base58
+    pub premarket_account: String,// base58
+}
+
+#[derive(serde::Deserialize)]
+
+pub struct DistributeTokensRequest {
+    pub network: String,          // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,      // base58
+    pub premarket_account: String, // base58
+    pub token_mint: String,       // base58
+    pub users: Vec<String>,        // base58
 }
 
 #[derive(serde::Deserialize)]
@@ -465,4 +475,51 @@ mod string_as_number {
         let s = String::deserialize(d)?; // теперь всё ок
         s.parse::<T>().map_err(serde::de::Error::custom)
     }
+}
+
+
+// Vesting API DTOs
+#[derive(Deserialize)]
+pub struct GetVestingInfoQuery {
+    pub lookup_type: String, // "premarket_id" | "premarket_address" | "vesting_address" | "mint_address"
+    pub key: String,
+}
+
+#[derive(Serialize)]
+pub struct VestingInfoDTO {
+    pub vesting_id: String,
+    pub vesting_address: String,
+    pub premarket_id: String,
+    pub premarket_address: String,
+    #[serde(with = "string_as_number")]
+    pub vesting_period: i64,
+    #[serde(with = "string_as_number")]
+    pub init_unlock: i64,
+    pub timestamp_start: Option<i64>,
+    pub timestamp_end: Option<i64>,
+    pub is_active: bool,
+}
+
+#[derive(Serialize)]
+pub struct VestingHolderDTO {
+    pub holder_id: Option<String>,
+    pub holder_wallet: String,
+    #[serde(with = "string_as_number")]
+    pub amount_sol_lamp: i64,
+    pub amount_tokens: Option<i64>,
+    pub claimed_tokens: Option<i64>,
+    pub available_tokens: Option<i64>,
+    pub username: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct FullVestingInfoDTO {
+    pub vesting_info: VestingInfoDTO,
+    pub holders: Vec<VestingHolderDTO>,
+    pub total_holders: usize,
+    #[serde(with = "string_as_number")]
+    pub total_tokens: i64,
+    #[serde(with = "string_as_number")]
+    pub total_tokens_claimed: i64,
 }
