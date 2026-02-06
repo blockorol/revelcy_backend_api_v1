@@ -411,7 +411,7 @@ pub async fn update_availability_info(
         UPDATE premarket_info
             SET
                 is_hided = COALESCE($2, is_hided),
-                short_url_name = COALESCE($3, short_url_name)
+                short_url_name = COALESCE($3, short_url_name),
                 is_whitelist_enabled = COALESCE($4, is_whitelist_enabled)
             WHERE id = $1
         "#,

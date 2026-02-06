@@ -808,7 +808,7 @@ fn calculate_token_amount(input: BondingPostion ) -> u64 {
 }
 
 fn get_in_curve(amount: u64) -> u64 {
-    return get_after_pump_fee(get_after_revelcy_fee((amount)));
+    return get_after_pump_fee(get_after_revelcy_fee(amount));
 }
 
 fn get_after_pump_fee(amount: u64) -> u64 {

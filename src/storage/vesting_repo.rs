@@ -206,6 +206,57 @@ pub async fn create_vesting_info(
     full_vesting_db.try_into()
 }
 
+/// Update vesting info record by premarket_id
+/// Returns service model VestingInfo (full join model, same as create)
+pub async fn update_vesting_info(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    vesting_period: i64,
+    init_unlock: i64,
+    timestamp_start: Option<i64>,
+    timestamp_end: Option<i64>,
+) -> Result<VestingInfo> {
+    // Update vesting info
+    let affected = sqlx::query(
+        r#"
+        UPDATE vesting_info
+        SET
+            vesting_period  = $2,
+            init_unlock     = $3,
+            timestamp_start = $4,
+            timestamp_end   = $5,
+            updated_at      = now()
+        WHERE premarket_id = $1
+        "#
+    )
+    .bind(premarket_id)
+    .bind(vesting_period)
+    .bind(init_unlock)
+    .bind(timestamp_start)
+    .bind(timestamp_end)
+    .execute(pool)
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to update vesting info: {}", e))?
+    .rows_affected();
+
+    if affected == 0 {
+        return Err(anyhow::anyhow!(
+            "Vesting info not found for premarket_id={}",
+            premarket_id
+        ));
+    }
+
+    // Fetch full vesting info with premarket data
+    let full_vesting_db = get_vesting_info_by_premarket_id(pool, premarket_id)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to fetch vesting info after update: {}", e))?
+        .ok_or_else(|| anyhow::anyhow!("Vesting info not found after update"))?;
+
+    // Convert to service model
+    full_vesting_db.try_into()
+}
+
+
 /// Update vesting timestamps (when vesting starts)
 pub async fn update_vesting_timestamps(
     pool: &PgPool,

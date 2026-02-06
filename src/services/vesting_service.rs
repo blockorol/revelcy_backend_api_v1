@@ -1,11 +1,13 @@
 use crate::models::premarket::{VestingHolderInfo, VestingInfo};
 use crate::storage::vesting_repo;
+use solana_sdk::pubkey::Pubkey;
+use crate::models::premarket::SolanaNetwork;
+use crate::services::solana_service_v2::vesting::generate_vesting_pda;
 use actix_web::error::{ErrorInternalServerError, ErrorNotFound};
 use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Lookup type for vesting info queries
 #[derive(Debug, Clone, Copy)]
 pub enum VestingLookupType {
     PremarketId,
@@ -14,21 +16,11 @@ pub enum VestingLookupType {
     MintAddress,
 }
 
-/// Get vesting info (without holders)
-/// 
-/// # Arguments
-/// * `pool` - Database connection pool
-/// * `key` - The lookup key (UUID string for PremarketId, address string for others)
-/// * `lookup_type` - Type of lookup to perform
-///
-/// # Returns
-/// Vesting information, or None if not found
 pub async fn get_full_vesting_info(
     pool: &PgPool,
     key: &str,
     lookup_type: VestingLookupType,
 ) -> Result<Option<VestingInfo>, actix_web::Error> {
-    // Get vesting info based on lookup type
     let vesting_db = match lookup_type {
         VestingLookupType::PremarketId => {
             let uuid = Uuid::parse_str(key)
@@ -41,24 +33,18 @@ pub async fn get_full_vesting_info(
         VestingLookupType::VestingAddress => {
             vesting_repo::get_vesting_info_by_vesting_address(pool, key).await
         }
-        VestingLookupType::MintAddress => {
-            vesting_repo::get_vesting_info_by_mint_address(pool, key).await
-        }
+        VestingLookupType::MintAddress => vesting_repo::get_vesting_info_by_mint_address(pool, key).await,
     }
     .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))?;
 
-    // If no vesting found, return None
     let vesting_db = match vesting_db {
         Some(v) => v,
         None => return Ok(None),
     };
 
-    // Calculate if vesting is active
-    let is_active = vesting_db.timestamp_start.is_some() 
-        && vesting_db.timestamp_end.is_some();
+    let is_active = vesting_db.timestamp_start.is_some() && vesting_db.timestamp_end.is_some();
 
-    // Convert to service model
-    let vesting_info = VestingInfo {
+    Ok(Some(VestingInfo {
         vesting_id: vesting_db.vesting_id,
         vesting_address: vesting_db.vesting_address,
         premarket_id: vesting_db.premarket_id,
@@ -71,18 +57,9 @@ pub async fn get_full_vesting_info(
         timestamp_start: vesting_db.timestamp_start,
         timestamp_end: vesting_db.timestamp_end,
         is_active,
-    };
-
-    Ok(Some(vesting_info))
+    }))
 }
 
-/// Calculate available tokens for a holder based on vesting schedule
-/// 
-/// Formula:
-/// - If vesting not started: 0
-/// - At start: init_unlock% of total
-/// - Linear vesting from start to end for remaining tokens
-/// - After end: 100% of total
 pub fn calculate_available_tokens(
     total: i64,
     claimed: i64,
@@ -91,7 +68,6 @@ pub fn calculate_available_tokens(
     init_unlock_percent: i64,
     now: i64,
 ) -> Option<i64> {
-    // If vesting hasn't started, no tokens available
     if start.is_none() || end.is_none() {
         return Some(0);
     }
@@ -99,42 +75,32 @@ pub fn calculate_available_tokens(
     let start_ts = start.unwrap();
     let end_ts = end.unwrap();
 
-    // If current time is before start, no tokens available
     if now < start_ts {
         return Some(0);
     }
-
-    // If current time is after end, all tokens available
     if now >= end_ts {
         return Some(total - claimed);
     }
 
-    // Calculate initial unlock amount
     let init_unlock_amount = (total * init_unlock_percent) / 100;
 
-    // Linear vesting calculation
     let vesting_duration = end_ts - start_ts;
     let time_elapsed = now - start_ts;
-    
-    // Remaining tokens after initial unlock
+
     let vesting_amount = total - init_unlock_amount;
-    
-    // Calculate vested amount (linear)
+
     let vested_amount = if vesting_duration > 0 {
         (vesting_amount * time_elapsed) / vesting_duration
     } else {
         vesting_amount
     };
 
-    // Total available = initial unlock + vested amount - already claimed
     let total_available = init_unlock_amount + vested_amount;
     let available = total_available - claimed;
-    
-    // Ensure we don't return negative
+
     Some(available.max(0))
 }
 
-/// Get vesting info for a specific holder (from premarket_holders)
 pub async fn get_vesting_holder_info(
     pool: &PgPool,
     premarket_id: Uuid,
@@ -146,7 +112,6 @@ pub async fn get_vesting_holder_info(
 
     match holder_db {
         Some(h) => {
-            // Get vesting info to calculate available tokens
             let vesting_db = vesting_repo::get_vesting_info_by_premarket_id(pool, premarket_id)
                 .await
                 .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))?
@@ -179,4 +144,98 @@ pub async fn get_vesting_holder_info(
         }
         None => Ok(None),
     }
+}
+
+/// Update vesting info for a premarket.
+///
+/// Semantics:
+/// - If enabled=false: clear timestamp_start/end (vesting disabled) and update params.
+/// - If enabled=true:
+///   - ensure vesting_info exists (create if missing) **requires** `vesting_address` to be already set in DB.
+///   - if timestamps are not set yet: set start=now, end=now+vesting_period_sec
+///   - always update vesting_period/init_unlock
+pub async fn update_vesting_info(
+    pool: &PgPool,
+    network: SolanaNetwork,
+    premarket_id: Uuid,
+    mint: Pubkey,
+    enabled: bool,
+    vesting_period_sec: i64,
+    unlock_at_launch_percent: i64,
+) -> Result<(), actix_web::Error> {
+    if unlock_at_launch_percent < 0 || unlock_at_launch_percent > 100 {
+        return Err(actix_web::error::ErrorBadRequest(
+            "unlock_at_launch_percent must be 0..=100",
+        ));
+    }
+    if enabled && vesting_period_sec <= 0 {
+        return Err(actix_web::error::ErrorBadRequest(
+            "vesting_period_sec must be > 0 when enabled=true",
+        ));
+    }
+
+    // Ensure row exists (create minimal row if missing).
+    // IMPORTANT: create_vesting_info requires vesting_address; we must have it somewhere.
+    // If you don’t have it yet, either:
+    //  - change create_vesting_info signature to accept Option<&str> and store NULL, or
+    //  - add a separate repo method that does INSERT ... ON CONFLICT (premarket_id) DO NOTHING with provided address.
+    let existing = vesting_repo::get_vesting_info_by_premarket_id(pool, premarket_id)
+        .await
+        .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))?;
+
+    if existing.is_none() {
+        // try to read vesting_address from somewhere (for example, precomputed onchain address stored in DB)
+        // You need a repo helper for that. If you already have it — replace this call.
+        let vesting_address = generate_vesting_pda(network, mint);
+
+        // create row with timestamps depending on enabled
+        let now = Utc::now().timestamp();
+        let (ts_start, ts_end) = if enabled {
+            (Some(now), Some(now + vesting_period_sec))
+        } else {
+            (None, None)
+        };
+
+        vesting_repo::create_vesting_info(
+            pool,
+            premarket_id,
+            &vesting_address.to_string(),
+            vesting_period_sec,
+            unlock_at_launch_percent,
+            ts_start,
+            ts_end,
+        )
+        .await
+        .map_err(|e| ErrorInternalServerError(format!("Failed to create vesting info: {}", e)))?;
+
+        return Ok(());
+    }
+
+    // Update existing row
+    let now = Utc::now().timestamp();
+
+    let current = existing.unwrap();
+
+    let (timestamp_start, timestamp_end) = if !enabled {
+        (None, None)
+    } else {
+        // if already started, keep existing start/end; else set new
+        match (current.timestamp_start, current.timestamp_end) {
+            (Some(s), Some(e)) => (Some(s), Some(e)),
+            _ => (Some(now), Some(now + vesting_period_sec)),
+        }
+    };
+
+    vesting_repo::update_vesting_info(
+        pool,
+        premarket_id,
+        vesting_period_sec,
+        unlock_at_launch_percent,
+        timestamp_start,
+        timestamp_end,
+    )
+    .await
+    .map_err(|e| ErrorInternalServerError(format!("Failed to update vesting info: {}", e)))?;
+
+    Ok(())
 }

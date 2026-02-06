@@ -10,3 +10,18 @@ pub fn get_pyth_subdomain() -> String {
 pub fn get_pyth_secret_token() -> String {
     std::env::var("PYTH_SECRET_TOKEN").unwrap_or_else(|_| "".to_string())
 }
+pub fn get_revelcy_auth_privite_key() -> String {
+    std::env::var("REVELCY_AUTH_PRIVATE_KEY").unwrap_or_else(|_| "".to_string())
+}
+pub fn get_pyth_mainnet_url() -> String {
+    std::env::var("PYTH_MAINNET_URL").unwrap_or_else(|_| "".to_string())
+}
+// todo: change to SolanaNetwork
+pub fn get_network() -> String {
+        std::env::var("NETWORK").unwrap_or_else(|_| "".to_string())
+}
+
+// todo: Network -> enum (mainnet/devnet)
+// hosts -> Url
+// add vaildation on startup
+// make a config with banch

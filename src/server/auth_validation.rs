@@ -12,12 +12,7 @@ pub struct BaseRequestContext {
     pub network: SolanaNetwork,
     pub user: UserContextData,
 }
-
-pub fn validate_base_request(
-    req: &HttpRequest,
-    network_str: &str,
-    user_pubkey_str: Option<&str>,
-) -> Result<BaseRequestContext, ApiError> {
+pub fn extract_user(req: &HttpRequest) -> Result<UserContextData, ApiError> {
     use std::str::FromStr;
 
     // ─── JWT ────────────────────────────────────────────────
@@ -29,50 +24,47 @@ pub fn validate_base_request(
 
     let token_data = jwt_service::decode_jwt_with_user_info(&token)
         .map_err(|_| ApiError::auth_invalid_token())?;
-    // todo: add expired token validation!
+
+    let token_pk_str = token_data
+        .current_wallet
+        .as_deref()
+        .ok_or_else(ApiError::auth_missing_wallet)?;
+
+    let token_pk = Pubkey::from_str(token_pk_str)
+        .map_err(|_| ApiError::invalid_user_pubkey())?;
+
+    Ok(UserContextData {
+        internal_id: token_data.user_id,
+        wallets: vec![token_pk],
+        current_pubkey: token_pk,
+    })
+}
+
+pub fn validate_base_request(
+    req: &HttpRequest,
+    network_str: &str,
+    user_pubkey_str: Option<&str>,
+) -> Result<BaseRequestContext, ApiError> {
+    use std::str::FromStr;
 
     // ─── NETWORK ────────────────────────────────────────────
     let network = SolanaNetwork::try_from(network_str)
         .map_err(|_| ApiError::invalid_network())?;
-    
 
-    // ─── USER PUBKEY ────────────────────────────────────────
-    // to do: change this validation to check by user_id (from token), is wallet from the users or not
-    // 403 - wallet not from the list
-    // 401 - no wallet in the request
-    // 400 - invalid format user_pubkey_str
+    // ─── USER FROM JWT ───────────────────────────────────────
+    let user = extract_user(req)?;
 
-    let user_pubkey = match (user_pubkey_str, token_data.current_wallet.as_deref()) {
-        (Some(req_pk), Some(token_pk)) => {
-            if req_pk != token_pk {
-                return Err(ApiError::wrong_user_pubkey_for_user()); // 403
-            }
-            Pubkey::from_str(req_pk)
-                .map_err(|_| ApiError::invalid_user_pubkey())?
+    // ─── OPTIONAL USER PUBKEY OVERRIDE CHECK ─────────────────
+    if let Some(req_pk_str) = user_pubkey_str {
+        // validate request pubkey format
+        let req_pk = Pubkey::from_str(req_pk_str)
+            .map_err(|_| ApiError::invalid_user_pubkey())?;
+
+        // must match token wallet
+        if req_pk != user.current_pubkey {
+            return Err(ApiError::wrong_user_pubkey_for_user()); // 403
         }
+    }
 
-        (Some(_), None) => {
-            return Err(ApiError::auth_missing_wallet()); // 401
-        }
-
-        (None, Some(token_pk)) => {
-            Pubkey::from_str(token_pk)
-                .map_err(|_| ApiError::invalid_user_pubkey())?
-        }
-
-        (None, None) => {
-            return Err(ApiError::auth_missing_wallet()); // 401
-        }
-    };
-
-    let user_context_data = UserContextData {
-        internal_id: token_data.user_id,
-        wallets: vec![user_pubkey], 
-        current_pubkey: user_pubkey,
-    };
-
-    Ok(BaseRequestContext {
-        network,
-        user: user_context_data,
-    })
+    Ok(BaseRequestContext { network, user })
 }

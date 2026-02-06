@@ -2,7 +2,6 @@
 use actix_web::{HttpResponse, ResponseError};
 use actix_web::http::StatusCode;
 use serde::Serialize;
-use tracing::field;
 use std::fmt;
 
 pub type ApiResult<T> = Result<T, ApiError>;
@@ -22,6 +21,9 @@ pub enum ApiErrorCode {
     // Invite code
     InviteCodeNotFound,
     InviteCodeAlreadyApplied,
+
+    // Vesting
+    InvalidVestingPeriod,
 
     // Premarket creation-validation
     PremarketDeadlineTooEarly,
@@ -436,6 +438,7 @@ impl ResponseError for ApiError {
             | InvalidTxType
             | InvalidPremarketPubkey 
             | PremarketAmountZero
+            | InvalidVestingPeriod
             | PremarketJoinAmountTooLarge
             | InvalidTokenMintPubkey
             | PremarketAlreadyExtended

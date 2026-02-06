@@ -14,6 +14,7 @@ pub mod tx_claim_tokens;
 pub mod tx_withdraw_vesting;
 pub mod solana_methods;
 pub mod contract_specific;
+pub mod vesting;
 
 pub use contract_specific::sign_tx_with_revelcy;
 

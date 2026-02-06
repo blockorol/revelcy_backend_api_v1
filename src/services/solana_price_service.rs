@@ -1,6 +1,7 @@
 use crate::models::premarket::PythResponse;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
+use crate::config::get_pyth_mainnet_url;
 
 pub const SOL_PRICE_CACHE_TTL: Duration = Duration::from_secs(60 * 10); // 10 minutes
 
@@ -32,12 +33,10 @@ async fn fetch_sol_price_uncached(url: &str) -> f64 {
 
 // get with cache
 pub async fn get_sol_price() -> f64 {
-    let url = match std::env::var("PYTH_MAINNET_URL") {
-        Ok(url) => url,
-        Err(_) => {
-            println!("PYTH_MAINNET_URL environment variable not set");
-            return 0.0;
-        }
+    let url = get_pyth_mainnet_url();
+    if url == "" {
+        println!("PYTH_MAINNET_URL environment variable not set");
+        return 0.0;
     };
 
     // read cache

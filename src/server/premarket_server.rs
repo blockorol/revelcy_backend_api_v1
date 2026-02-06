@@ -1,16 +1,13 @@
 use std::str::FromStr;
 use std::time::Duration;
-use awc::cookie::time;
 use sqlx::{PgPool};
 use chrono::Utc;
 use actix_web::{web, Error, HttpResponse, HttpRequest, HttpMessage};
 use actix_web::error::ErrorInternalServerError;
 use crate::api::errors::{ApiErrorCode, ApiError, FieldError, ApiResult};
-use crate::constants::{VIRTUAL_SUPPLY_RATIO, VIRTUAL_TOKEN_RATIO};
 
 
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signer::Signer;
 use crate::server::premarket_validation::{
     validate_create_premarket_base,
     validate_create_premarket, validate_extend_premarket,
@@ -39,9 +36,10 @@ use crate::models::premarket::{
 };
 
 use crate::services::{
-    jwt_service, premarket_service, ipfs_service, vesting_service
+    jwt_service, premarket_service, 
+    // ipfs_service, 
+    vesting_service
 };
-use crate::storage::{premarket_repo, vesting_repo};
 use crate::middleware::jwt::JwtMiddleware;
 use crate::services::background_finaliser::{
     background_finalize_action, 
@@ -85,6 +83,7 @@ use crate::server::whitelist_handlers::{
 use crate::server::premarket_getter_handler::{
     get_user_entry
 };
+use crate::server::vesing_server_handler::update_vesting;
 
 pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
     web::scope("/premarket")
@@ -97,6 +96,9 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
 
         .route("/update_community", web::post().to(update_community_info))
         .route("/update_availability", web::post().to(update_availability))
+
+        .route("/vesting/update_info", web::post().to(update_vesting))
+        
         // Whitelist routes: todo: move to separate file
         .route("/whitelist/add_user", web::post().to(add_whitelist_user))
         .route("/whitelist/add_user_list", web::post().to(add_whitelist_user_list))
