@@ -118,7 +118,9 @@ pub async fn get_vesting_holder_info(
                 .ok_or_else(|| ErrorNotFound("Vesting not found"))?;
 
             let now = Utc::now().timestamp();
-            let available_tokens = if let (Some(total), Some(claimed)) = (h.amount_token, h.claimed_amount_token) {
+            let total_opt = if h.amount_token == 0 { None } else { Some(h.amount_token) };
+            let claimed_opt = if h.claimed_amount_token == 0 { None } else { Some(h.claimed_amount_token) };
+            let available_tokens = if let (Some(total), Some(claimed)) = (total_opt, claimed_opt) {
                 calculate_available_tokens(
                     total,
                     claimed,
@@ -135,8 +137,8 @@ pub async fn get_vesting_holder_info(
                 holder_id: h.holder_id,
                 holder_wallet: h.holder_wallet,
                 amount_sol_lamp: h.amount_lamport,
-                amount_tokens: h.amount_token,
-                claimed_tokens: h.claimed_amount_token,
+                amount_tokens: total_opt,
+                claimed_tokens: claimed_opt,
                 available_tokens,
                 username: h.username,
                 avatar_url: h.avatar_url,

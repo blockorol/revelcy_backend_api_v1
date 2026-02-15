@@ -514,9 +514,9 @@ pub async fn add_holder(
         claimed: false,
         avatar_url: None,
         username: None,
-        amount_token: None,
-        claimed_amount_token: None,
-        updated_at: None,
+        amount_token: 0,
+        claimed_amount_token: 0,
+        updated_at: Utc::now(),
     };
     premarket_repo::insert_holder(pool, premarket_pubkey, &holder)
         .await

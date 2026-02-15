@@ -177,9 +177,9 @@ pub struct HolderDbModel {
     pub avatar_url: Option<String>, // Just to response with join
     pub username: Option<String>,   // Just to response with join
     // Vesting-related fields
-    pub amount_token: Option<i64>,
-    pub claimed_amount_token: Option<i64>,
-    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub amount_token: i64,
+    pub claimed_amount_token: i64,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 pub struct HolderStats {
