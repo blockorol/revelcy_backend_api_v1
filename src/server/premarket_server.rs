@@ -285,10 +285,6 @@ async fn handle_create_premarket(
         eprintln!("get_mint_kp error: {e:?}");
         ApiError::internal_build_tx_failed()
     })?;
-    let mint_key = mint_key.ok_or_else(|| {
-        eprintln!("mint key not found for premarket {}", parsed.premarket_pda);
-        ApiError::internal_build_tx_failed()
-    })?;
 
     validate_create_premarket(
         &ctx.user.current_pubkey.to_string(),
@@ -891,10 +887,6 @@ pub async fn create_premarket_tx(
 
     let mint_key = get_mint_kp(&pool, premarket_pda).await.map_err(|e| {
         eprintln!("get_mint_kp error: {e:?}");
-        ApiError::internal_build_tx_failed()
-    })?;
-    let mint_key = mint_key.ok_or_else(|| {
-        eprintln!("mint key not found for premarket {}", premarket_pda);
         ApiError::internal_build_tx_failed()
     })?;
 
