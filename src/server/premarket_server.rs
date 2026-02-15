@@ -6,9 +6,6 @@ use actix_web::{web, Error, HttpResponse, HttpRequest, HttpMessage};
 use actix_web::error::ErrorInternalServerError;
 use crate::api::errors::{ApiErrorCode, ApiError, FieldError, ApiResult};
 
-use crate::storage::signing_keys::get_mint_signing_keypair_by_premarket;
-
-
 use solana_sdk::pubkey::Pubkey;
 use crate::server::premarket_validation::{
     validate_create_premarket_base,
@@ -284,8 +281,8 @@ async fn handle_create_premarket(
     
     let uri = parsed.params.uri.clone();
 
-    let mint_key = get_mint_signing_keypair_by_premarket(&pool, &parsed.premarket_pda.to_string()).await.map_err(|e| {
-        eprintln!("get_mint_signing_keypair_by_premarket error: {e:?}");
+    let mint_key = get_mint_kp(&pool, parsed.premarket_pda).await.map_err(|e| {
+        eprintln!("get_mint_kp error: {e:?}");
         ApiError::internal_build_tx_failed()
     })?;
     let mint_key = mint_key.ok_or_else(|| {
@@ -892,8 +889,8 @@ pub async fn create_premarket_tx(
         creator_allocate: dto.creator_allocate_lamp.clone(),
     };
 
-    let mint_key = get_mint_signing_keypair_by_premarket(&pool, &premarket_pda.to_string()).await.map_err(|e| {
-        eprintln!("get_mint_signing_keypair_by_premarket error: {e:?}");
+    let mint_key = get_mint_kp(&pool, premarket_pda).await.map_err(|e| {
+        eprintln!("get_mint_kp error: {e:?}");
         ApiError::internal_build_tx_failed()
     })?;
     let mint_key = mint_key.ok_or_else(|| {
