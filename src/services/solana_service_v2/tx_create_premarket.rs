@@ -78,11 +78,6 @@ pub async fn build_create_premarket_tx_unsigned(
     let mint_pub = params.mint.to_string();
     let premarket_pda = params.premarket_pda.clone();
 
-    let priv_b58 = bs58::encode(params.mint.to_bytes()).into_string();
-    insert_mint_signing_key(pool, &premarket_pda.to_string(), &mint_pub, &priv_b58)
-        .await
-        .context("failed to insert mint key into signing_keys")?;
-
     let result: Result<BuiltTxCreation> = async {
         let mut data = Vec::with_capacity(8 + 128);
         data.extend_from_slice(&anchor_sighash_global(CREATE_METHOD_NAME));

@@ -9,7 +9,8 @@ const MAX_JOIN_SOL_LAMPORTS: u64 = 2 * solana_sdk::native_token::LAMPORTS_PER_SO
 pub fn validate_create_premarket(
     current_pubkey: &str,
     params: &BuildPremarketTxParams,
-    premarket: &PremarketInfoServiceModel
+    premarket: &PremarketInfoServiceModel,
+    mint_pubkey_from_db: &str,
 ) -> Result<(), Vec<FieldError>> {
     let mut errors = Vec::new();
     let now = Utc::now().timestamp();
@@ -70,6 +71,14 @@ pub fn validate_create_premarket(
             field: "creator_allocate_lamp",
             code: ApiErrorCode::PremarketCreatorAllocateGreaterThanGoal,
             message: "creator_allocate_lamp must be <= goal_sol_lamp",
+        });
+    }
+
+    if params.mint.to_string() != mint_pubkey_from_db {
+        errors.push(FieldError {
+            field: "mint",
+            code: ApiErrorCode::InvalidTokenMintPubkey,
+            message: "mint pubkey mismatch",
         });
     }
 

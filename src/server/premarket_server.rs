@@ -6,6 +6,8 @@ use actix_web::{web, Error, HttpResponse, HttpRequest, HttpMessage};
 use actix_web::error::ErrorInternalServerError;
 use crate::api::errors::{ApiErrorCode, ApiError, FieldError, ApiResult};
 
+use crate::storage::signing_keys::get_mint_signing_keypair_by_premarket;
+
 
 use solana_sdk::pubkey::Pubkey;
 use crate::server::premarket_validation::{
@@ -282,7 +284,22 @@ async fn handle_create_premarket(
     
     let uri = parsed.params.uri.clone();
 
-    validate_create_premarket(&ctx.user.current_pubkey.to_string(), &parsed.params, &premarket_info).map_err(ApiError::from_field_errors)?;
+    let mint_key = get_mint_signing_keypair_by_premarket(&pool, &parsed.premarket_pda.to_string()).await.map_err(|e| {
+        eprintln!("get_mint_signing_keypair_by_premarket error: {e:?}");
+        ApiError::internal_build_tx_failed()
+    })?;
+    let mint_key = mint_key.ok_or_else(|| {
+        eprintln!("mint key not found for premarket {}", parsed.premarket_pda);
+        ApiError::internal_build_tx_failed()
+    })?;
+
+    validate_create_premarket(
+        &ctx.user.current_pubkey.to_string(),
+        &parsed.params,
+        &premarket_info,
+        &mint_key.pub_key,
+    )
+    .map_err(ApiError::from_field_errors)?;
 
     if uri != premarket_info.token_info.data_uri {
         return Err(ApiError::from_field_errors(vec![FieldError {
@@ -875,7 +892,21 @@ pub async fn create_premarket_tx(
         creator_allocate: dto.creator_allocate_lamp.clone(),
     };
 
-    validate_create_premarket(&ctx.user.current_pubkey.to_string(), &params, &premarket_info.clone())
+    let mint_key = get_mint_signing_keypair_by_premarket(&pool, &premarket_pda.to_string()).await.map_err(|e| {
+        eprintln!("get_mint_signing_keypair_by_premarket error: {e:?}");
+        ApiError::internal_build_tx_failed()
+    })?;
+    let mint_key = mint_key.ok_or_else(|| {
+        eprintln!("mint key not found for premarket {}", premarket_pda);
+        ApiError::internal_build_tx_failed()
+    })?;
+
+    validate_create_premarket(
+        &ctx.user.current_pubkey.to_string(),
+        &params,
+        &premarket_info.clone(),
+        &mint_key.pub_key,
+    )
         .map_err(ApiError::from_field_errors)?;
     
 
