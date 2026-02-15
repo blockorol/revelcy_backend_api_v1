@@ -15,7 +15,6 @@ use sqlx::PgPool;
 use std::time::Duration;
 
 use crate::models::premarket::{BuildPremarketTxParams, BuiltTxCreation, SolanaNetwork};
-use crate::storage::signing_keys::insert_mint_signing_key;
 
 use super::constants::CREATE_METHOD_NAME;
 use super::env::{program_id_for, read_revelcy_auth, rpc_url};

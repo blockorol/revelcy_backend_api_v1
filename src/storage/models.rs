@@ -31,6 +31,13 @@ pub struct SigningKeyPair {
     pub priv_key: String,
 }
 
+#[derive(FromRow, Debug, Clone, Serialize, Deserialize)]
+pub struct SigningKeyPairWithId {
+    pub id: Uuid,
+    pub pub_key: String,
+    pub priv_key: String,
+}
+
 
 impl TryFrom<UserDbModel> for User {
     type Error = anyhow::Error;

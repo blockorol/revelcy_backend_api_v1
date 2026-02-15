@@ -1,4 +1,4 @@
-use crate::storage::models::{SigningKeyPair};
+use crate::storage::models::{SigningKeyPair, SigningKeyPairWithId};
 use sqlx::{PgPool, Result};
 use uuid::Uuid;
 
@@ -50,11 +50,12 @@ pub async fn get_mint_signing_keypair_by_premarket(
     Ok(row)
 }
 
+// acquire_signing_key with uuid instead of premarket_pubkey
 pub async fn acquire_signing_key(
     pool: &PgPool,
     premarket_uuid: &str,
-) -> Result<Option<SigningKeyPair>> {
-    let key = sqlx::query_as::<_, SigningKeyPair>(
+) -> Result<Option<SigningKeyPairWithId>> {
+    let key = sqlx::query_as::<_, SigningKeyPairWithId>(
         r#"
         UPDATE signing_keys
         SET premarket_pubkey = $1
@@ -66,7 +67,7 @@ pub async fn acquire_signing_key(
             FOR UPDATE SKIP LOCKED
             LIMIT 1
         )
-        RETURNING pub_key, priv_key
+        RETURNING id, pub_key, priv_key
         "#
     )
     .bind(premarket_uuid)
@@ -76,10 +77,11 @@ pub async fn acquire_signing_key(
     Ok(key)
 }
 
+// second part of acquire_signing_key flow - update premarket_pubkey for the premarket pubkey key
 pub async fn update_premarket_pubkey(
     pool: &PgPool,
     premarket_pubkey: &str,
-    premarket_uuid: &Uuid
+    keypair_uuid: &Uuid
 ) -> Result<u64> {
     let res = sqlx::query(
         r#"
@@ -89,7 +91,7 @@ pub async fn update_premarket_pubkey(
         "#
     )
     .bind(premarket_pubkey)
-    .bind(premarket_uuid)
+    .bind(keypair_uuid)
     .execute(pool)
     .await?;
 

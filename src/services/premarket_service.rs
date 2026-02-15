@@ -236,7 +236,7 @@ pub async fn create_concept(
                 .await
                 .map_err(|_| actix_web::error::ErrorInternalServerError("generate_premarket_pda failed"))?;
 
-            update_premarket_pubkey(pool, &pda.to_string(), &pm_uuid)
+            update_premarket_pubkey(pool, &pda.to_string(), &keypair.id)
                 .await
                 .map_err(|_| actix_web::error::ErrorInternalServerError("update_premarket_pubkey failed"))?;
 
