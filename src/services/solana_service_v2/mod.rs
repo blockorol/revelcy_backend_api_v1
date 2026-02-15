@@ -69,5 +69,4 @@ pub use tx_claim_tokens::build_claim_tokens_tx_unsigned;
 pub use tx_withdraw_vesting::{
     build_withdraw_vesting_tx_unsigned,
     parse_withdraw_vesting_tx_from_base64,
-    ParsedWithdrawVestingTx,
 };

@@ -1,4 +1,4 @@
-use crate::models::premarket::{VestingHolderInfo, VestingInfo};
+use crate::models::vesting::{VestingHolderInfo, VestingInfo};
 use crate::storage::vesting_repo;
 use solana_sdk::pubkey::Pubkey;
 use crate::models::premarket::SolanaNetwork;
