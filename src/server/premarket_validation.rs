@@ -2,6 +2,7 @@ use chrono::Utc;
 
 use crate::api::errors::{ApiErrorCode, FieldError};
 use crate::models::premarket::{BuildJoinTxParams, BuildPremarketTxParams, FullPremarketInfo, PremarketInfoServiceModel, PremarketState};
+use solana_sdk::pubkey::Pubkey;
 
 const MAX_JOIN_SOL_LAMPORTS: u64 = 2 * solana_sdk::native_token::LAMPORTS_PER_SOL;
 
@@ -10,7 +11,7 @@ pub fn validate_create_premarket(
     current_pubkey: &str,
     params: &BuildPremarketTxParams,
     premarket: &PremarketInfoServiceModel,
-    mint_pubkey_from_db: &str,
+    pubkey: Pubkey,
 ) -> Result<(), Vec<FieldError>> {
     let mut errors = Vec::new();
     let now = Utc::now().timestamp();
@@ -74,7 +75,7 @@ pub fn validate_create_premarket(
         });
     }
 
-    if params.mint.to_string() != mint_pubkey_from_db {
+    if params.mint != pubkey {
         errors.push(FieldError {
             field: "mint",
             code: ApiErrorCode::InvalidTokenMintPubkey,

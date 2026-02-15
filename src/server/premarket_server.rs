@@ -1,5 +1,6 @@
 use std::str::FromStr;
 use std::time::Duration;
+use solana_sdk::signer::Signer;
 use sqlx::{PgPool};
 use chrono::Utc;
 use actix_web::{web, Error, HttpResponse, HttpRequest, HttpMessage};
@@ -290,7 +291,7 @@ async fn handle_create_premarket(
         &ctx.user.current_pubkey.to_string(),
         &parsed.params,
         &premarket_info,
-        &mint_key.pub_key,
+        mint_key.pubkey(),
     )
     .map_err(ApiError::from_field_errors)?;
 
@@ -894,7 +895,7 @@ pub async fn create_premarket_tx(
         &ctx.user.current_pubkey.to_string(),
         &params,
         &premarket_info.clone(),
-        &mint_key.pub_key,
+        mint_key.pubkey(),
     )
         .map_err(ApiError::from_field_errors)?;
     
