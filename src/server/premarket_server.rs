@@ -328,6 +328,8 @@ async fn handle_create_premarket(
     }
 
     let amount_initial_buy_sol_lamp = parsed.params.creator_allocate;
+    
+    let creator_address = parsed.params.user.to_string();
     let mint_str = premarket_info.token_info.address.clone();
     let pda_str = premarket_info.blockchain_address.clone();
     let uri_str = uri.clone();
@@ -338,13 +340,14 @@ async fn handle_create_premarket(
         let pool2 = pool2.clone();
         let mint_str = mint_str.clone();
         let premarket_pubkey = pda_str.clone();
+        let creator_address = creator_address.clone();
         let uri_str = uri_str.clone();
 
 
         Box::pin(async move {
             if amount_initial_buy_sol_lamp != 0 {
                 let holder = HolderInfo {
-                    wallet_address: premarket_pubkey.clone(),
+                    wallet_address: creator_address.clone(),
                     amount_sol_lamp: amount_initial_buy_sol_lamp,
                     join_timestamp: Utc::now().timestamp_millis(),
                     id: None,
