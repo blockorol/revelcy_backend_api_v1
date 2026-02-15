@@ -1,11 +1,11 @@
 use std::str::FromStr;
 use std::time::Duration;
+use solana_sdk::signer::Signer;
 use sqlx::{PgPool};
 use chrono::Utc;
 use actix_web::{web, Error, HttpResponse, HttpRequest, HttpMessage};
 use actix_web::error::ErrorInternalServerError;
 use crate::api::errors::{ApiErrorCode, ApiError, FieldError, ApiResult};
-
 
 use solana_sdk::pubkey::Pubkey;
 use crate::server::premarket_validation::{
@@ -282,7 +282,18 @@ async fn handle_create_premarket(
     
     let uri = parsed.params.uri.clone();
 
-    validate_create_premarket(&ctx.user.current_pubkey.to_string(), &parsed.params, &premarket_info).map_err(ApiError::from_field_errors)?;
+    let mint_key = get_mint_kp(&pool, parsed.premarket_pda).await.map_err(|e| {
+        eprintln!("get_mint_kp error: {e:?}");
+        ApiError::internal_build_tx_failed()
+    })?;
+
+    validate_create_premarket(
+        &ctx.user.current_pubkey.to_string(),
+        &parsed.params,
+        &premarket_info,
+        mint_key.pubkey(),
+    )
+    .map_err(ApiError::from_field_errors)?;
 
     if uri != premarket_info.token_info.data_uri {
         return Err(ApiError::from_field_errors(vec![FieldError {
@@ -328,6 +339,8 @@ async fn handle_create_premarket(
     }
 
     let amount_initial_buy_sol_lamp = parsed.params.creator_allocate;
+    
+    let creator_address = parsed.params.user.to_string();
     let mint_str = premarket_info.token_info.address.clone();
     let pda_str = premarket_info.blockchain_address.clone();
     let uri_str = uri.clone();
@@ -338,13 +351,14 @@ async fn handle_create_premarket(
         let pool2 = pool2.clone();
         let mint_str = mint_str.clone();
         let premarket_pubkey = pda_str.clone();
+        let creator_address = creator_address.clone();
         let uri_str = uri_str.clone();
 
 
         Box::pin(async move {
             if amount_initial_buy_sol_lamp != 0 {
                 let holder = HolderInfo {
-                    wallet_address: premarket_pubkey.clone(),
+                    wallet_address: creator_address.clone(),
                     amount_sol_lamp: amount_initial_buy_sol_lamp,
                     join_timestamp: Utc::now().timestamp_millis(),
                     id: None,
@@ -872,7 +886,17 @@ pub async fn create_premarket_tx(
         creator_allocate: dto.creator_allocate_lamp.clone(),
     };
 
-    validate_create_premarket(&ctx.user.current_pubkey.to_string(), &params, &premarket_info.clone())
+    let mint_key = get_mint_kp(&pool, premarket_pda).await.map_err(|e| {
+        eprintln!("get_mint_kp error: {e:?}");
+        ApiError::internal_build_tx_failed()
+    })?;
+
+    validate_create_premarket(
+        &ctx.user.current_pubkey.to_string(),
+        &params,
+        &premarket_info.clone(),
+        mint_key.pubkey(),
+    )
         .map_err(ApiError::from_field_errors)?;
     
 
