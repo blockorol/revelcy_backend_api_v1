@@ -5,7 +5,8 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use std::convert::TryFrom;
 use crate::models::user::User;
-use crate::models::premarket::{ UserInfoShort, PremarketInfoServiceModel, PremarketGoal, TokenLinks, TokenInfo, PremarketState, VestingInfo};
+use crate::models::premarket::{ UserInfoShort, PremarketInfoServiceModel, PremarketGoal, TokenLinks, TokenInfo, PremarketState};
+use crate::models::vesting::VestingInfo;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct WhitelistDbModel {

@@ -11,6 +11,7 @@ use crate::storage::models::{
     CommunityInfoDbModel, CommunityLinkDbModel, HolderDbModel, PremarketInfoDbModel
 }; // todo: по хорошему убрать это. сервисный уровень не должен знать про модели БД. он рабоатет с моделями сервиса, и каст должен идти в репозитории
 use crate::storage::premarket_repo;
+use crate::storage::vesting_repo;
 use actix_web::error::ErrorBadRequest;
 use actix_web::error::ErrorInternalServerError;
 use chrono::Utc;
@@ -22,6 +23,7 @@ use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 
 use crate::services::solana_price_service;
+use crate::models::vesting::VestingSettingsServiceModel;
 
 pub const VIRTUAL_SUPPLY_RATIO: u64 = 30_000_000_000;
 pub const VIRTUAL_TOKEN_RATIO: u64 = 1_073_000_000_000_000;
@@ -104,9 +106,19 @@ pub async fn get_full_premarket_info(
                 links,
             };
 
+            let vesting_settings = vesting_repo::get_vesting_info_by_premarket_id(pool, pm_db.id)
+                .await
+                .map_err(ErrorInternalServerError)?
+                .map(|v| VestingSettingsServiceModel {
+                    enabled: v.timestamp_start.is_some() && v.timestamp_end.is_some(),
+                    vesting_period_sec: Some(v.vesting_period),
+                    unlock_at_launch_percent: Some(v.init_unlock),
+                });
+
             Ok(Some(FullPremarketInfo {
                 main_info: premarket_info,
                 community: community_info,
+                vesting_settings,
             }))
         }
         Ok(None) => Ok(None),

@@ -15,3 +15,11 @@ pub struct UpdateVestingInfoRequest {
 pub struct UpdateVestingInfoResponse {
     pub ok: bool,
 }
+
+// --------- Vesting Settings DTO for GetMainInfoDTO ------------------
+#[derive(Debug, Clone, Serialize)]
+pub struct VestingSettingsDTO {
+    pub enabled: bool,
+    pub vesting_period_sec: Option<i64>,
+    pub unlock_at_launch_percent: Option<i64>,
+}

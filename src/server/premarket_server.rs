@@ -30,6 +30,7 @@ use crate::api::premarket::{
      UpdateCommunityDTO,
      OldTxFields, CommonTxFields, Network
 };
+use crate::api::vesting::VestingSettingsDTO;
 use crate::models::premarket::{
     CreatePremarketConceptModel,
     BuildClaimTokensTxParams, BuildFinishTxParams, BuildJoinTxParams, BuildKillTxParams, BuildOutTxParams, BuildPremarketTxParams, BuildWithdrawVestingTxParams, CommunityInfoServiceModel, CommunityLink, GetPremarketDataParams, HolderInfo, PremarketGoal, PremarketListResult, PremarketLookupKeyType, PremarketState, SolanaNetwork, TokenInfo, TokenLinks, UserInfoShort
@@ -1474,10 +1475,22 @@ pub async fn get_main_info(
         is_hided: premarket_info.main_info.is_hided,
     };
 
+    let vesting_info = premarket_info.vesting_settings.as_ref().and_then(|v| {
+        if !v.enabled {
+            return None;
+        }
+        Some(VestingSettingsDTO {
+            vesting_period_sec: v.vesting_period_sec,
+            unlock_at_launch_percent: v.unlock_at_launch_percent,
+            enabled: v.enabled,
+        })
+    });
+
     let response = GetMainInfoDTO {
         blockchain_info,
         community_info,
         availability_info,
+        vesting_info,
     };
     
     Ok(HttpResponse::Ok().json(response))

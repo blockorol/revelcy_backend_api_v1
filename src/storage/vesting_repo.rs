@@ -6,7 +6,7 @@ use super::models::{
     FullVestingInfoDbModel, HolderDbModel,
     VestingInfoDbModel,
 };
-use crate::models::premarket::VestingInfo;
+use crate::models::vesting::VestingInfo;
 
 /// Get vesting info by premarket_id
 pub async fn get_vesting_info_by_premarket_id(
