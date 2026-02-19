@@ -1375,6 +1375,7 @@ pub async fn get_list_main_info(
             availability_info: AvailabilityInfoDTO {
                 token_short_url_name: premarket_info.short_url_name.clone(),
                 is_hided: premarket_info.is_hided,
+                is_whitelist_enabled: premarket_info.is_whitelist_enabled,
             },
         })
         .collect();
@@ -1497,6 +1498,7 @@ pub async fn get_main_info(
     let availability_info = AvailabilityInfoDTO {
         token_short_url_name: premarket_info.main_info.short_url_name.clone(),
         is_hided: premarket_info.main_info.is_hided,
+        is_whitelist_enabled: premarket_info.main_info.is_whitelist_enabled,
     };
 
     let vesting_info = premarket_info.vesting_settings.as_ref().and_then(|v| {

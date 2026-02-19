@@ -214,8 +214,8 @@ pub struct VestingInfoDbModel {
     pub init_unlock: i64,
     pub timestamp_start: Option<i64>,
     pub timestamp_end: Option<i64>,
-    pub created_at: Option<i64>,
-    pub updated_at: Option<i64>,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 // Full vesting info with premarket data

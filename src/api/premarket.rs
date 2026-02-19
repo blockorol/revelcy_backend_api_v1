@@ -106,6 +106,7 @@ pub struct UpdateAvailabilityInfoDTO {
 pub struct AvailabilityInfoDTO {
     pub token_short_url_name: Option<String>,
     pub is_hided: bool,
+    pub is_whitelist_enabled: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
