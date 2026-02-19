@@ -642,11 +642,37 @@ pub async fn get_holders_by_premarket_id(
     .fetch_one(pool)
     .await?;
 
+    let total_token_amount = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COALESCE(SUM(amount_token)::BIGINT, 0)
+        FROM premarket_holders
+        WHERE premarket_info_id = $1
+          AND out_timestamp IS NULL
+        "#,
+    )
+    .bind(premarket_info_id)
+    .fetch_one(pool)
+    .await?;
+
+    let total_claimed_token_amount = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COALESCE(SUM(claimed_amount_token)::BIGINT, 0)
+        FROM premarket_holders
+        WHERE premarket_info_id = $1
+          AND out_timestamp IS NULL
+        "#,
+    )
+    .bind(premarket_info_id)
+    .fetch_one(pool)
+    .await?;
+
     Ok(HolderStats {
         holders,
         total_active_count,
         reserved_sol_lamp,
         reserved_sol_24h_before_lamp,
+        total_token_amount,
+        total_claimed_token_amount,
     })
 }
 

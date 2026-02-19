@@ -3,7 +3,9 @@ use uuid::Uuid;
 use std::str::FromStr;
 use solana_sdk::pubkey::Pubkey;
 
-use crate::api::premarket::{ TokenDynamicInfoDTO, HolderInfoDTO};
+use crate::api::premarket::{
+    DynamicVestingInfoDTO, HolderInfoDTO, TokenDynamicInfoDTO, TokenEntryInfo as TokenEntryInfoDTO,
+};
 use crate::models::vesting::VestingSettingsServiceModel;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -265,6 +267,7 @@ pub struct TokenDynamicInfo {
     pub reserved_sol_lamp: u64,
     pub change_24h: f64,
     pub holders: Vec<HolderInfo>,
+    pub vesting_info: Option<DynamicVestingInfo>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -317,6 +320,34 @@ impl From<TokenDynamicInfo> for TokenDynamicInfoDTO {
             reserved_sol_lamp: info.reserved_sol_lamp,
             change_24h: info.change_24h,
             holders: info.holders.into_iter().map(Into::into).collect(),
+            vesting_info: info.vesting_info.map(Into::into),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DynamicVestingInfo {
+    pub starttime_ms: Option<i64>,
+    pub endtime_ms: Option<i64>,
+    pub entry: TokenEntryInfo,
+}
+
+impl From<TokenEntryInfo> for TokenEntryInfoDTO {
+    fn from(info: TokenEntryInfo) -> Self {
+        TokenEntryInfoDTO {
+            total_dec: info.total_dec,
+            vested_dec: info.vested_dec,
+            claimed_dec: info.claimed_dec,
+        }
+    }
+}
+
+impl From<DynamicVestingInfo> for DynamicVestingInfoDTO {
+    fn from(info: DynamicVestingInfo) -> Self {
+        DynamicVestingInfoDTO {
+            starttime_ms: info.starttime_ms,
+            endtime_ms: info.endtime_ms,
+            entry: info.entry.into(),
         }
     }
 }

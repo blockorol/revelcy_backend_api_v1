@@ -1559,6 +1559,7 @@ pub async fn get_dynamic_info(
         reserved_sol_lamp: premarket_info.reserved_sol_lamp,
         change_24h: premarket_info.change_24h,
         holders: holders_dto,
+        vesting_info: premarket_info.vesting_info.map(Into::into),
     };
 
     Ok(HttpResponse::Ok().json(resp))

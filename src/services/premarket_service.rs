@@ -403,6 +403,10 @@ pub async fn get_dynamic_info(
             .await
             .map_err(ErrorInternalServerError)?;
 
+    let vesting_db = vesting_repo::get_vesting_info_by_premarket_address(pool, premarket_pubkey)
+        .await
+        .map_err(ErrorInternalServerError)?;
+
     let holder_service_list: Vec<HolderInfo> = holder_data
         .holders
         .into_iter()
@@ -430,12 +434,36 @@ pub async fn get_dynamic_info(
         0.0
     };
 
+    let total_tokens = holder_data.total_token_amount.max(0) as u64;
+    let total_claimed = holder_data.total_claimed_token_amount.max(0) as u64;
+    let vesting_info = if total_tokens == 0 && total_claimed == 0 {
+        None
+    } else {
+        let (starttime_ms, endtime_ms) = match vesting_db {
+            Some(v) => (
+                v.timestamp_start.map(|v| v * 1000),
+                v.timestamp_end.map(|v| v * 1000),
+            ),
+            None => (None, None),
+        };
+        Some(crate::models::premarket::DynamicVestingInfo {
+            starttime_ms,
+            endtime_ms,
+            entry: TokenEntryInfo {
+                total_dec: total_tokens,
+                vested_dec: total_tokens,
+                claimed_dec: total_claimed,
+            },
+        })
+    };
+
     Ok(TokenDynamicInfo {
         holders_count: holder_data.total_active_count as u32,
         current_price_lamp,
         reserved_sol_lamp: holder_data.reserved_sol_lamp as u64,
         change_24h,
         holders: holder_service_list,
+        vesting_info,
     })
 }
 

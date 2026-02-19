@@ -194,6 +194,8 @@ pub struct HolderStats {
     pub total_active_count: i64,
     pub reserved_sol_lamp: i64,
     pub reserved_sol_24h_before_lamp: i64,
+    pub total_token_amount: i64,
+    pub total_claimed_token_amount: i64,
 }
 
 #[derive(sqlx::FromRow)]

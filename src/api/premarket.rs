@@ -225,6 +225,14 @@ pub struct TokenDynamicInfoDTO {
 
     pub change_24h: f64,
     pub holders: Vec<HolderInfoDTO>,
+    pub vesting_info: Option<DynamicVestingInfoDTO>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DynamicVestingInfoDTO {
+    pub starttime_ms: Option<i64>,
+    pub endtime_ms: Option<i64>,
+    pub entry: TokenEntryInfo,
 }
 
 #[derive(Serialize, Deserialize)]
