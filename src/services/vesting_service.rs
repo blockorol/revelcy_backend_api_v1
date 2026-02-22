@@ -148,6 +148,47 @@ pub async fn get_vesting_holder_info(
     }
 }
 
+pub async fn finalize_withdraw_vesting(
+    pool: &PgPool,
+    token_mint: &str,
+    holder_wallet: &str,
+) -> Result<(), actix_web::Error> {
+    let vesting = get_full_vesting_info(pool, token_mint, VestingLookupType::MintAddress)
+        .await?
+        .ok_or_else(|| ErrorNotFound("Vesting not found for mint"))?;
+
+    let holder = vesting_repo::get_holder_by_wallet(pool, vesting.premarket_id, holder_wallet)
+        .await
+        .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))?
+        .ok_or_else(|| ErrorNotFound("Holder not found in premarket"))?;
+
+    let total_amount = holder.amount_token.max(0);
+    let claimed_prev = holder.claimed_amount_token.max(0).min(total_amount);
+    let available_now = calculate_available_tokens(
+        total_amount,
+        claimed_prev,
+        vesting.timestamp_start,
+        vesting.timestamp_end,
+        vesting.init_unlock,
+        Utc::now().timestamp(),
+    )
+    .unwrap_or(0)
+    .max(0);
+    let claimed_next = claimed_prev.saturating_add(available_now).min(total_amount);
+
+    vesting_repo::update_holder_token_amounts(
+        pool,
+        vesting.premarket_id,
+        holder_wallet,
+        total_amount,
+        claimed_next,
+    )
+    .await
+    .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))?;
+
+    Ok(())
+}
+
 /// Update vesting info for a premarket.
 ///
 /// Semantics:

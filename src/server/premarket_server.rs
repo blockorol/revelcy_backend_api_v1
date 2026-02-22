@@ -809,7 +809,7 @@ async fn handle_refund_premarket(
 }
 
 async fn handle_withdraw_vesting(
-    _pool: web::Data<sqlx::PgPool>,
+    pool: web::Data<sqlx::PgPool>,
     ctx: &BaseRequestContext,
     common: CommonTxFields,
 ) -> ApiResult<TxFinalizePlan> {
@@ -831,10 +831,37 @@ async fn handle_withdraw_vesting(
 
     validate_withdraw_vesting().map_err(ApiError::from_field_errors)?;
 
+    let pool2 = pool.clone();
+    let token_mint_str = parsed.token_mint.to_string();
+    let user_pubkey_str = ctx.user.current_pubkey.to_string();
+    let user_internal_id_str = ctx.user.internal_id.to_string();
+
+    let update_method: UpdateFn = Box::new(move || {
+        let pool2 = pool2.clone();
+        let token_mint_str = token_mint_str.clone();
+        let user_pubkey_str = user_pubkey_str.clone();
+        let user_internal_id_str: String = user_internal_id_str.clone();
+
+        Box::pin(async move {
+            vesting_service::finalize_withdraw_vesting(
+                pool2.get_ref(),
+                &token_mint_str,
+                &user_pubkey_str,
+            )
+            .await
+            .map_err(|e| {
+                eprintln!(
+                    "Failed to update DB: withdraw_vesting mint {} for user {}({}): {}",
+                    token_mint_str, user_internal_id_str, user_pubkey_str, e
+                );
+            });
+        })
+    });
+
     Ok(TxFinalizePlan {
         tx_type,
         extra_signers: None,
-        update_method: Box::new(move || Box::pin(async move {})),
+        update_method,
     })
 }
 
