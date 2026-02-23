@@ -14,12 +14,15 @@ use solana_transaction_status::{UiTransactionEncoding, UiTransactionTokenBalance
 use std::str::FromStr;
 use tokio::time::{sleep, Duration, Instant};
 
+pub fn make_async_rpc_client(network: SolanaNetwork) -> AsyncRpcClient {
+    AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15))
+}
 
 pub async fn send_signed_tx_base64(
     network: SolanaNetwork,
     signed_tx_base64: &str,
 ) -> Result<Signature> {
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
+    let rpc = make_async_rpc_client(network);
 
     let raw = BASE64
         .decode(signed_tx_base64.trim())
@@ -51,7 +54,16 @@ pub async fn wait_for_finalized(
     timeout: Duration,
     poll_every: Duration,
 ) -> Result<()> {
-    let rpc: AsyncRpcClient = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
+    let rpc = make_async_rpc_client(network);
+    wait_for_finalized_with_client(&rpc, sig, timeout, poll_every).await
+}
+
+pub async fn wait_for_finalized_with_client(
+    rpc: &AsyncRpcClient,
+    sig: &Signature,
+    timeout: Duration,
+    poll_every: Duration,
+) -> Result<()> {
     let started = Instant::now();
 
     loop {
@@ -81,7 +93,7 @@ pub async fn wait_for_confirmed(
     timeout: Duration,
     poll_every: Duration,
 ) -> Result<()> {
-    let rpc: AsyncRpcClient = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
+    let rpc = make_async_rpc_client(network);
     let started = Instant::now();
     loop {
         if started.elapsed() > timeout {
@@ -128,11 +140,6 @@ pub async fn get_spl_token_delta(
     mint: &str,
     owner: &str,
 ) -> Result<i128> {
-    println!(
-        "[get_spl_token_delta] start network={:?} sig={} mint={} owner={}",
-        network, signature, mint, owner
-    );
-
     let rpc = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
 
     let tx = rpc
@@ -146,20 +153,12 @@ pub async fn get_spl_token_delta(
         )
         .await
         .context("get_transaction_with_config failed")?;
-    println!(
-        "[get_spl_token_delta] tx loaded: slot={} block_time={:?}",
-        tx.slot, tx.block_time
-    );
 
     let meta = tx
         .transaction
         .meta
         .as_ref()
         .ok_or_else(|| anyhow!("No meta in transaction"))?;
-    println!(
-        "[get_spl_token_delta] meta present: err={:?}",
-        meta.err
-    );
 
     let pre = match &meta.pre_token_balances {
         OptionSerializer::Some(v) => v.as_slice(),
@@ -169,33 +168,10 @@ pub async fn get_spl_token_delta(
         OptionSerializer::Some(v) => v.as_slice(),
         _ => &[],
     };
-    println!(
-        "[get_spl_token_delta] balances: pre_count={} post_count={}",
-        pre.len(),
-        post.len()
-    );
-
-    for (i, b) in pre.iter().enumerate() {
-        println!(
-            "[get_spl_token_delta] pre[{}]: mint={} owner={:?} amount={}",
-            i, b.mint, b.owner, b.ui_token_amount.amount
-        );
-    }
-    for (i, b) in post.iter().enumerate() {
-        println!(
-            "[get_spl_token_delta] post[{}]: mint={} owner={:?} amount={}",
-            i, b.mint, b.owner, b.ui_token_amount.amount
-        );
-    }
 
     let pre_amt = find_amount_for_mint_owner(pre, mint, owner);
     let post_amt = find_amount_for_mint_owner(post, mint, owner);
     let delta = post_amt as i128 - pre_amt as i128;
-
-    println!(
-        "[get_spl_token_delta] result: pre_amt={} post_amt={} delta={}",
-        pre_amt, post_amt, delta
-    );
 
     Ok(delta)
 }

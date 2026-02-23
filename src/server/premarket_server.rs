@@ -347,7 +347,7 @@ async fn handle_create_premarket(
 
     let pool2 = pool.clone();
 
-    let update_method: UpdateFn = Box::new(move |_sig| {
+    let update_method: UpdateFn = Box::new(move |_sig, _rpc| {
         let pool2 = pool2.clone();
         let mint_str = mint_str.clone();
         let premarket_pubkey = pda_str.clone();
@@ -435,7 +435,7 @@ async fn handle_join_premarket(
     let user_internal_id_str = ctx.user.internal_id.to_string();
     let user_pubkey_str = ctx.user.current_pubkey.to_string();
 
-    let update_method: UpdateFn = Box::new(move |_sig| {
+    let update_method: UpdateFn = Box::new(move |_sig, _rpc| {
         let pool2 = pool2.clone();
         let premarket_str = premarket_str.clone();
         let user_internal_id_str = user_internal_id_str.clone();
@@ -486,7 +486,7 @@ async fn handle_out_of_premarket(
     let user_pubkey_str = ctx.user.current_pubkey.to_string();
     let user_internal_id_str = ctx.user.internal_id.to_string();
 
-    let update_method: UpdateFn = Box::new(move |_sig| {
+    let update_method: UpdateFn = Box::new(move |_sig, _rpc| {
         let pool2 = pool2.clone();
         let premarket_str = premarket_str.clone();
         let user_pubkey_str = user_pubkey_str.clone();
@@ -560,7 +560,7 @@ async fn handle_extend_premarket(
     let user_pubkey_str = ctx.user.current_pubkey.to_string();
     let user_internal_id_str = ctx.user.internal_id.to_string();
 
-    let update_method: UpdateFn = Box::new(move |_sig| {
+    let update_method: UpdateFn = Box::new(move |_sig, _rpc| {
         let pool2 = pool2.clone();
         let premarket_pubkey = premarket_pubkey.clone();
         let user_pubkey_str = user_pubkey_str.clone();
@@ -607,7 +607,7 @@ async fn handle_update_uri(
     }
 
     // TODO: should be changed asap
-    let update_method: UpdateFn = Box::new(move |_sig| Box::pin(async move {
+    let update_method: UpdateFn = Box::new(move |_sig, _rpc| Box::pin(async move {
         eprintln!("PANIC!!!! no method to update DB info for tx_type update_uri");
     }));
 
@@ -633,7 +633,7 @@ async fn handle_claim_tokens(
     let user_pubkey_str = ctx.user.current_pubkey.to_string();
     let user_internal_id_str = ctx.user.internal_id.to_string();
 
-    let update_method: UpdateFn = Box::new(move |_sig| {
+    let update_method: UpdateFn = Box::new(move |_sig, _rpc| {
         let pool2 = pool2.clone();
         let premarket_str = premarket_str.clone();
         let user_pubkey_str = user_pubkey_str.clone();
@@ -724,14 +724,34 @@ async fn handle_finish_premarket(
     let pool2 = pool.clone();
     let user_pubkey_str = ctx.user.current_pubkey.to_string();
     let user_internal_id_str = ctx.user.internal_id.to_string();
+    let premarket_id = full.main_info.id;
+    let mint_address = full.main_info.token_info.address.clone();
+    let network = ctx.network;
 
-    let update_method: UpdateFn = Box::new(move |_sig| {
+    let update_method: UpdateFn = Box::new(move |_sig, rpc| {
         let pool2 = pool2.clone();
         let premarket_str = premarket_str.clone();
         let user_pubkey_str = user_pubkey_str.clone();
         let user_internal_id_str = user_internal_id_str.clone();
+        let mint_address = mint_address.clone();
+        let network = network;
 
         Box::pin(async move {
+            vesting_service::sync_finish_premarket_holder_amount_tokens(
+                pool2.get_ref(),
+                &rpc,
+                network,
+                premarket_id,
+                &mint_address,
+            )
+            .await
+            .map_err(|e| {
+                eprintln!(
+                    "Failed to sync vesting holder amounts for finish_premarket '{}' by user {}({}): {}",
+                    premarket_str, user_internal_id_str, user_pubkey_str, e
+                );
+            });
+
             premarket_service::set_premarket_state(
                 pool2.get_ref(),
                 &premarket_str,
@@ -778,7 +798,7 @@ async fn handle_refund_premarket(
     let user_pubkey_str = ctx.user.current_pubkey.to_string();
     let user_internal_id_str = ctx.user.internal_id.to_string();
 
-    let update_method: UpdateFn = Box::new(move |_sig| {
+    let update_method: UpdateFn = Box::new(move |_sig, _rpc| {
         let pool2 = pool2.clone();
         let premarket_str = premarket_str.clone();
         let user_pubkey_str = user_pubkey_str.clone();
@@ -814,7 +834,6 @@ async fn handle_withdraw_vesting(
     common: CommonTxFields,
 ) -> ApiResult<TxFinalizePlan> {
     let tx_type: &'static str = "withdraw_vesting";
-    println!("Handling withdraw_vesting tx for user {}", ctx.user.current_pubkey.to_string());
 
     let parsed: crate::services::solana_service_v2::tx_withdraw_vesting::ParsedWithdrawVestingTx = parse_withdraw_vesting_tx_from_base64(&common.unsigned_tx, ctx.network)
         .map_err(|e| {
@@ -838,7 +857,7 @@ async fn handle_withdraw_vesting(
     let user_internal_id_str = ctx.user.internal_id.to_string();
     let network = ctx.network;
 
-    let update_method: UpdateFn = Box::new(move |sig| {
+    let update_method: UpdateFn = Box::new(move |sig, _rpc| {
         let pool2 = pool2.clone();
         let token_mint_str = token_mint_str.clone();
         let user_pubkey_str = user_pubkey_str.clone();
@@ -1561,9 +1580,6 @@ pub async fn get_dynamic_info(
         Ok(pk) => pk,
         Err(_) => return Ok(HttpResponse::BadRequest().body("Invalid premarket_id")),
     };
-
-    
-    println!("Fetching TokenDynamicInfo for {}", query.premarket_id);
     
     let premarket_info = match premarket_service::get_dynamic_info(&pool, &pubkey.to_string()).await {
         Ok(info) => info,
