@@ -66,7 +66,7 @@ pub async fn generate_premarket_pda(
 }
 
 pub async fn build_create_premarket_tx_unsigned(
-    pool: &PgPool,
+    _pool: &PgPool,
     params: BuildPremarketTxParams,
 ) -> Result<BuiltTxCreation> {
     let program_id = program_id_for(params.network);

@@ -1,5 +1,6 @@
 use crate::models::vesting::{VestingHolderInfo, VestingInfo};
 use crate::storage::vesting_repo;
+use solana_sdk::signature::Signature;
 use solana_sdk::pubkey::Pubkey;
 use crate::models::premarket::SolanaNetwork;
 use crate::services::solana_service_v2::vesting::generate_vesting_pda;
@@ -150,31 +151,59 @@ pub async fn get_vesting_holder_info(
 
 pub async fn finalize_withdraw_vesting(
     pool: &PgPool,
+    network: SolanaNetwork,
+    signature: &Signature,
     token_mint: &str,
     holder_wallet: &str,
 ) -> Result<(), actix_web::Error> {
+    println!(
+        "[finalize_withdraw_vesting] start network={:?} sig={} mint={} wallet={}",
+        network, signature, token_mint, holder_wallet
+    );
     let vesting = get_full_vesting_info(pool, token_mint, VestingLookupType::MintAddress)
         .await?
         .ok_or_else(|| ErrorNotFound("Vesting not found for mint"))?;
+    
+    println!(
+        "[vesting] premarket_id={} premarket_address={} vesting_address={} timestamp_start={:?} timestamp_end={:?} init_unlock={} is_active={}",
+        vesting.premarket_id, vesting.premarket_address, vesting.vesting_address, vesting.timestamp_start, vesting.timestamp_end, vesting.init_unlock, vesting.is_active
+    );
 
     let holder = vesting_repo::get_holder_by_wallet(pool, vesting.premarket_id, holder_wallet)
         .await
         .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))?
         .ok_or_else(|| ErrorNotFound("Holder not found in premarket"))?;
 
-    let total_amount = holder.amount_token.max(0);
-    let claimed_prev = holder.claimed_amount_token.max(0).min(total_amount);
-    let available_now = calculate_available_tokens(
+    println!(
+        "[holder] holder_wallet={} amount_lamport={} amount_token={} claimed_amount_token={}",
+        holder.holder_wallet, holder.amount_lamport, holder.amount_token, holder.claimed_amount_token
+    );
+
+    let total_amount = holder.amount_token;
+    println!(
+        "[finalize_withdraw_vesting] before calc: premarket_id={} wallet={} total_amount={} claimed_prev={}",
+        vesting.premarket_id,
+        holder_wallet,
         total_amount,
-        claimed_prev,
-        vesting.timestamp_start,
-        vesting.timestamp_end,
-        vesting.init_unlock,
-        Utc::now().timestamp(),
+        holder.claimed_amount_token
+    );
+
+    let claimed_now = calculate_claimed_tokens_delta_from_tx(
+        network,
+        signature,
+        token_mint,
+        holder_wallet,
     )
-    .unwrap_or(0)
-    .max(0);
-    let claimed_next = claimed_prev.saturating_add(available_now).min(total_amount);
+    .await?;
+    println!(
+        "[finalize_withdraw_vesting] claimed_now_from_tx={}",
+        claimed_now
+    );
+    let claimed_next = holder.claimed_amount_token.saturating_add(claimed_now);
+    println!(
+        "[finalize_withdraw_vesting] claimed_next={}",
+        claimed_next
+    );
 
     vesting_repo::update_holder_token_amounts(
         pool,
@@ -187,6 +216,45 @@ pub async fn finalize_withdraw_vesting(
     .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))?;
 
     Ok(())
+}
+
+pub async fn calculate_claimed_tokens_delta_from_tx(
+    network: SolanaNetwork,
+    signature: &Signature,
+    token_mint: &str,
+    holder_wallet: &str,
+) -> Result<i64, actix_web::Error> {
+    println!(
+        "[calculate_claimed_tokens_delta_from_tx] start network={:?} sig={} mint={} wallet={}",
+        network, signature, token_mint, holder_wallet
+    );
+
+    let delta_raw = crate::services::solana_service_v2::get_spl_token_delta(
+        network,
+        signature,
+        token_mint,
+        holder_wallet,
+    )
+    .await
+    .map_err(|e| ErrorInternalServerError(format!("RPC tx delta error: {}", e)))?;
+
+    println!(
+        "[calculate_claimed_tokens_delta_from_tx] delta_raw={}",
+        delta_raw
+    );
+
+    let claimed_now = if delta_raw > 0 {
+        (delta_raw as i64).max(0)
+    } else {
+        0
+    };
+
+    println!(
+        "[calculate_claimed_tokens_delta_from_tx] claimed_now={}",
+        claimed_now
+    );
+
+    Ok(claimed_now)
 }
 
 /// Update vesting info for a premarket.

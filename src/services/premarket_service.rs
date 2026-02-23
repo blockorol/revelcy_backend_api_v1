@@ -485,16 +485,50 @@ pub async fn get_holder_entry_info(
                 None => return Ok(None)
             };
 
-    let token_amount_dec = calculate_token_amount(holder_entry_data);
-    let claimed_dec = if holder_entry_data.is_claimed { token_amount_dec } else { 0 };
+    let calculated_amount_token = calculate_token_amount(holder_entry_data) as i64;
+    let amount_token_i64 = if holder_entry_data.amount_token > 0 {
+        holder_entry_data.amount_token
+    } else {
+        calculated_amount_token
+    };
+    let amount_token_i64 = amount_token_i64.max(0);
+
+    let claimed_token_i64 = holder_entry_data
+        .claimed_amount_token
+        .max(0)
+        .min(amount_token_i64);
+
+    let vesting = vesting_repo::get_vesting_info_by_premarket_id(pool, premarket_id)
+        .await
+        .map_err(ErrorInternalServerError)?;
+
+    let vested_i64 = match vesting {
+        Some(v) => {
+            let available = crate::services::vesting_service::calculate_available_tokens(
+                amount_token_i64,
+                claimed_token_i64,
+                v.timestamp_start,
+                v.timestamp_end,
+                v.init_unlock,
+                Utc::now().timestamp(),
+            )
+            .unwrap_or(0)
+            .max(0);
+
+            claimed_token_i64
+                .saturating_add(available)
+                .min(amount_token_i64)
+        }
+        None => amount_token_i64,
+    };
 
 
     Ok(Some(HolderEntryInfo {
         amount_sol_lamp: holder_entry_data.amount_sol_lamp,
         token: TokenEntryInfo {
-            total_dec: token_amount_dec,
-            vested_dec: token_amount_dec,
-            claimed_dec: claimed_dec,
+            total_dec: amount_token_i64 as u64,
+            vested_dec: vested_i64 as u64,
+            claimed_dec: claimed_token_i64 as u64,
         },
         rank: holder_entry_data.rank,
     }))
@@ -574,7 +608,6 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
 
     let real_token_bought_amount: u64 =
         ((1_073_000_000.0 * real_sol_amount) / (30.0 + real_sol_amount)) as u64;
-    println!("Real token bought amount: {}", real_token_bought_amount);
     let real_token_amount: u64 = 793_100_000 - real_token_bought_amount;
 
     let virtual_lamp_amount: f64 = real_sol_amount + 30.0;
@@ -583,7 +616,7 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
     let price = virtual_lamp_amount / virtual_token_amount as f64 * current_sol_price;
     let final_price = (price * 1_000_000_000.0).round() / 1_000_000_000.0;
 
-    println!("Real sol: {}, token: {}, Virtual sol: {}, token: {} => price {}, Final price: {}", real_sol_amount, real_token_amount, virtual_lamp_amount, virtual_token_amount, price, final_price  );
+    // println!("Real sol: {}, token: {}, Virtual sol: {}, token: {} => price {}, Final price: {}", real_sol_amount, real_token_amount, virtual_lamp_amount, virtual_token_amount, price, final_price  );
     final_price
 }
 
@@ -716,8 +749,6 @@ pub async fn get_holder_entry_price(
             .await
             .map_err(ErrorInternalServerError)?;
     let final_price = calculate_entry_price(lamports_before_join as u64).await;
-
-    println!("Entry price: {}", final_price);
 
     Ok(Some(final_price))
 }

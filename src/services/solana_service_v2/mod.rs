@@ -21,6 +21,7 @@ pub use contract_specific::sign_tx_with_revelcy;
 
 
 pub use solana_methods::{
+    get_spl_token_delta,
     send_signed_tx_base64,
     wait_for_finalized,
     wait_for_confirmed,

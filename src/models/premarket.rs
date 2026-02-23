@@ -283,6 +283,8 @@ pub struct BondingPostion {
     pub before_amount_sol_lamp: u64,
     pub is_claimed: bool,
     pub rank: i64,
+    pub amount_token: i64,
+    pub claimed_amount_token: i64,
 }
 
 #[derive(Serialize, Deserialize, Copy, Debug, Clone)]

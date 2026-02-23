@@ -4,7 +4,7 @@ use solana_sdk::signature::Signature;
 use crate::models::premarket::SolanaNetwork;
 
 pub type UpdateFuture = Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
-pub type UpdateFn = Box<dyn FnOnce() -> UpdateFuture + Send + 'static>;
+pub type UpdateFn = Box<dyn FnOnce(Signature) -> UpdateFuture + Send + 'static>;
 
 pub fn background_finalize_action(
     network: SolanaNetwork,
@@ -23,7 +23,7 @@ pub fn background_finalize_action(
         .await
         {
             Ok(()) => {
-                (update)().await;
+                (update)(sig).await;
             }
             Err(e) => {
                 eprintln!("wait_for_finalized failed: sig={} err={:#}", sig, e);
