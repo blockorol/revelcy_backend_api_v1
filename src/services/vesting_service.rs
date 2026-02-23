@@ -1,11 +1,15 @@
 use crate::models::vesting::{VestingHolderInfo, VestingInfo};
 use crate::storage::vesting_repo;
+use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
+use solana_sdk::signature::Signature;
 use solana_sdk::pubkey::Pubkey;
 use crate::models::premarket::SolanaNetwork;
 use crate::services::solana_service_v2::vesting::generate_vesting_pda;
 use actix_web::error::{ErrorInternalServerError, ErrorNotFound};
 use chrono::Utc;
 use sqlx::PgPool;
+use std::collections::HashMap;
+use std::str::FromStr;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy)]
@@ -146,6 +150,129 @@ pub async fn get_vesting_holder_info(
         }
         None => Ok(None),
     }
+}
+
+pub async fn finalize_withdraw_vesting(
+    pool: &PgPool,
+    network: SolanaNetwork,
+    signature: &Signature,
+    token_mint: &str,
+    holder_wallet: &str,
+) -> Result<(), actix_web::Error> {
+    let vesting = get_full_vesting_info(pool, token_mint, VestingLookupType::MintAddress)
+        .await?
+        .ok_or_else(|| ErrorNotFound("Vesting not found for mint"))?;
+    
+    let holder = vesting_repo::get_holder_by_wallet(pool, vesting.premarket_id, holder_wallet)
+        .await
+        .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))?
+        .ok_or_else(|| ErrorNotFound("Holder not found in premarket"))?;
+
+    let total_amount = holder.amount_token;
+    let claimed_now = calculate_claimed_tokens_delta_from_tx(
+        network,
+        signature,
+        token_mint,
+        holder_wallet,
+    )
+    .await?;
+    let claimed_next = holder.claimed_amount_token.saturating_add(claimed_now);
+
+    vesting_repo::update_holder_token_amounts(
+        pool,
+        vesting.premarket_id,
+        holder_wallet,
+        total_amount,
+        claimed_next,
+    )
+    .await
+    .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))?;
+
+    Ok(())
+}
+
+pub async fn sync_finish_premarket_holder_amount_tokens(
+    pool: &PgPool,
+    rpc: &AsyncRpcClient,
+    network: SolanaNetwork,
+    premarket_id: Uuid,
+    mint_address: &str,
+) -> Result<(), actix_web::Error> {
+    let mint = Pubkey::from_str(mint_address)
+        .map_err(|_| ErrorInternalServerError("Invalid mint address"))?;
+    let vesting_account = generate_vesting_pda(network, mint);
+
+    let onchain_vesting = crate::services::solana_service_v2::vesting::get_vesting_account_data_with_client(
+        rpc,
+        vesting_account,
+    )
+    .await
+    .map_err(|e| ErrorInternalServerError(format!("Failed to read vesting account: {}", e)))?;
+
+    let holders = vesting_repo::get_vesting_holders_by_premarket_id(pool, premarket_id)
+        .await
+        .map_err(|e| ErrorInternalServerError(format!("Failed to load holders: {}", e)))?;
+
+    let claimed_by_wallet: HashMap<String, i64> = holders
+        .into_iter()
+        .map(|h| (h.holder_wallet, h.claimed_amount_token))
+        .collect();
+
+    for u in onchain_vesting.users {
+        let wallet = u.user_pubkey.to_string();
+        let amount_token = match i64::try_from(u.tokens_total) {
+            Ok(v) => v,
+            Err(_) => {
+                eprintln!(
+                    "sync_finish_premarket_holder_amount_tokens: tokens_total overflow for wallet {}",
+                    wallet
+                );
+                continue;
+            }
+        };
+        let claimed_amount_token = *claimed_by_wallet.get(&wallet).unwrap_or(&0);
+
+        vesting_repo::update_holder_token_amounts(
+            pool,
+            premarket_id,
+            &wallet,
+            amount_token,
+            claimed_amount_token,
+        )
+        .await
+        .map_err(|e| {
+            ErrorInternalServerError(format!(
+                "Failed to update holder token amounts for wallet {}: {}",
+                wallet, e
+            ))
+        })?;
+    }
+
+    Ok(())
+}
+
+pub async fn calculate_claimed_tokens_delta_from_tx(
+    network: SolanaNetwork,
+    signature: &Signature,
+    token_mint: &str,
+    holder_wallet: &str,
+) -> Result<i64, actix_web::Error> {
+    let delta_raw = crate::services::solana_service_v2::get_spl_token_delta(
+        network,
+        signature,
+        token_mint,
+        holder_wallet,
+    )
+    .await
+    .map_err(|e| ErrorInternalServerError(format!("RPC tx delta error: {}", e)))?;
+
+    let claimed_now = if delta_raw > 0 {
+        (delta_raw as i64).max(0)
+    } else {
+        0
+    };
+
+    Ok(claimed_now)
 }
 
 /// Update vesting info for a premarket.

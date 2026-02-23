@@ -406,7 +406,7 @@ pub async fn update_availability_info(
     let id_option = get_premarket_id_by_bc_address(pool, bc_address).await?;
     let premarket_info_id = id_option.ok_or(sqlx::Error::RowNotFound)?;
 
-    let result = sqlx::query(
+    let _result = sqlx::query(
         r#"
         UPDATE premarket_info
             SET
@@ -684,7 +684,7 @@ pub async fn get_holder_entry_by_premarket_id(
     let row: Option<BondingPostionDbModel> = sqlx::query_as::<_, BondingPostionDbModel>(
         r#"
         WITH holder AS (
-            SELECT amount_lamport, join_timestamp, claimed
+            SELECT amount_lamport, join_timestamp, claimed, amount_token, claimed_amount_token
             FROM premarket_holders
             WHERE premarket_info_id = $1
               AND holder_wallet = $2
@@ -707,7 +707,9 @@ pub async fn get_holder_entry_by_premarket_id(
                 WHERE ph.premarket_info_id = $1
                   AND ph.out_timestamp IS NULL
                   AND ph.join_timestamp < h.join_timestamp
-            ) AS rank
+            ) AS rank,
+            h.amount_token AS amount_token,
+            h.claimed_amount_token AS claimed_amount_token
         FROM holder h
         "#
     )
@@ -731,6 +733,8 @@ pub async fn get_holder_entry_by_premarket_id(
         before_amount_sol_lamp: row.total_amount as u64,
         is_claimed: row.is_claimed,
         rank: row.rank as i64,
+        amount_token: row.amount_token,
+        claimed_amount_token: row.claimed_amount_token,
     }))
 }
 
