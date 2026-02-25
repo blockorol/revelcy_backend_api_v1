@@ -44,7 +44,7 @@ ENV OPENSSL_STATIC=1
 # =====================================================================================
 # ========== Stage 1: Build goose migration tool (Go) =================================
 # =====================================================================================
-FROM golang:1.23-alpine AS goose
+FROM golang:1.25-alpine AS goose
 # ---- Install Goose CLI --------------------------------------------------------------
 RUN go install github.com/pressly/goose/v3/cmd/goose@latest
 
