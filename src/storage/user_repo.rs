@@ -1,10 +1,9 @@
 use crate::storage::models::UserDbModel;
-use crate::models::user::{ApplyInviteCodeResult, User};
+use crate::models::user::{ApplyInviteCodeResult, User, UserShort};
 use sqlx::{PgPool, Row, Result};
 use uuid::Uuid;
 
 
-// Найти пользователя по кошельку
 pub async fn get_user_by_wallet(pool: &PgPool, wallet_address: &str) -> Result<Option<User>> {
     let record = sqlx::query_as::<_, UserDbModel>(
         r#"
@@ -94,8 +93,38 @@ pub async fn search_users_by_username_with_wallets(
     Ok(result)
 }
 
+pub async fn get_users_short_by_addresses(
+    pool: &PgPool,
+    addresses: &[String],
+) -> Result<Vec<UserShort>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            w.wallet_address AS address,
+            u.username AS name,
+            u.avatar_url AS url
+        FROM wallets w
+        JOIN users u ON u.id = w.user_id
+        WHERE w.wallet_address = ANY($1)
+        ORDER BY w.wallet_address
+        "#,
+    )
+    .bind(addresses)
+    .fetch_all(pool)
+    .await?;
 
-// Создать пользователя и привязать кошелек
+    let items = rows
+        .into_iter()
+        .map(|row| UserShort {
+            address: row.get::<String, _>("address"),
+            name: row.get::<Option<String>, _>("name"),
+            url: row.get::<Option<String>, _>("url"),
+        })
+        .collect();
+
+    Ok(items)
+}
+
 pub async fn create_user_with_wallet(pool: &PgPool, wallet_address: &str) -> Result<User> {
     let mut tx = pool.begin().await?;
 

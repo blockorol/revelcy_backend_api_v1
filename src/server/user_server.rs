@@ -4,9 +4,10 @@ use sqlx::PgPool;
 use crate::api::user::{
     AddAvatarResponseDto,
     AddUserNameRequestDto, AddUserNameResponseDto,
+    GetUsersShortListRequestDto, GetUsersShortListResponseDto,
     SearchUsersRequestDto, SearchUsersResponseDto,
     SetInviteCodeRequestDto, SetInviteCodeResponseDto,
-    UserDto, UserSetInfoRequestDTO, UserSetInfoResponseDTO
+    UserDto, UserSetInfoRequestDTO, UserSetInfoResponseDTO, UserShortDto
 };
 use crate::api::errors::{ApiError, ApiErrorCode, FieldError, ApiResult};
 use uuid::Uuid;
@@ -29,6 +30,7 @@ pub fn user_scope() -> Scope {
         .route("/set_invite_code", web::post().to(set_invite_code))
         .route("/update_username", web::post().to(update_username))
         .route("/update_avatar", web::post().to(update_avatar))
+        .route("/short_list", web::post().to(get_users_short_list))
         .route("/search", web::post().to(search_users))
 }
 
@@ -266,6 +268,43 @@ pub async fn search_users(
         .collect();
 
     Ok(HttpResponse::Ok().json(SearchUsersResponseDto { items }))
+}
+
+pub async fn get_users_short_list(
+    _req: HttpRequest,
+    pool: web::Data<PgPool>,
+    payload: web::Json<GetUsersShortListRequestDto>,
+) -> ApiResult<HttpResponse> {
+    let dto = payload.into_inner();
+
+    let addresses: Vec<String> = dto
+        .addresses
+        .into_iter()
+        .map(|a| a.trim().to_string())
+        .filter(|a| !a.is_empty())
+        .collect();
+
+    if addresses.is_empty() {
+        return Ok(HttpResponse::Ok().json(GetUsersShortListResponseDto { items: vec![] }));
+    }
+
+    let users = user_service::get_users_short_by_addresses(pool.get_ref(), &addresses)
+        .await
+        .map_err(|e| {
+            eprintln!("get_users_short_list db error: {e:?}");
+            ApiError::internal_get_db_error()
+        })?;
+
+    let items = users
+        .into_iter()
+        .map(|u| UserShortDto {
+            address: u.address,
+            name: u.name,
+            url: u.url,
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(GetUsersShortListResponseDto { items }))
 }
 
 

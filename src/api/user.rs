@@ -15,6 +15,23 @@ pub struct SearchUsersResponseDto {
     pub items: Vec<UserDto>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct GetUsersShortListRequestDto {
+    pub addresses: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GetUsersShortListResponseDto {
+    pub items: Vec<UserShortDto>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UserShortDto {
+    pub address: String,
+    pub name: Option<String>,
+    pub url: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserDto {
     pub id: String,

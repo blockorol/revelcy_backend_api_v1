@@ -19,6 +19,13 @@ pub struct User {
     pub wallets: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserShort {
+    pub address: String,
+    pub name: Option<String>,
+    pub url: Option<String>,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct UserContextData {
     pub internal_id: Uuid,

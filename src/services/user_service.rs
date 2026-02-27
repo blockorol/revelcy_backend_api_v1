@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::config;
-use crate::models::user::{ApplyInviteCodeResult, User};
+use crate::models::user::{ApplyInviteCodeResult, User, UserShort};
 use crate::services::file_service;
 use crate::storage::user_repo;
 
@@ -80,6 +80,15 @@ pub async fn search_by_username(
     limit: i64,
 ) -> Result<Vec<User>, actix_web::Error> {
     user_repo::search_users_by_username_with_wallets(pool, input, limit)
+        .await
+        .map_err(ErrorInternalServerError)
+}
+
+pub async fn get_users_short_by_addresses(
+    pool: &PgPool,
+    addresses: &[String],
+) -> Result<Vec<UserShort>, actix_web::Error> {
+    user_repo::get_users_short_by_addresses(pool, addresses)
         .await
         .map_err(ErrorInternalServerError)
 }
