@@ -90,6 +90,7 @@ fn map_user_to_dto(u: User) -> WhitelistUserDTO {
         id: u.id,
         username: u.username,
         avatar_url: u.avatar_url,
+        wallets: u.wallets,
     }
 }
 

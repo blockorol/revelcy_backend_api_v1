@@ -50,6 +50,7 @@ pub struct WhitelistUserDTO {
     pub id: Uuid,
     pub username: Option<String>,
     pub avatar_url: Option<String>,
+    pub wallets: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

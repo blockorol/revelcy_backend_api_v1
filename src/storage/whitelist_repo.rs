@@ -5,7 +5,15 @@ use uuid::Uuid;
 
 use crate::models::user::User;
 use crate::models::whitelist::WhitelistStatus;
-use crate::storage::models::{WhitelistDbModel, UserDbModel};
+use crate::storage::models::WhitelistDbModel;
+
+#[derive(sqlx::FromRow)]
+struct WhitelistUserRow {
+    id: Uuid,
+    username: Option<String>,
+    avatar_url: Option<String>,
+    wallets: Vec<String>,
+}
 
 /// is user exist in whitelist
 pub async fn exists(
@@ -77,12 +85,22 @@ pub async fn list_users_by_premarket(
     .fetch_one(pool)
     .await?;
 
-    let rows: Vec<UserDbModel> = sqlx::query_as::<_, UserDbModel>(
+    let rows: Vec<WhitelistUserRow> = sqlx::query_as::<_, WhitelistUserRow>(
         r#"
-        SELECT u.id, u.username, u.avatar_url
+        SELECT
+            u.id,
+            u.username,
+            u.avatar_url,
+            COALESCE(
+                array_agg(DISTINCT wa.wallet_address)
+                    FILTER (WHERE wa.wallet_address IS NOT NULL),
+                '{}'::text[]
+            ) AS wallets
         FROM whitelist w
         JOIN users u ON u.id = w.user_id
+        LEFT JOIN wallets wa ON wa.user_id = u.id
         WHERE w.premarket_id = $1
+        GROUP BY w.id, u.id, u.username, u.avatar_url
         ORDER BY w.id DESC
         LIMIT $2 OFFSET $3
         "#,
@@ -93,11 +111,15 @@ pub async fn list_users_by_premarket(
     .fetch_all(pool)
     .await?;
 
-    // DB -> Service mapping inside storage layer
     let users: Vec<User> = rows
         .into_iter()
-        .map(|u| User::try_from(u))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|u| User {
+            id: u.id,
+            username: u.username,
+            avatar_url: u.avatar_url,
+            wallets: u.wallets,
+        })
+        .collect();
 
     Ok((users, total))
 }
@@ -125,13 +147,23 @@ pub async fn list_users_by_status(
     .fetch_one(pool)
     .await?;
 
-    let rows: Vec<UserDbModel> = sqlx::query_as::<_, UserDbModel>(
+    let rows: Vec<WhitelistUserRow> = sqlx::query_as::<_, WhitelistUserRow>(
         r#"
-        SELECT u.id, u.username, u.avatar_url
+        SELECT
+            u.id,
+            u.username,
+            u.avatar_url,
+            COALESCE(
+                array_agg(DISTINCT wa.wallet_address)
+                    FILTER (WHERE wa.wallet_address IS NOT NULL),
+                '{}'::text[]
+            ) AS wallets
         FROM whitelist w
         JOIN users u ON u.id = w.user_id
+        LEFT JOIN wallets wa ON wa.user_id = u.id
         WHERE w.premarket_id = $1
           AND w.status = $2
+        GROUP BY w.updated_at, u.id, u.username, u.avatar_url
         ORDER BY w.updated_at DESC
         LIMIT $3 OFFSET $4
         "#,
@@ -143,11 +175,15 @@ pub async fn list_users_by_status(
     .fetch_all(pool)
     .await?;
 
-    // DB -> Service mapping inside storage layer
     let users: Vec<User> = rows
         .into_iter()
-        .map(User::try_from)
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|u| User {
+            id: u.id,
+            username: u.username,
+            avatar_url: u.avatar_url,
+            wallets: u.wallets,
+        })
+        .collect();
 
     Ok((users, total))
 }

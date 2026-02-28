@@ -1424,6 +1424,7 @@ pub async fn get_list_main_info(
                 },
             },
             availability_info: AvailabilityInfoDTO {
+                is_whitelist_enabled: premarket_info.is_whitelist_enabled,
                 token_short_url_name: premarket_info.short_url_name.clone(),
                 is_hided: premarket_info.is_hided,
             },
@@ -1546,6 +1547,7 @@ pub async fn get_main_info(
         links: dto_links,
     };
     let availability_info = AvailabilityInfoDTO {
+        is_whitelist_enabled: premarket_info.main_info.is_whitelist_enabled,
         token_short_url_name: premarket_info.main_info.short_url_name.clone(),
         is_hided: premarket_info.main_info.is_hided,
     };
