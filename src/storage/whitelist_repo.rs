@@ -15,6 +15,12 @@ struct WhitelistUserRow {
     wallets: Vec<String>,
 }
 
+#[derive(sqlx::FromRow)]
+struct WhitelistStatusRow {
+    status: String,
+    updated_at: i64,
+}
+
 /// is user exist in whitelist
 pub async fn exists(
     pool: &PgPool,
@@ -122,6 +128,34 @@ pub async fn list_users_by_premarket(
         .collect();
 
     Ok((users, total))
+}
+
+pub async fn get_status_with_updated_at(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    user_id: Uuid,
+) -> Result<Option<(WhitelistStatus, i64)>> {
+    let row_opt = sqlx::query_as::<_, WhitelistStatusRow>(
+        r#"
+        SELECT
+            status,
+            EXTRACT(EPOCH FROM updated_at)::BIGINT AS updated_at
+        FROM whitelist
+        WHERE premarket_id = $1
+          AND user_id = $2
+        "#,
+    )
+    .bind(premarket_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let status = match row_opt {
+        Some(r) => Some((WhitelistStatus::from_str(&r.status)?, r.updated_at)),
+        None => None,
+    };
+
+    Ok(status)
 }
 
 pub async fn list_users_by_status(

@@ -1,10 +1,11 @@
 use crate::models::premarket::{
-    BondingPostion, HolderEntryInfo, TokenEntryInfo,
+    BondingPostion, HolderEntryData, HolderEntryInfo, HolderWhitelistInfo, TokenEntryInfo,
     CreatePremarketInfoServiceModel,
     CommunityInfoServiceModel, CommunityLink, CreatePremarketConceptModel, FullPremarketInfo, HolderInfo, LinkType, PremarketGoal, PremarketInfoServiceModel, PremarketListResult, PremarketLookupKeyType, PremarketOnchainData, PremarketOnchainUser, PremarketState, SolanaNetwork, TokenDynamicInfo, TokenInfo, TokenLinks, TxConfirmationStatusDTO, UserInfoShort
 };
 use crate::models::user::UserContextData;
 use crate::services::solana_service_v2::generate_premarket_pda;
+use crate::services::user_service;
 use crate::storage::signing_keys::{acquire_signing_key, update_premarket_pubkey};
 
 use crate::storage::models::{
@@ -12,6 +13,7 @@ use crate::storage::models::{
 }; // todo: по хорошему убрать это. сервисный уровень не должен знать про модели БД. он рабоатет с моделями сервиса, и каст должен идти в репозитории
 use crate::storage::premarket_repo;
 use crate::storage::vesting_repo;
+use crate::storage::whitelist_repo;
 use actix_web::error::ErrorBadRequest;
 use actix_web::error::ErrorInternalServerError;
 use chrono::Utc;
@@ -484,56 +486,88 @@ pub async fn get_holder_entry_info(
     pool: &PgPool,
     premarket_pubkey: &str,
     holder_pubkey: &str,
-) -> Result<Option<HolderEntryInfo>, actix_web::Error> {
+) -> Result<HolderEntryInfo, actix_web::Error> {
     let premarket_id = match premarket_repo::get_premarket_id_by_bc_address(pool, premarket_pubkey).await.map_err(ErrorInternalServerError)? {
         Some(id) => id,
         None => return Err(ErrorBadRequest("premarket not found"))
     };
 
-    let holder_entry_data = match
-        premarket_repo::get_holder_entry_by_premarket_id(pool, premarket_id, holder_pubkey)
-            .await
-            .map_err(ErrorInternalServerError)? {
-                Some(d) => d,
-                None => return Ok(None)
-            };
-
-    let calculated_amount_token = calculate_token_amount(holder_entry_data) as i64;
-    let amount_token_i64 = if holder_entry_data.amount_token > 0 {
-        holder_entry_data.amount_token
-    } else {
-        calculated_amount_token
-    };
-    let amount_token_i64 = amount_token_i64.max(0);
-
-    let claimed_token_i64 = holder_entry_data
-        .claimed_amount_token
-        .max(0)
-        .min(amount_token_i64);
-
-    let vesting = vesting_repo::get_vesting_info_by_premarket_id(pool, premarket_id)
+    let pm_opt = premarket_repo::get_main_premarket_info_by_bc_address(pool, premarket_pubkey)
         .await
         .map_err(ErrorInternalServerError)?;
+    let pm = match pm_opt {
+        Some(pm) => pm,
+        None => return Err(ErrorBadRequest("premarket not found")),
+    };
 
-    let vested_dec = calculate_vested_dec(
-        amount_token_i64,
-        claimed_token_i64,
-        vesting
-            .as_ref()
-            .map(|v| (v.timestamp_start, v.timestamp_end, v.init_unlock)),
-        Utc::now().timestamp(),
-    );
+    let holder_entry_data_opt = 
+        premarket_repo::get_holder_entry_by_premarket_id(pool, premarket_id, holder_pubkey)
+            .await
+        .map_err(ErrorInternalServerError)?;
 
+    let whitelist = {
+        if pm.is_whitelist_enabled {
+            let user_opt = user_service::get_by_wallet_address(pool, holder_pubkey).await?;
+            if let Some(user) = user_opt {
+                whitelist_repo::get_status_with_updated_at(pool, premarket_id, user.id)
+                    .await
+                    .map_err(ErrorInternalServerError)?
+                    .map(|(status, updated_at)| HolderWhitelistInfo {
+                        status: status.as_str().to_string(),
+                        updated_at,
+                    })
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
 
-    Ok(Some(HolderEntryInfo {
-        amount_sol_lamp: holder_entry_data.amount_sol_lamp,
-        token: TokenEntryInfo {
-            total_dec: amount_token_i64 as u64,
-            vested_dec: vested_dec,
-            claimed_dec: claimed_token_i64 as u64,
-        },
-        rank: holder_entry_data.rank,
-    }))
+    let entry = if let Some(holder_entry_data) = holder_entry_data_opt {
+        let calculated_amount_token = calculate_token_amount(holder_entry_data) as i64;
+        let amount_token_i64 = if holder_entry_data.amount_token > 0 {
+            holder_entry_data.amount_token
+        } else {
+            calculated_amount_token
+        };
+        let amount_token_i64 = amount_token_i64.max(0);
+
+        let claimed_token_i64 = holder_entry_data
+            .claimed_amount_token
+            .max(0)
+            .min(amount_token_i64);
+
+        let vesting = vesting_repo::get_vesting_info_by_premarket_id(pool, premarket_id)
+            .await
+            .map_err(ErrorInternalServerError)?;
+
+        let vested_dec = calculate_vested_dec(
+            amount_token_i64,
+            claimed_token_i64,
+            vesting
+                .as_ref()
+                .map(|v| (v.timestamp_start, v.timestamp_end, v.init_unlock)),
+            Utc::now().timestamp(),
+        );
+
+        Some(HolderEntryData {
+            amount_sol_lamp: holder_entry_data.amount_sol_lamp,
+            token: TokenEntryInfo {
+                total_dec: amount_token_i64 as u64,
+                vested_dec: vested_dec,
+                claimed_dec: claimed_token_i64 as u64,
+            },
+            rank: holder_entry_data.rank,
+        })
+    } else {
+        None
+    };
+
+    Ok(HolderEntryInfo {
+        entry,
+        whitelist,
+    })
 }
 
 fn calculate_vested_dec(

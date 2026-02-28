@@ -180,10 +180,22 @@ pub struct GetHolderEntryInfoQuery {
 
 #[derive(Serialize)]
 pub struct GetHolderEntryInfoResponse {
+    pub entry: Option<GetHolderEntryDataResponse>,
+    pub whitelist: Option<GetHolderWhitelistResponse>,
+}
+
+#[derive(Serialize)]
+pub struct GetHolderEntryDataResponse {
     #[serde(with = "string_as_number")]
     pub amount_sol_lamp: u64,
     pub token: TokenEntryInfo,
     pub rank: i64,
+}
+
+#[derive(Serialize)]
+pub struct GetHolderWhitelistResponse {
+    pub status: String,
+    pub updated_at: i64,
 }
 
 #[derive(Deserialize, Serialize)]

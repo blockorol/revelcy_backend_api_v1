@@ -3,7 +3,7 @@ use sqlx::{PgPool};
 use solana_sdk::pubkey::Pubkey;
 use actix_web::{web, Error, HttpResponse};
 use crate::api::premarket::{
-    GetHolderEntryInfoQuery, GetHolderEntryInfoResponse, TokenEntryInfo
+    GetHolderEntryDataResponse, GetHolderEntryInfoQuery, GetHolderEntryInfoResponse, GetHolderWhitelistResponse, TokenEntryInfo
 };
 
 
@@ -25,7 +25,7 @@ pub async fn get_user_entry(
         Err(_) => return Ok(HttpResponse::BadRequest().body("Invalid premarket_id")),
     };
 
-    let holder_entry_info_opt = match 
+    let holder_entry_info = match 
         premarket_service::get_holder_entry_info(&pool, &pubkey.to_string(), &holder_wallet.to_string()).await {
         Ok(info) => info,
         Err(err) => {
@@ -33,19 +33,20 @@ pub async fn get_user_entry(
             return Ok(HttpResponse::InternalServerError().finish());
         }
     };
-    let resp = match holder_entry_info_opt  {
-        Some(holder_entry_info) => GetHolderEntryInfoResponse {
-            amount_sol_lamp: holder_entry_info.amount_sol_lamp,
+    let resp = GetHolderEntryInfoResponse {
+        entry: holder_entry_info.entry.map(|entry| GetHolderEntryDataResponse {
+            amount_sol_lamp: entry.amount_sol_lamp,
             token: TokenEntryInfo{
-                total_dec: holder_entry_info.token.total_dec, 
-                vested_dec: holder_entry_info.token.vested_dec, 
-                claimed_dec: holder_entry_info.token.claimed_dec, 
+                total_dec: entry.token.total_dec, 
+                vested_dec: entry.token.vested_dec, 
+                claimed_dec: entry.token.claimed_dec, 
             },
-            rank: holder_entry_info.rank,
-        },
-        None => {
-            return Ok(HttpResponse::Ok().json({}));
-        }
+            rank: entry.rank,
+        }),
+        whitelist: holder_entry_info.whitelist.map(|w| GetHolderWhitelistResponse {
+            status: w.status,
+            updated_at: w.updated_at,
+        }),
     };
 
     Ok(HttpResponse::Ok().json(resp))

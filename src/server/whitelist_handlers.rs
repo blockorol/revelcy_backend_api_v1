@@ -194,10 +194,7 @@ pub async fn get_premarket_whitelist(
 ) -> ApiResult<HttpResponse> {
     let dto = payload.into_inner();
 
-    let ctx = validate_base_request(&req, &dto.network.to_string(), None)?;
-
-    // authz: only creator
-    ensure_creator(pool.get_ref(), dto.premarket_id, ctx.user.internal_id).await?;
+    let _ctx = validate_base_request(&req, &dto.network.to_string(), None)?;
     let status: Option<WhitelistStatus> = dto.status.map(|s| {
         WhitelistStatus::from_str(&s)
             .map_err(|_| ApiError::from_field_errors(vec![FieldError {
@@ -217,8 +214,8 @@ pub async fn get_premarket_whitelist(
     .await
     .map_err(|e| {
         eprintln!(
-            "[whitelist/get] Failed premarket_id={} caller={} cursor={} limit={} err={:?}",
-            dto.premarket_id, ctx.user.internal_id, dto.cursor, dto.limit, e
+            "[whitelist/get] Failed premarket_id={} cursor={} limit={} err={:?}",
+            dto.premarket_id, dto.cursor, dto.limit, e
         );
         ApiError::internal_get_db_error()
     })?;

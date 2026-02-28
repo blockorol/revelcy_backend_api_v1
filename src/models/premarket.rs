@@ -272,9 +272,21 @@ pub struct TokenDynamicInfo {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HolderEntryInfo {
+    pub entry: Option<HolderEntryData>,
+    pub whitelist: Option<HolderWhitelistInfo>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct HolderEntryData {
     pub amount_sol_lamp: u64,
     pub token: TokenEntryInfo,
     pub rank: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct HolderWhitelistInfo {
+    pub status: String,
+    pub updated_at: i64,
 }
 
 #[derive(Serialize, Deserialize, Copy, Debug, Clone)]
