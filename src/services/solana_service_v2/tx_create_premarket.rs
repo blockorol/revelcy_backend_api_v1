@@ -152,14 +152,19 @@ pub fn parse_create_premarket_tx_from_base64(
     let args = CreatePremarketArgsBorsh::try_from_slice(&ix.data[8..])
         .context("borsh decode CreatePremarketArgs failed")?;
 
-    if ix.accounts.len() < 4 {
-        return Err(anyhow!("instruction accounts too short (<4)"));
+    if ix.accounts.len() < 5 {
+        return Err(anyhow!("instruction accounts too short (<5)"));
     }
 
     let revelcy_auth = resolve_account(msg, ix.accounts[0] as usize)?;
     let premarket_pda = resolve_account(msg, ix.accounts[1] as usize)?;
     let mint = resolve_account(msg, ix.accounts[2] as usize)?;
     let user = resolve_account(msg, ix.accounts[3] as usize)?;
+    let system_program_key = resolve_account(msg, ix.accounts[4] as usize)?;
+
+    if system_program_key != system_program::ID {
+        return Err(anyhow!("invalid system_program account"));
+    }
 
     let params = BuildPremarketTxParams {
         mint,

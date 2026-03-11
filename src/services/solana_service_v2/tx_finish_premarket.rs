@@ -64,6 +64,8 @@ pub async fn build_finish_premarket_tx_unsigned(
 
     // PDAs/ATAs
     let (bonding_curve, _) = pda(&pump_fun_program_id, &[b"bonding-curve", mint_pub.as_ref()]);
+    let (bonding_curve_v2, _) =
+        pda(&pump_fun_program_id, &[b"bonding-curve-v2", mint_pub.as_ref()]);
     let bonding_curve_ata = get_associated_token_address(&bonding_curve, &mint_pub);
     let (metadata, _) = pda(
         &metaplex_program,
@@ -78,7 +80,7 @@ pub async fn build_finish_premarket_tx_unsigned(
     let (vesting_account, _) = pda(&program_id, &[b"vesting", mint_pub.as_ref()]);
     let vesting_ata = get_associated_token_address(&vesting_account, &mint_pub);
 
-    let associated_user_ata = get_associated_token_address(&revelcy_pub, &mint_pub);
+    let associated_user_ata = get_associated_token_address(&params.user, &mint_pub);
 
     let (creator_vault, _) = pda(
         &pump_fun_program_id,
@@ -133,6 +135,7 @@ pub async fn build_finish_premarket_tx_unsigned(
         AccountMeta::new(user_volume_accum, false),           // 24. user_volume_accumulator
         AccountMeta::new(fee_config, false),                  // 25. fee_config
         AccountMeta::new(fee_program, false),                 // 26. fee_program
+        AccountMeta::new_readonly(bonding_curve_v2, false),   // 27. bonding_curve_v2
     ];
 
     let ix_finish = Instruction {
