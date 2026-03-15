@@ -76,6 +76,7 @@ use crate::services::solana_service::{
 use crate::server::whitelist_handlers::{
     add_whitelist_user,
     add_whitelist_user_list,
+    apply_whitelist,
     get_premarket_whitelist,
     remove_whitelist_user,
     whitelist_approve, 
@@ -103,6 +104,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         // Whitelist routes: todo: move to separate file
         .route("/whitelist/add_user", web::post().to(add_whitelist_user))
         .route("/whitelist/add_user_list", web::post().to(add_whitelist_user_list))
+        .route("/whitelist/apply", web::post().to(apply_whitelist))
         .route("/whitelist/get", web::post().to(get_premarket_whitelist))
         .route("/whitelist/remove_user", web::post().to(remove_whitelist_user))
         .route("/whitelist/approve", web::post().to(whitelist_approve))

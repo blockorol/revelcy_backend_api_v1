@@ -4,7 +4,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::models::user::User;
-use crate::models::whitelist::WhitelistStatus;
+use crate::models::whitelist::{WhitelistStatus, WhitelistUserInfo};
 use crate::storage::models::WhitelistDbModel;
 
 #[derive(sqlx::FromRow)]
@@ -13,6 +13,7 @@ struct WhitelistUserRow {
     username: Option<String>,
     avatar_url: Option<String>,
     wallets: Vec<String>,
+    status: String,
 }
 
 #[derive(sqlx::FromRow)]
@@ -76,7 +77,7 @@ pub async fn list_users_by_premarket(
     premarket_id: Uuid,
     cursor: i64,
     limit: i64,
-) -> Result<(Vec<User>, i64)> {
+) -> Result<(Vec<WhitelistUserInfo>, i64)> {
     let limit = limit.clamp(1, 200);
     let offset = cursor.max(0);
 
@@ -97,6 +98,7 @@ pub async fn list_users_by_premarket(
             u.id,
             u.username,
             u.avatar_url,
+            w.status,
             COALESCE(
                 array_agg(DISTINCT wa.wallet_address)
                     FILTER (WHERE wa.wallet_address IS NOT NULL),
@@ -106,7 +108,7 @@ pub async fn list_users_by_premarket(
         JOIN users u ON u.id = w.user_id
         LEFT JOIN wallets wa ON wa.user_id = u.id
         WHERE w.premarket_id = $1
-        GROUP BY w.id, u.id, u.username, u.avatar_url
+        GROUP BY w.id, w.status, u.id, u.username, u.avatar_url
         ORDER BY w.id DESC
         LIMIT $2 OFFSET $3
         "#,
@@ -117,15 +119,18 @@ pub async fn list_users_by_premarket(
     .fetch_all(pool)
     .await?;
 
-    let users: Vec<User> = rows
+    let users: Vec<WhitelistUserInfo> = rows
         .into_iter()
-        .map(|u| User {
-            id: u.id,
-            username: u.username,
-            avatar_url: u.avatar_url,
-            wallets: u.wallets,
-        })
-        .collect();
+        .map(|u| Ok(WhitelistUserInfo {
+            user: User {
+                id: u.id,
+                username: u.username,
+                avatar_url: u.avatar_url,
+                wallets: u.wallets,
+            },
+            status: WhitelistStatus::from_str(&u.status)?,
+        }))
+        .collect::<Result<Vec<_>>>()?;
 
     Ok((users, total))
 }
@@ -164,7 +169,7 @@ pub async fn list_users_by_status(
     status: WhitelistStatus,
     cursor: i64,
     limit: i64,
-) -> Result<(Vec<User>, i64)> {
+) -> Result<(Vec<WhitelistUserInfo>, i64)> {
     let limit = limit.clamp(1, 200);
     let offset = cursor.max(0);
 
@@ -187,6 +192,7 @@ pub async fn list_users_by_status(
             u.id,
             u.username,
             u.avatar_url,
+            w.status,
             COALESCE(
                 array_agg(DISTINCT wa.wallet_address)
                     FILTER (WHERE wa.wallet_address IS NOT NULL),
@@ -197,7 +203,7 @@ pub async fn list_users_by_status(
         LEFT JOIN wallets wa ON wa.user_id = u.id
         WHERE w.premarket_id = $1
           AND w.status = $2
-        GROUP BY w.updated_at, u.id, u.username, u.avatar_url
+        GROUP BY w.updated_at, w.status, u.id, u.username, u.avatar_url
         ORDER BY w.updated_at DESC
         LIMIT $3 OFFSET $4
         "#,
@@ -209,15 +215,18 @@ pub async fn list_users_by_status(
     .fetch_all(pool)
     .await?;
 
-    let users: Vec<User> = rows
+    let users: Vec<WhitelistUserInfo> = rows
         .into_iter()
-        .map(|u| User {
-            id: u.id,
-            username: u.username,
-            avatar_url: u.avatar_url,
-            wallets: u.wallets,
-        })
-        .collect();
+        .map(|u| Ok(WhitelistUserInfo {
+            user: User {
+                id: u.id,
+                username: u.username,
+                avatar_url: u.avatar_url,
+                wallets: u.wallets,
+            },
+            status: WhitelistStatus::from_str(&u.status)?,
+        }))
+        .collect::<Result<Vec<_>>>()?;
 
     Ok((users, total))
 }
@@ -228,21 +237,25 @@ pub async fn add(
     pool: &PgPool,
     premarket_id: Uuid,
     user_id: Uuid,
+    status: WhitelistStatus,
 ) -> Result<()> {
     let id = Uuid::new_v4();
 
     let _row = sqlx::query_as::<_, WhitelistDbModel>(
         r#"
-        INSERT INTO whitelist (id, premarket_id, user_id)
-        VALUES ($1, $2, $3)
+        INSERT INTO whitelist (id, premarket_id, user_id, status)
+        VALUES ($1, $2, $3, $4)
         ON CONFLICT (premarket_id, user_id)
-        DO UPDATE SET premarket_id = EXCLUDED.premarket_id
+        DO UPDATE SET
+            status = EXCLUDED.status,
+            updated_at = NOW()
         RETURNING id, premarket_id, user_id
         "#,
     )
     .bind(id)
     .bind(premarket_id)
     .bind(user_id)
+    .bind(status.as_str())
     .fetch_one(pool)
     .await?;
 
@@ -250,25 +263,56 @@ pub async fn add(
 }
 
 /// CREATE: add many users to whitelist
-pub async fn add_many(pool: &PgPool, premarket_id: Uuid, user_ids: &[Uuid]) -> Result<()> {
+pub async fn add_many(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    user_ids: &[Uuid],
+    status: WhitelistStatus,
+) -> Result<()> {
     if user_ids.is_empty() {
         return Ok(());
     }
 
     sqlx::query(
         r#"
-        INSERT INTO whitelist (id, premarket_id, user_id)
-        SELECT gen_random_uuid(), $1, x.user_id
+        INSERT INTO whitelist (id, premarket_id, user_id, status)
+        SELECT gen_random_uuid(), $1, x.user_id, $3
         FROM UNNEST($2::uuid[]) AS x(user_id)
-        ON CONFLICT (premarket_id, user_id) DO NOTHING
+        ON CONFLICT (premarket_id, user_id)
+        DO UPDATE SET
+            status = EXCLUDED.status,
+            updated_at = NOW()
         "#,
     )
     .bind(premarket_id)
     .bind(user_ids)
+    .bind(status.as_str())
     .execute(pool)
     .await?;
 
     Ok(())
+}
+
+pub async fn add_requested_if_absent(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    user_id: Uuid,
+) -> Result<bool> {
+    let res = sqlx::query(
+        r#"
+        INSERT INTO whitelist (id, premarket_id, user_id, status)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (premarket_id, user_id) DO NOTHING
+        "#,
+    )
+    .bind(Uuid::new_v4())
+    .bind(premarket_id)
+    .bind(user_id)
+    .bind(WhitelistStatus::Requested.as_str())
+    .execute(pool)
+    .await?;
+
+    Ok(res.rows_affected() > 0)
 }
 
 /// DELETE: удалить по id
