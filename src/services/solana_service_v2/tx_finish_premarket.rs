@@ -64,6 +64,8 @@ pub async fn build_finish_premarket_tx_unsigned(
 
     // PDAs/ATAs
     let (bonding_curve, _) = pda(&pump_fun_program_id, &[b"bonding-curve", mint_pub.as_ref()]);
+    let (bonding_curve_v2, _) =
+        pda(&pump_fun_program_id, &[b"bonding-curve-v2", mint_pub.as_ref()]);
     let bonding_curve_ata = get_associated_token_address(&bonding_curve, &mint_pub);
     let (metadata, _) = pda(
         &metaplex_program,
@@ -95,6 +97,36 @@ pub async fn build_finish_premarket_tx_unsigned(
         245, 210, 255, 59, 101, 93, 43, 182, 253, 109, 24, 176,
     ];
     let (fee_config, _) = Pubkey::find_program_address(&[seed1, &seed2], &fee_program);
+
+    println!("finish_premarket accounts:");
+    println!("  program_id: {}", program_id);
+    println!("  revelcy_auth: {}", revelcy_pub);
+    println!("  revelcy_ata: {}", revelcy_ata);
+    println!("  premarket_account: {}", params.premarket);
+    println!("  token_mint: {}", mint_pub);
+    println!("  mint_auth: {}", mint_auth);
+    println!("  bonding_curve: {}", bonding_curve);
+    println!("  bonding_curve_v2: {}", bonding_curve_v2);
+    println!("  bonding_curve_ata: {}", bonding_curve_ata);
+    println!("  global: {}", pumpfun_global);
+    println!("  mpl_token_metadata: {}", metaplex_program);
+    println!("  metadata: {}", metadata);
+    println!("  user: {}", params.user);
+    println!("  vesting_account: {}", vesting_account);
+    println!("  vesting_ata: {}", vesting_ata);
+    println!("  system_program: {}", system_program::ID);
+    println!("  token_program: {}", token_program_id);
+    println!("  associated_token_program: {}", associated_token_program_id);
+    println!("  rent: {}", rent_sysvar);
+    println!("  event_auth: {}", event_auth);
+    println!("  pump_fun_program_id: {}", pump_fun_program_id);
+    println!("  fee_recipient: {}", fee_recipient);
+    println!("  associated_user: {}", associated_user_ata);
+    println!("  creator_vault: {}", creator_vault);
+    println!("  global_volume_accumulator: {}", global_volume_accum);
+    println!("  user_volume_accumulator: {}", user_volume_accum);
+    println!("  fee_config: {}", fee_config);
+    println!("  fee_program: {}", fee_program);
 
     // Serialize discriminator + args
     let mut data = Vec::with_capacity(32);
@@ -133,6 +165,7 @@ pub async fn build_finish_premarket_tx_unsigned(
         AccountMeta::new(user_volume_accum, false),           // 24. user_volume_accumulator
         AccountMeta::new(fee_config, false),                  // 25. fee_config
         AccountMeta::new(fee_program, false),                 // 26. fee_program
+        AccountMeta::new_readonly(bonding_curve_v2, false),   // 27. bonding_curve_v2
     ];
 
     let ix_finish = Instruction {

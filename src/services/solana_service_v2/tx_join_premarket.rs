@@ -109,13 +109,18 @@ pub fn parse_join_premarket_tx_from_base64(
         JoinArgsBorsh::try_from_slice(&ix.data[8..]).context("borsh decode JoinArgs failed")?;
 
     // accounts: revelcy_auth, user, premarket, system_program
-    if ix.accounts.len() < 3 {
-        return Err(anyhow!("instruction accounts too short (<3)"));
+    if ix.accounts.len() < 4 {
+        return Err(anyhow!("instruction accounts too short (<4)"));
     }
 
     let revelcy_auth = resolve_account(msg, ix.accounts[0] as usize)?;
     let user = resolve_account(msg, ix.accounts[1] as usize)?;
     let premarket = resolve_account(msg, ix.accounts[2] as usize)?;
+    let system_program_key = resolve_account(msg, ix.accounts[3] as usize)?;
+
+    if system_program_key != system_program::ID {
+        return Err(anyhow!("invalid system_program account"));
+    }
 
     let params = BuildJoinTxParams {
         network,

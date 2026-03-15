@@ -5,8 +5,14 @@ use serde::{Serialize, Deserialize};
 use crate::models::user::User;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WhitelistUserInfo {
+    pub user: User,
+    pub status: WhitelistStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WhitelistUsersResult {
-    pub items: Vec<User>,
+    pub items: Vec<WhitelistUserInfo>,
     pub total: Option<i64>,
 }
 

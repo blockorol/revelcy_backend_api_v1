@@ -36,7 +36,7 @@ pub async fn add_user(
         _ => return Err(ErrorBadRequest("user_id or user_wallet_address required")),
     };
 
-    whitelist_repo::add(pool, premarket_id, uid)
+    whitelist_repo::add(pool, premarket_id, uid, WhitelistStatus::Approved)
         .await
         .map_err(ErrorInternalServerError)?;
 
@@ -69,11 +69,21 @@ pub async fn add_users(
     ids.sort();
     ids.dedup();
 
-    whitelist_repo::add_many(pool, premarket_id, &ids)
+    whitelist_repo::add_many(pool, premarket_id, &ids, WhitelistStatus::Approved)
         .await
         .map_err(ErrorInternalServerError)?;
 
     Ok(())
+}
+
+pub async fn apply_user(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    user_id: Uuid,
+) -> Result<bool, actix_web::Error> {
+    whitelist_repo::add_requested_if_absent(pool, premarket_id, user_id)
+        .await
+        .map_err(ErrorInternalServerError)
 }
 
 pub async fn get_users(

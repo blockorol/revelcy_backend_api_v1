@@ -6,12 +6,12 @@ use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     message::Message,
-    signature::Signer,
     pubkey::Pubkey,
+    signature::Signer,
     system_program,
     transaction::Transaction,
 };
-use std::{str::FromStr, time::Duration};
+use std::time::Duration;
 
 use crate::models::premarket::{BuiltTx, SolanaNetwork};
 
@@ -25,11 +25,11 @@ pub struct UpdatePremarketDataArgs {
     pub end_timestamp_updated: Option<bool>,
     pub goal_sol: Option<u64>,
     pub max_sol: Option<u64>,
-    pub mint: Option<String>,
+    pub mint: Option<Pubkey>,
     pub name: Option<String>,
     pub symbol: Option<String>,
     pub uri: Option<String>,
-    pub creator: Option<String>,
+    pub creator: Option<Pubkey>,
 }
 
 pub async fn build_update_premarket_data_tx_unsigned(

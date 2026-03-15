@@ -9,14 +9,14 @@ use crate::api::whitelist::{
     WhitelistSetStatusRequest, WhitelistSetStatusResponse,
     RemoveWhitelistUserRequest, RemoveWhitelistUserResponse,
     AddWhitelistUserRequest, AddWhitelistUserListRequest,
+    ApplyWhitelistRequest, ApplyWhitelistResponse,
     GetWhitelistRequest, GetWhitelistResponse,
     WhitelistUserDTO,
 };
 use crate::server::auth_validation::validate_base_request;
 use crate::services::{premarket_service, user_service, whitelist_service};
-use crate::models::user::User;
+use crate::models::whitelist::{WhitelistStatus, WhitelistUserInfo};
 use crate::models::premarket::PremarketLookupKeyType;
-use crate::models::whitelist::WhitelistStatus;
 // ─────────────────────────────────────────────────────────────
 // Helper: ensure caller is creator of premarket
 // ─────────────────────────────────────────────────────────────
@@ -85,12 +85,13 @@ async fn resolve_user_id_strict(
 
 
 
-fn map_user_to_dto(u: User) -> WhitelistUserDTO {
+fn map_user_to_dto(u: WhitelistUserInfo) -> WhitelistUserDTO {
     WhitelistUserDTO {
-        id: u.id,
-        username: u.username,
-        avatar_url: u.avatar_url,
-        wallets: u.wallets,
+        id: u.user.id,
+        username: u.user.username,
+        avatar_url: u.user.avatar_url,
+        wallets: u.user.wallets,
+        status: u.status.as_str().to_string(),
     }
 }
 
@@ -187,6 +188,31 @@ pub async fn add_whitelist_user_list(
 // ─────────────────────────────────────────────────────────────
 // POST /whitelist/get
 // ─────────────────────────────────────────────────────────────
+pub async fn apply_whitelist(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    payload: web::Json<ApplyWhitelistRequest>,
+) -> ApiResult<HttpResponse> {
+    let dto = payload.into_inner();
+    let ctx = validate_base_request(&req, &dto.network.to_string(), None)?;
+
+    let created = whitelist_service::apply_user(
+        pool.get_ref(),
+        dto.premarket_id,
+        ctx.user.internal_id,
+    )
+    .await
+    .map_err(|e| {
+        eprintln!(
+            "[whitelist/apply] Failed premarket_id={} user_id={} err={:?}",
+            dto.premarket_id, ctx.user.internal_id, e
+        );
+        ApiError::internal_update_db_error()
+    })?;
+
+    Ok(HttpResponse::Ok().json(ApplyWhitelistResponse { created }))
+}
+
 pub async fn get_premarket_whitelist(
     req: HttpRequest,
     pool: web::Data<PgPool>,

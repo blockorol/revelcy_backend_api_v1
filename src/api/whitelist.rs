@@ -37,6 +37,17 @@ pub struct AddWhitelistUserListRequest {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct ApplyWhitelistRequest {
+    pub network: Network,
+    pub premarket_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ApplyWhitelistResponse {
+    pub created: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct GetWhitelistRequest {
     pub network: Network,
     pub premarket_id: Uuid,
@@ -51,6 +62,7 @@ pub struct WhitelistUserDTO {
     pub username: Option<String>,
     pub avatar_url: Option<String>,
     pub wallets: Vec<String>,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
