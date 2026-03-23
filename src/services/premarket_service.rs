@@ -16,7 +16,7 @@ use crate::storage::vesting_repo;
 use crate::storage::whitelist_repo;
 use actix_web::error::ErrorBadRequest;
 use actix_web::error::ErrorInternalServerError;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -29,6 +29,11 @@ use crate::models::vesting::VestingSettingsServiceModel;
 
 pub const VIRTUAL_SUPPLY_RATIO: u64 = 30_000_000_000;
 pub const VIRTUAL_TOKEN_RATIO: u64 = 1_073_000_000_000_000;
+
+fn unix_seconds_to_utc_datetime(timestamp: i64) -> Result<DateTime<Utc>, actix_web::Error> {
+    DateTime::from_timestamp(timestamp, 0)
+        .ok_or_else(|| ErrorBadRequest("invalid concept_created_timestamp"))
+}
 
 pub async fn get_full_premarket_info(
     pool: &PgPool,
@@ -80,7 +85,9 @@ pub async fn get_full_premarket_info(
                 is_whitelist_enabled: pm_db.is_whitelist_enabled,
                 deadline_timestamp: pm_db.premarket_deadline,
                 created_timestamp: pm_db.premarket_created,
+                concept_created_timestamp: pm_db.concept_created.timestamp(),
                 finished_timestamp: pm_db.premarket_finished,
+                is_concept_visible: pm_db.is_concept_visible,
             };
 
             let links = if links_db.is_empty() {
@@ -152,23 +159,31 @@ pub async fn get_list(
     pool: &PgPool,
     cursor: i64,
     limit: i64,
+    states: Option<Vec<PremarketState>>,
+    only_user_token: bool,
     user_opt: Option<UserContextData>
 ) -> Result<Option<PremarketListResult>, actix_web::Error> {
     let user_id_opt = user_opt.as_ref().map(|u| u.internal_id);
+    let state_names = states.map(|items| {
+        items
+            .into_iter()
+            .map(|state| state.to_string())
+            .collect::<Vec<_>>()
+    });
+    let state_names = state_names.filter(|items| !items.is_empty());
 
-    let res = premarket_repo::get_list(pool, user_id_opt, cursor, limit)
-        .await
-        .map_err(ErrorInternalServerError)?;
-
-    let (rows, total) = match res {
-        Some((rows, total)) => (rows, total),
-        None => {
-            return Ok(Some(PremarketListResult {
-                items: Vec::new(),
-                total: Some(0),
-            }));
-        }
+    let res = if only_user_token {
+        let user_id = user_id_opt.ok_or_else(|| ErrorBadRequest("user is required for only_user_token"))?;
+        premarket_repo::get_list_user_related(pool, user_id, cursor, limit, state_names)
+            .await
+            .map_err(ErrorInternalServerError)?
+    } else {
+        premarket_repo::get_list_public(pool, user_id_opt, cursor, limit, state_names)
+            .await
+            .map_err(ErrorInternalServerError)?
     };
+
+    let (rows, total) = res;
 
     let items = rows
         .into_iter()
@@ -202,7 +217,9 @@ pub async fn get_list(
             is_whitelist_enabled: pm_db.is_whitelist_enabled,
             deadline_timestamp: pm_db.premarket_deadline,
             created_timestamp: pm_db.premarket_created,
+            concept_created_timestamp: pm_db.concept_created.timestamp(),
             finished_timestamp: pm_db.premarket_finished,
+            is_concept_visible: pm_db.is_concept_visible,
         })
         .collect();
 
@@ -218,11 +235,32 @@ pub async fn create_concept(
     concept_data: &CreatePremarketConceptModel,
 ) -> Result<(uuid::Uuid, String), actix_web::Error> {
     let concept = get_user_concept(pool, &concept_data.creator.id).await?;
-    let (blockchain_address, mint_pubkey) = match concept {
+    let (concept_id, blockchain_address, mint_pubkey) = match concept {
         Some(c) => {
-            premarket_repo::hard_delete_premarket_by_id(pool, c.id).await;
-            (c.blockchain_address, c.token_info.address)
-        },
+            let payload = premarket_repo::UpdateConceptPayload {
+                creator_address: concept_data.creator.blockchain_address.clone(),
+                data_uri: concept_data.token_info.data_uri.clone(),
+                name: concept_data.token_info.name.clone(),
+                description: concept_data.token_info.description.clone(),
+                symbol: concept_data.token_info.symbol.clone(),
+                image_url: concept_data.token_info.image_url.clone(),
+                telegram: concept_data.token_info.links.telegram.clone(),
+                twitter: concept_data.token_info.links.twitter.clone(),
+                web_site: concept_data.token_info.links.web_site.clone(),
+                premarket_goal_sol_lamp: concept_data.goal.solana_lamp,
+                premarket_deadline: concept_data.deadline_timestamp,
+            };
+
+            let affected = premarket_repo::update_concept(pool, c.id, payload)
+                .await
+                .map_err(ErrorInternalServerError)?;
+
+            if affected == 0 {
+                return Err(ErrorInternalServerError("failed to update existing concept"));
+            }
+
+            return Ok((c.id, c.blockchain_address));
+        }
         None => {
             let pm_uuid = uuid::Uuid::new_v4();
             let exp_keypair = acquire_signing_key(pool, &pm_uuid.to_string())
@@ -242,19 +280,21 @@ pub async fn create_concept(
                 .await
                 .map_err(|_| actix_web::error::ErrorInternalServerError("update_premarket_pubkey failed"))?;
 
-            (pda.to_string(), keypair.pub_key)
+            (pm_uuid, pda.to_string(), keypair.pub_key)
         }
     };
 
     let premarket = CreatePremarketInfoServiceModel{
-        id: None,
+        id: Some(concept_id),
         blockchain_address: blockchain_address.clone(),
         goal: concept_data.goal.clone(),
         deadline_timestamp: concept_data.deadline_timestamp,
         created_timestamp: Utc::now().timestamp(),
+        concept_created_timestamp: concept_data.concept_created_timestamp,
         finished_timestamp: None,
         is_extended: false,
-        is_hided: false,
+        is_hided: concept_data.is_hided,
+        is_concept_visible: concept_data.is_concept_visible,
         is_whitelist_enabled: false,
         state: PremarketState::Concept,
         short_url_name: None,
@@ -307,9 +347,11 @@ pub async fn create_full_premarket_info(
         premarket_goal_sol_lamp: premarket.goal.solana_lamp,
         premarket_deadline: premarket.deadline_timestamp,
         premarket_created: premarket.created_timestamp,
+        concept_created: unix_seconds_to_utc_datetime(premarket.concept_created_timestamp)?,
         premarket_finished: premarket.finished_timestamp,
         is_extended: false,
         is_hided: premarket.is_hided,
+        is_concept_visible: premarket.is_concept_visible,
         is_whitelist_enabled: premarket.is_whitelist_enabled,
         state: premarket.state.to_string(),
     };
@@ -348,6 +390,7 @@ pub async fn update_availability_info(
     pool: &PgPool,
     premarket_pubkey: &str,
     is_hided: Option<bool>,
+    is_concept_visible: Option<bool>,
     is_whitelist_enabled: Option<bool>,
     short_url_name: Option<String>,
 ) -> Result<(), actix_web::Error> {
@@ -355,6 +398,7 @@ pub async fn update_availability_info(
         pool,
         premarket_pubkey,
         is_hided,
+        is_concept_visible,
         is_whitelist_enabled,
         short_url_name,
     )
@@ -611,8 +655,11 @@ pub async fn set_premarket_state(
         PremarketState::Canceled | PremarketState::Finished => {
             premarket_repo::update_premarket_state_to_finish(pool, premarket_pubkey, &new_state.to_string(), update_time).await.map_err(actix_web::error::ErrorInternalServerError)?
         }
-        PremarketState::Concept | PremarketState::Premarket => {
+        PremarketState::Premarket => {
             premarket_repo::update_premarket_state_to_start(pool, premarket_pubkey, &new_state.to_string(), update_time).await.map_err(actix_web::error::ErrorInternalServerError)?
+        }
+        PremarketState::Concept => {
+            premarket_repo::update_premarket_state(pool, premarket_pubkey, &new_state.to_string()).await.map_err(actix_web::error::ErrorInternalServerError)?
         }
     };
 
