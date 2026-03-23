@@ -21,9 +21,9 @@ use crate::api::premarket::{
     CreatePremarketConceptRequest, CreatePremarketConceptResponse,
     WithdrawVestingTxRequest, AvailabilityInfoDTO, BlockchainInfoDTO, 
     ClaimTokensTxRequest, CommunityInfoDTO, CommunityLinkDTO, CreatePremarketTxRequest, 
-    CreatePremarketTxResponse, UpdateURITxRequest, ExtendPremarketTxRequest, FinishPremarketTxRequest,
+     CreatePremarketTxResponse, UpdateURITxRequest, ExtendPremarketTxRequest, FinishPremarketTxRequest,
      GetDynamicInfoQuery, GetHolderEntryPriceQuery, GetListMainInfoDTO,
-     GetListQuery, GetMainInfoDTO, GetMainInfoQuery, HolderEntryPriceDTO,
+     GetListQuery, GetMainInfoDTO, GetMainInfoQuery, GetUserConceptQuery, HolderEntryPriceDTO,
      HolderInfoDTO, JoinPremarketTxRequest, KillPremarketTxRequest, OutPremarketTxRequest,
      SentTxResponse, ShortPremarketInfoDTO, TokenDynamicInfoDTO, TokenLinksDTO, TokenState,
      TransactionStatus, TxOnlyResponse, TxToSignRequest, UpdateAvailabilityInfoDTO,
@@ -111,6 +111,7 @@ pub fn pub_scope() -> impl actix_web::dev::HttpServiceFactory {
         .route("/whitelist/reject", web::post().to(whitelist_reject))
 
         .route("/concept/create", web::post().to(create_concept))
+        .route("/concept/get", web::get().to(get_user_concept))
        
         // tx route: todo: move to separate file
         .route("/tx/create", web::post().to(create_premarket_tx))
@@ -143,7 +144,9 @@ pub async fn create_concept(
         },
         deadline_timestamp: dto.token_info.deadline,
         created_timestamp: Utc::now().timestamp(),
+        concept_created_timestamp: Utc::now().timestamp(),
         is_hided: false,
+        is_concept_visible: false,
         short_url_name: None,
         creator: UserInfoShort{
             id: ctx.user.internal_id,
@@ -1373,6 +1376,81 @@ pub async fn extend_premarket_tx(
     }))
 }
 
+fn map_full_premarket_to_main_info_dto(
+    premarket_info: crate::models::premarket::FullPremarketInfo,
+) -> GetMainInfoDTO {
+    let blockchain_info = BlockchainInfoDTO {
+        id: Some(premarket_info.main_info.id.to_string()),
+        ipfs_uri: premarket_info.main_info.token_info.data_uri.clone(),
+        creator_id: premarket_info.main_info.creator.id.to_string(),
+        creator_address: premarket_info.main_info.creator.blockchain_address.clone(),
+        premarket_address: premarket_info.main_info.blockchain_address.clone(),
+        name: premarket_info.main_info.token_info.name.clone(),
+        description: premarket_info.main_info.token_info.description.clone(),
+        symbol: premarket_info.main_info.token_info.symbol.clone(),
+        image_url: premarket_info.main_info.token_info.image_url.clone(),
+        links: TokenLinksDTO {
+            telegram: premarket_info.main_info.token_info.links.telegram.clone(),
+            twitter: premarket_info.main_info.token_info.links.twitter.clone(),
+            web_site: premarket_info.main_info.token_info.links.web_site.clone(),
+        },
+        premarket_goal_sol_lamp: premarket_info.main_info.goal.solana_lamp.to_string(),
+        premarket_deadline: premarket_info.main_info.deadline_timestamp,
+        premarket_is_extended: Some(premarket_info.main_info.is_extended),
+        premarket_created: premarket_info.main_info.created_timestamp,
+        concept_created: premarket_info.main_info.concept_created_timestamp,
+        premarket_finished: premarket_info.main_info.finished_timestamp,
+        mint_address: premarket_info.main_info.token_info.address.clone(),
+        state: match premarket_info.main_info.state {
+            PremarketState::Concept => TokenState::Concept,
+            PremarketState::Premarket => TokenState::Premarket,
+            PremarketState::Canceled => TokenState::Canceled,
+            PremarketState::Finished => TokenState::Finished,
+        },
+    };
+
+    let dto_links: Option<Vec<CommunityLinkDTO>> = premarket_info.community.links.map(|links| {
+        links
+            .into_iter()
+            .map(|link| CommunityLinkDTO {
+                text: link.text,
+                url: link.url,
+                r#type: link.r#type.into(),
+            })
+            .collect()
+    });
+
+    let community_info = CommunityInfoDTO {
+        description: premarket_info.community.description,
+        token_banner_url: premarket_info.community.token_banner_url,
+        links: dto_links,
+    };
+    let availability_info = AvailabilityInfoDTO {
+        is_whitelist_enabled: premarket_info.main_info.is_whitelist_enabled,
+        token_short_url_name: premarket_info.main_info.short_url_name.clone(),
+        is_hided: premarket_info.main_info.is_hided,
+        is_concept_visible: premarket_info.main_info.is_concept_visible,
+    };
+
+    let vesting_info = premarket_info.vesting_settings.as_ref().and_then(|v| {
+        if !v.enabled {
+            return None;
+        }
+        Some(VestingSettingsDTO {
+            vesting_period_sec: v.vesting_period_sec,
+            unlock_at_launch_percent: v.unlock_at_launch_percent,
+            enabled: v.enabled,
+        })
+    });
+
+    GetMainInfoDTO {
+        blockchain_info,
+        community_info,
+        availability_info,
+        vesting_info,
+    }
+}
+
 pub async fn get_list_main_info(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -1383,12 +1461,28 @@ pub async fn get_list_main_info(
     if limit <= 0 { limit = 50; }
     if limit > 200 { limit = 200; }
 
+    let states = query.state.as_ref().map(|states| {
+        states
+            .iter()
+            .copied()
+            .map(PremarketState::from)
+            .collect::<Vec<_>>()
+    });
+    let only_user_token = query.only_user_token.unwrap_or(false);
+
 
     let user_opt = validate_base_request(&req, query.network.as_str(), None)
         .ok()
         .map(|ctx| ctx.user); // <-- берём только user
 
-    let list = premarket_service::get_list(pool.get_ref(), cursor, limit, user_opt)
+    let list = premarket_service::get_list(
+        pool.get_ref(),
+        cursor,
+        limit,
+        states,
+        only_user_token,
+        user_opt,
+    )
         .await
         .map_err(ErrorInternalServerError)?
         .unwrap_or(PremarketListResult { items: vec![], total: Some(0) });
@@ -1416,6 +1510,7 @@ pub async fn get_list_main_info(
                 premarket_goal_sol_lamp: premarket_info.goal.solana_lamp.to_string(),
                 premarket_deadline: premarket_info.deadline_timestamp,
                 premarket_created:  premarket_info.created_timestamp,
+                concept_created: premarket_info.concept_created_timestamp,
                 premarket_finished: premarket_info.finished_timestamp,
                 mint_address: premarket_info.token_info.address.clone(),
                 state: match premarket_info.state {
@@ -1429,6 +1524,7 @@ pub async fn get_list_main_info(
                 is_whitelist_enabled: premarket_info.is_whitelist_enabled,
                 token_short_url_name: premarket_info.short_url_name.clone(),
                 is_hided: premarket_info.is_hided,
+                is_concept_visible: premarket_info.is_concept_visible,
             },
         })
         .collect();
@@ -1437,6 +1533,36 @@ pub async fn get_list_main_info(
         premarkets: Some(premarkets_vec),
         total: list.total,
     }))
+}
+
+pub async fn get_user_concept(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<GetUserConceptQuery>,
+) -> ApiResult<HttpResponse> {
+    let ctx = validate_base_request(&req, query.network.as_str(), None)?;
+
+    let concept = premarket_service::get_user_concept(&pool, &ctx.user.internal_id)
+        .await
+        .map_err(|e| {
+            eprintln!("Error fetching user concept main info: {:?}", e);
+            ApiError::internal_server_error()
+        })?
+        .ok_or_else(ApiError::missing_premarket)?;
+
+    let full_concept = premarket_service::get_full_premarket_info(
+        &pool,
+        &concept.blockchain_address,
+        PremarketLookupKeyType::BcAddress,
+    )
+    .await
+    .map_err(|e| {
+        eprintln!("Error fetching user concept full info: {:?}", e);
+        ApiError::internal_server_error()
+    })?
+    .ok_or_else(ApiError::missing_premarket)?;
+
+    Ok(HttpResponse::Ok().json(map_full_premarket_to_main_info_dto(full_concept)))
 }
 
 pub async fn get_main_info(
@@ -1469,15 +1595,11 @@ pub async fn get_main_info(
             return Err(ApiError::internal_server_error());
         }
     };
-    if premarket_info.main_info.state == PremarketState::Concept {
-        return Err(ApiError::from_field_errors(vec![FieldError{
-                field: "state",
-                code: ApiErrorCode::PremarketNotFound,
-                message: "premarket not found",
-            }]));
-    }
-
-    if premarket_info.main_info.is_hided && key_type == PremarketLookupKeyType::BcAddress {
+    if ((premarket_info.main_info.state == PremarketState::Concept
+        && !premarket_info.main_info.is_concept_visible)
+        || (premarket_info.main_info.state != PremarketState::Concept
+            && premarket_info.main_info.is_hided))
+        && key_type == PremarketLookupKeyType::BcAddress {
         let ctx = match validate_base_request(&req, query.network.as_str(), None) {
             Ok(v) => v,
             Err(_) => return Err(ApiError::invalid_auth_token()),
@@ -1523,6 +1645,7 @@ pub async fn get_main_info(
         premarket_deadline: premarket_info.main_info.deadline_timestamp,
         premarket_is_extended: Some(premarket_info.main_info.is_extended),
         premarket_created: premarket_info.main_info.created_timestamp,
+        concept_created: premarket_info.main_info.concept_created_timestamp,
         premarket_finished:  premarket_info.main_info.finished_timestamp,
         mint_address: premarket_info.main_info.token_info.address.clone(),
         state: match premarket_info.main_info.state {
@@ -1552,6 +1675,7 @@ pub async fn get_main_info(
         is_whitelist_enabled: premarket_info.main_info.is_whitelist_enabled,
         token_short_url_name: premarket_info.main_info.short_url_name.clone(),
         is_hided: premarket_info.main_info.is_hided,
+        is_concept_visible: premarket_info.main_info.is_concept_visible,
     };
 
     let vesting_info = premarket_info.vesting_settings.as_ref().and_then(|v| {
@@ -1694,6 +1818,7 @@ pub async fn update_availability(
         pool.get_ref(),
         &premarket_pubkey,
         dto.is_hided,
+        dto.is_concept_visible,
         dto.is_whitelist_enabled,
         dto.token_short_url_name.clone(),
     )
@@ -1701,10 +1826,11 @@ pub async fn update_availability(
     .map_err(|e| {
         eprintln!(
             "[update_availability] Failed to update availability for premarket {} by user {}. \
-             is_hided={:?}, token_short_url_name={:?}, error={:?}",
+             is_hided={:?}, is_concept_visible={:?}, token_short_url_name={:?}, error={:?}",
             premarket_pubkey,
             ctx.user.internal_id,
             dto.is_hided,
+            dto.is_concept_visible,
             dto.token_short_url_name,
             e
         );
@@ -1753,13 +1879,3 @@ pub async fn update_community_info(
 
 }
 
-impl From<TokenState> for PremarketState {
-    fn from(state: TokenState) -> Self {
-        match state {
-            TokenState::Concept => PremarketState::Concept,
-            TokenState::Premarket => PremarketState::Premarket,
-            TokenState::Canceled => PremarketState::Canceled,
-            TokenState::Finished => PremarketState::Finished,
-        }
-    }
-}

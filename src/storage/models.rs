@@ -4,6 +4,7 @@ use serde::{Serialize, Deserialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 use std::convert::TryFrom;
+use chrono::{DateTime, Utc};
 use crate::models::user::User;
 use crate::models::premarket::{ UserInfoShort, PremarketInfoServiceModel, PremarketGoal, TokenLinks, TokenInfo, PremarketState};
 use crate::models::vesting::VestingInfo;
@@ -90,8 +91,10 @@ pub struct PremarketInfoDbModel {
     pub premarket_deadline: i64,
     pub is_extended: bool,
     pub is_hided: bool,
+    pub is_concept_visible: bool,
     pub is_whitelist_enabled: bool,
     pub premarket_created: i64,
+    pub concept_created: DateTime<Utc>,
     pub premarket_finished: Option<i64>,
 
     pub state: String, // лучше использовать enum, но можно и строку
@@ -141,10 +144,12 @@ impl TryFrom<PremarketInfoDbModel> for PremarketInfoServiceModel {
 
             deadline_timestamp: pm_db.premarket_deadline,
             created_timestamp: pm_db.premarket_created,
+            concept_created_timestamp: pm_db.concept_created.timestamp(),
             finished_timestamp: pm_db.premarket_finished,
 
             is_extended: pm_db.is_extended,
             is_hided: pm_db.is_hided,
+            is_concept_visible: pm_db.is_concept_visible,
             is_whitelist_enabled: pm_db.is_whitelist_enabled,
             state,
         })
@@ -218,8 +223,8 @@ pub struct VestingInfoDbModel {
     pub init_unlock: i64,
     pub timestamp_start: Option<i64>,
     pub timestamp_end: Option<i64>,
-    pub created_at: Option<i64>,
-    pub updated_at: Option<i64>,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 // Full vesting info with premarket data

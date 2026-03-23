@@ -116,7 +116,9 @@ pub struct CreatePremarketConceptModel {
     pub goal: PremarketGoal,
     pub deadline_timestamp: i64,
     pub created_timestamp: i64,
+    pub concept_created_timestamp: i64,
     pub is_hided: bool,
+    pub is_concept_visible: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -129,9 +131,11 @@ pub struct CreatePremarketInfoServiceModel {
     pub goal: PremarketGoal,
     pub deadline_timestamp: i64,
     pub created_timestamp: i64,
+    pub concept_created_timestamp: i64,
     pub finished_timestamp: Option<i64>,
     pub is_extended: bool,
     pub is_hided: bool,
+    pub is_concept_visible: bool,
     pub is_whitelist_enabled: bool,
     pub state: PremarketState,
 }
@@ -146,9 +150,11 @@ pub struct PremarketInfoServiceModel {
     pub goal: PremarketGoal,
     pub deadline_timestamp: i64,
     pub created_timestamp: i64,
+    pub concept_created_timestamp: i64,
     pub finished_timestamp: Option<i64>,
     pub is_extended: bool,
     pub is_hided: bool,
+    pub is_concept_visible: bool,
     pub is_whitelist_enabled: bool,
     pub state: PremarketState,
 }
@@ -197,7 +203,6 @@ impl FromStr for PremarketState {
         }
     }
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PremarketGoal {

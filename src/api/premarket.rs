@@ -32,6 +32,11 @@ pub struct GetMainInfoQuery {
     pub network: String,
 }
 
+#[derive(Deserialize)]
+pub struct GetUserConceptQuery {
+    pub network: String,
+}
+
 #[derive(Serialize)]
 pub struct GetMainInfoDTO {
     pub blockchain_info: BlockchainInfoDTO,
@@ -45,6 +50,8 @@ pub struct GetListQuery {
     pub network: String,
     pub cursor: u32,
     pub limit: u32,
+    pub state: Option<Vec<TokenState>>,
+    pub only_user_token: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -81,6 +88,7 @@ pub struct BlockchainInfoDTO {
     pub premarket_deadline: i64,
     pub premarket_is_extended: Option<bool>,
     pub premarket_created: i64,
+    pub concept_created: i64,
     pub premarket_finished: Option<i64>,
     pub mint_address: String,
     pub state: TokenState,
@@ -98,6 +106,7 @@ pub struct UpdateAvailabilityInfoDTO {
     pub premarket_pubkey: String,
     pub token_short_url_name: Option<String>,
     pub is_hided: Option<bool>,
+    pub is_concept_visible: Option<bool>,
     pub is_whitelist_enabled: Option<bool>,
     pub network: String,
 }
@@ -106,6 +115,7 @@ pub struct UpdateAvailabilityInfoDTO {
 pub struct AvailabilityInfoDTO {
     pub token_short_url_name: Option<String>,
     pub is_hided: bool,
+    pub is_concept_visible: bool,
     pub is_whitelist_enabled: bool,
 }
 
@@ -162,13 +172,24 @@ impl From<LinkType> for LinkTypeDTO {
 }
 
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum TokenState {
     Concept,
     Premarket,
     Canceled,
     Finished,
+}
+
+impl From<TokenState> for crate::models::premarket::PremarketState {
+    fn from(state: TokenState) -> Self {
+        match state {
+            TokenState::Concept => crate::models::premarket::PremarketState::Concept,
+            TokenState::Premarket => crate::models::premarket::PremarketState::Premarket,
+            TokenState::Canceled => crate::models::premarket::PremarketState::Canceled,
+            TokenState::Finished => crate::models::premarket::PremarketState::Finished,
+        }
+    }
 }
 
 

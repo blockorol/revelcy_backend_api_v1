@@ -214,13 +214,12 @@ pub async fn apply_whitelist(
 }
 
 pub async fn get_premarket_whitelist(
-    req: HttpRequest,
+    _req: HttpRequest,
     pool: web::Data<PgPool>,
     payload: web::Json<GetWhitelistRequest>,
 ) -> ApiResult<HttpResponse> {
     let dto = payload.into_inner();
 
-    let _ctx = validate_base_request(&req, &dto.network.to_string(), None)?;
     let status: Option<WhitelistStatus> = dto.status.map(|s| {
         WhitelistStatus::from_str(&s)
             .map_err(|_| ApiError::from_field_errors(vec![FieldError {

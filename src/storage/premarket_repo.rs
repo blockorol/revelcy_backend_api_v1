@@ -1,4 +1,5 @@
 use anyhow::{Result, bail};
+use std::collections::HashSet;
 
 use crate::storage::models::{
     BondingPostionDbModel,
@@ -225,12 +226,172 @@ pub async fn get_main_premarket_info_by_bc_address(
 }
  
 
-pub async fn get_list(
+pub async fn get_list_public(
     pool: &PgPool,
     user_id_opt: Option<Uuid>,
     cursor: i64,
     limit: i64,
-) -> Result<Option<(Vec<PremarketInfoDbModel>, i64)>> {
+    states: Option<Vec<String>>,
+ ) -> Result<(Vec<PremarketInfoDbModel>, i64)> {
+    let limit = limit.clamp(1, 200);
+    let offset = cursor.max(0);
+
+    let total: i64 = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*)
+        FROM premarket_info pi
+        WHERE 
+          (
+            (
+                $1::uuid IS NOT NULL
+                AND pi.creator_id = $1::uuid
+            )
+            OR (
+                pi.state = 'concept'
+                AND pi.is_concept_visible = TRUE
+            )
+            OR (
+                pi.state <> 'concept'
+                AND pi.is_hided = FALSE
+            )
+          )
+          AND (
+            $2::text[] IS NULL
+            OR pi.state = ANY($2::text[])
+          )
+        "#,
+    )
+    .bind(user_id_opt)
+    .bind(states.as_deref())
+    .fetch_one(pool)
+    .await?;
+
+    let rows: Vec<PremarketInfoDbModel> = sqlx::query_as::<_, PremarketInfoDbModel>(
+        r#"
+        SELECT *
+        FROM premarket_info pi
+        WHERE
+          (
+            (
+                $1::uuid IS NOT NULL
+                AND pi.creator_id = $1::uuid
+            )
+            OR (
+                pi.state = 'concept'
+                AND pi.is_concept_visible = TRUE
+            )
+            OR (
+                pi.state <> 'concept'
+                AND pi.is_hided = FALSE
+            )
+          )
+          AND (
+            $2::text[] IS NULL
+            OR pi.state = ANY($2::text[])
+          )
+        ORDER BY pi.premarket_created DESC, pi.id DESC
+        LIMIT $3 OFFSET $4
+        "#,
+    )
+    .bind(user_id_opt)
+    .bind(states.as_deref())
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+
+    Ok((rows, total))
+}
+
+pub async fn get_list_user_related(
+    pool: &PgPool,
+    user_id: Uuid,
+    cursor: i64,
+    limit: i64,
+    states: Option<Vec<String>>,
+) -> Result<(Vec<PremarketInfoDbModel>, i64)> {
+    let mut ids = HashSet::new();
+
+    for id in get_premarket_ids_joined_by_user(pool, user_id).await? {
+        ids.insert(id);
+    }
+    for id in get_premarket_ids_whitelisted_for_user(pool, user_id).await? {
+        ids.insert(id);
+    }
+    for id in get_premarket_ids_created_by_user(pool, user_id).await? {
+        ids.insert(id);
+    }
+
+    let ids: Vec<Uuid> = ids.into_iter().collect();
+    if ids.is_empty() {
+        return Ok((Vec::new(), 0));
+    }
+
+    get_premarkets_by_ids(pool, &ids, cursor, limit, states).await
+}
+
+async fn get_premarket_ids_joined_by_user(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Vec<Uuid>> {
+    let ids = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT DISTINCT premarket_info_id
+        FROM premarket_holders
+        WHERE holder_id = $1
+          AND out_timestamp IS NULL
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(ids)
+}
+
+async fn get_premarket_ids_whitelisted_for_user(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Vec<Uuid>> {
+    let ids = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT DISTINCT premarket_id
+        FROM whitelist
+        WHERE user_id = $1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(ids)
+}
+
+async fn get_premarket_ids_created_by_user(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Vec<Uuid>> {
+    let ids = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT id
+        FROM premarket_info
+        WHERE creator_id = $1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(ids)
+}
+
+async fn get_premarkets_by_ids(
+    pool: &PgPool,
+    ids: &[Uuid],
+    cursor: i64,
+    limit: i64,
+    states: Option<Vec<String>>,
+) -> Result<(Vec<PremarketInfoDbModel>, i64)> {
     let limit = limit.clamp(1, 200);
     let offset = cursor.max(0);
 
@@ -238,18 +399,15 @@ pub async fn get_list(
         r#"
         SELECT COUNT(*)
         FROM premarket_info
-        WHERE
-          state != 'concept' 
+        WHERE id = ANY($1::uuid[])
           AND (
-            is_hided = FALSE
-            OR (
-                $1::uuid IS NOT NULL
-                AND creator_id = $1::uuid
-            )
+            $2::text[] IS NULL
+            OR state = ANY($2::text[])
           )
         "#,
     )
-    .bind(user_id_opt)
+    .bind(ids)
+    .bind(states.as_deref())
     .fetch_one(pool)
     .await?;
 
@@ -257,26 +415,23 @@ pub async fn get_list(
         r#"
         SELECT *
         FROM premarket_info
-        WHERE
-          state != 'concept' 
+        WHERE id = ANY($1::uuid[])
           AND (
-            is_hided = FALSE
-            OR (
-                $1::uuid IS NOT NULL
-                AND creator_id = $1::uuid
-            )
+            $2::text[] IS NULL
+            OR state = ANY($2::text[])
           )
         ORDER BY premarket_created DESC, id DESC
-        LIMIT $2 OFFSET $3
+        LIMIT $3 OFFSET $4
         "#,
     )
-    .bind(user_id_opt)
+    .bind(ids)
+    .bind(states.as_deref())
     .bind(limit)
     .bind(offset)
     .fetch_all(pool)
     .await?;
 
-    Ok(Some((rows, total)))
+    Ok((rows, total))
 }
 
 
@@ -306,16 +461,18 @@ pub async fn create_premarket_and_community(
             premarket_goal_sol_lamp,
             premarket_deadline,
             premarket_created,
+            concept_created,
             state,
             mint_address,
             is_hided,
+            is_concept_visible,
             short_url_name
         )
         VALUES (
             $1, $2, $3, $4, $5,
             $6, $7, $8, $9, $10,
             $11, $12, $13, $14, $15,
-            $16, $17, $18, $19
+            $16, $17, $18, $19, $20, $21
         )
         RETURNING *
         "#
@@ -335,9 +492,11 @@ pub async fn create_premarket_and_community(
     .bind(premarket.premarket_goal_sol_lamp)
     .bind(premarket.premarket_deadline)
     .bind(premarket.premarket_created)
+    .bind(premarket.concept_created)
     .bind(&premarket.state)
     .bind(&premarket.mint_address)
     .bind(&premarket.is_hided)
+    .bind(&premarket.is_concept_visible)
     .bind(&premarket.short_url_name)
     .fetch_one(&mut tx)
     .await?;
@@ -395,11 +554,68 @@ pub async fn hard_delete_premarket_by_id(pool: &PgPool, premarket_id: Uuid) -> R
     Ok(affected)
 }
 
+pub struct UpdateConceptPayload {
+    pub creator_address: String,
+    pub data_uri: String,
+    pub name: String,
+    pub description: String,
+    pub symbol: String,
+    pub image_url: Option<String>,
+    pub telegram: Option<String>,
+    pub twitter: Option<String>,
+    pub web_site: Option<String>,
+    pub premarket_goal_sol_lamp: i64,
+    pub premarket_deadline: i64,
+}
+
+pub async fn update_concept(
+    pool: &PgPool,
+    premarket_id: Uuid,
+    payload: UpdateConceptPayload,
+) -> Result<u64> {
+    let res = sqlx::query(
+        r#"
+        UPDATE premarket_info
+        SET
+            creator_address = $2,
+            data_uri = $3,
+            name = $4,
+            description = $5,
+            symbol = $6,
+            image_url = $7,
+            telegram = $8,
+            twitter = $9,
+            web_site = $10,
+            premarket_goal_sol_lamp = $11,
+            premarket_deadline = $12
+        WHERE id = $1
+          AND state = 'concept'
+        "#,
+    )
+    .bind(premarket_id)
+    .bind(payload.creator_address)
+    .bind(payload.data_uri)
+    .bind(payload.name)
+    .bind(payload.description)
+    .bind(payload.symbol)
+    .bind(payload.image_url)
+    .bind(payload.telegram)
+    .bind(payload.twitter)
+    .bind(payload.web_site)
+    .bind(payload.premarket_goal_sol_lamp)
+    .bind(payload.premarket_deadline)
+    .execute(pool)
+    .await?;
+
+    Ok(res.rows_affected())
+}
+
 
 pub async fn update_availability_info(
     pool: &PgPool,
     bc_address: &str,
     is_hided: Option<bool>,
+    is_concept_visible: Option<bool>,
     is_whitelist_enabled: Option<bool>,
     short_url_name: Option<String>,
 ) -> Result<()> {
@@ -412,7 +628,8 @@ pub async fn update_availability_info(
             SET
                 is_hided = COALESCE($2, is_hided),
                 short_url_name = COALESCE($3, short_url_name),
-                is_whitelist_enabled = COALESCE($4, is_whitelist_enabled)
+                is_whitelist_enabled = COALESCE($4, is_whitelist_enabled),
+                is_concept_visible = COALESCE($5, is_concept_visible)
             WHERE id = $1
         "#,
     )
@@ -420,6 +637,7 @@ pub async fn update_availability_info(
     .bind(is_hided)
     .bind(short_url_name)
     .bind(is_whitelist_enabled)
+    .bind(is_concept_visible)
     .execute(pool)
     .await?;
 
@@ -781,6 +999,26 @@ pub async fn update_premarket_state_to_start(
     .bind(new_state)
     .bind(premarket_pubkey)
     .bind(update_time)
+    .execute(pool)
+    .await?;
+
+    Ok(res.rows_affected())
+}
+
+pub async fn update_premarket_state(
+    pool: &PgPool,
+    premarket_pubkey: &str,
+    new_state: &str,
+) -> Result<u64> {
+    let res = sqlx::query(
+        r#"
+        UPDATE premarket_info
+        SET state = $1
+        WHERE bc_address = $2
+        "#,
+    )
+    .bind(new_state)
+    .bind(premarket_pubkey)
     .execute(pool)
     .await?;
 
