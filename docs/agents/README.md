@@ -15,6 +15,11 @@ Before editing unfamiliar code, read the files that match the task.
 - Use `SOLANA.md` to answer: how do chain transaction flows work?
 - Use `AUTH_SECURITY.md` to answer: what security-sensitive rules apply?
 - Use `TESTING.md` to answer: what should be checked for this change?
+- Use `GLOSSARY.md` to answer: what does this project term mean?
+- Use `RISK_REGISTER.md` to answer: which files or areas need extra caution?
+- Use `LEGACY_NOTES.md` to answer: what known imperfections should not be casually "fixed"?
+- Use `ERROR_HANDLING.md` to answer: how should errors cross API/service/storage boundaries?
+- Use `DEPENDENCIES.md` to answer: what dependency/version constraints matter?
 - Use `WORKFLOWS.md` to answer: how should this kind of change be made?
 - Use `CHANGE_PROTOCOL.md` to answer: what must be checked and documented after a change?
 
@@ -31,7 +36,9 @@ For endpoint or route changes, read:
 For business logic changes, read:
 
 - `DOMAIN.md`
+- `GLOSSARY.md`
 - `INVARIANTS.md`
+- `RISK_REGISTER.md`
 - `WORKFLOWS.md`
 - `CHANGE_PROTOCOL.md`
 
@@ -49,18 +56,34 @@ For Solana transaction changes, read:
 - `DOMAIN.md`
 - `INVARIANTS.md`
 - `SOLANA.md`
+- `RISK_REGISTER.md`
 - `WORKFLOWS.md`
 
 For auth, JWT, wallet, file upload, proxy, or secret-handling changes, read:
 
 - `ARCHITECTURE.md`
 - `AUTH_SECURITY.md`
+- `ERROR_HANDLING.md`
 - `INVARIANTS.md`
+- `RISK_REGISTER.md`
 - `CHANGE_PROTOCOL.md`
 
 For test or verification changes, read:
 
 - `TESTING.md`
+- `CHANGE_PROTOCOL.md`
+
+For dependency updates, read:
+
+- `DEPENDENCIES.md`
+- `TESTING.md`
+- `CHANGE_PROTOCOL.md`
+
+For cleanup, rename, or refactor requests, read:
+
+- `LEGACY_NOTES.md`
+- `RISK_REGISTER.md`
+- `INVARIANTS.md`
 - `CHANGE_PROTOCOL.md`
 
 ## Interface Model Levels

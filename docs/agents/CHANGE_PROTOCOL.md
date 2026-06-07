@@ -76,6 +76,29 @@ Update `docs/agents/TESTING.md` when:
 - Required verification commands change.
 - New test categories, fixtures, mocks, or external-service assumptions are added.
 
+Update `docs/agents/GLOSSARY.md` when:
+
+- A domain/codebase term is added, renamed, or clarified.
+- Existing terminology is found to be ambiguous.
+
+Update `docs/agents/RISK_REGISTER.md` when:
+
+- A new high-risk file, flow, or failure mode is discovered.
+- A risky area becomes safer or changes ownership.
+
+Update `docs/agents/LEGACY_NOTES.md` when:
+
+- A known imperfection, legacy module, typo, or transitional pattern is discovered or resolved.
+- The project intentionally keeps a non-ideal structure for compatibility.
+
+Update `docs/agents/ERROR_HANDLING.md` when:
+
+- API error shape, service error handling, storage error mapping, or logging expectations change.
+
+Update `docs/agents/DEPENDENCIES.md` when:
+
+- Dependency versions, upgrade constraints, or sensitive dependency notes change.
+
 Update `docs/agents/WORKFLOWS.md` when:
 
 - A recurring change pattern appears.
@@ -197,3 +220,21 @@ Tasks:
 - Check for secret logging or tracked secret values.
 - Check authorization paths for mutations.
 - Report residual risks.
+
+### `revelcy-update-risk-docs`
+
+Trigger after discovering risky files, legacy behavior, or dependency constraints.
+
+Tasks:
+
+- Update `docs/agents/RISK_REGISTER.md`.
+- Update `docs/agents/LEGACY_NOTES.md` or `docs/agents/DEPENDENCIES.md` when relevant.
+
+### `revelcy-update-error-docs`
+
+Trigger after API/service/storage error behavior changes.
+
+Tasks:
+
+- Inspect error mapping in `src/api/errors.rs` and affected handlers/services.
+- Update `docs/agents/ERROR_HANDLING.md`.

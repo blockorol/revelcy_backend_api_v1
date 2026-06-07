@@ -115,5 +115,10 @@ For Solana transaction changes:
 - `docs/agents/SOLANA.md`: Solana transaction and integration map.
 - `docs/agents/AUTH_SECURITY.md`: auth, JWT, wallet, secret, file/proxy safety notes.
 - `docs/agents/TESTING.md`: verification strategy for agents.
+- `docs/agents/GLOSSARY.md`: domain and codebase terminology.
+- `docs/agents/RISK_REGISTER.md`: known risky files and change areas.
+- `docs/agents/LEGACY_NOTES.md`: known imperfect areas that should not be casually rewritten.
+- `docs/agents/ERROR_HANDLING.md`: error mapping and public/private error rules.
+- `docs/agents/DEPENDENCIES.md`: dependency constraints and upgrade cautions.
 - `docs/agents/WORKFLOWS.md`: recipes for common code changes.
 - `docs/agents/CHANGE_PROTOCOL.md`: required checks and documentation update rules.
