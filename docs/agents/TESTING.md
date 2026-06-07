@@ -17,6 +17,7 @@ For documentation-only changes:
 
 ```powershell
 git diff --check
+.\scripts\check-agent-docs.ps1
 ```
 
 ## Current Test Assets
@@ -31,6 +32,7 @@ Before using these scripts, inspect them and confirm they match the current sche
 For documentation-only changes:
 
 - Run `git diff --check`.
+- Run `.\scripts\check-agent-docs.ps1` when agent docs or project skills changed.
 - Confirm links and filenames are consistent.
 
 For route/API changes:

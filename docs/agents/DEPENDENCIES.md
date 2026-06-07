@@ -58,3 +58,11 @@ The main `Dockerfile` builds with:
 - Alpine runtime with PostgreSQL client.
 
 Dependency changes can affect Docker builds even if local `cargo check` passes.
+
+## Skill Validation Dependency
+
+The system skill validator at `C:\Users\wking.korol\.codex\skills\.system\skill-creator\scripts\quick_validate.py` requires Python `yaml` support. If it is unavailable locally, run the repository-level structural check instead:
+
+```powershell
+.\scripts\check-agent-docs.ps1
+```

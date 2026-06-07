@@ -11,6 +11,7 @@ Before editing unfamiliar code, read the files that match the task.
 - Use `DOMAIN.md` to answer: what does this business concept mean?
 - Use `INVARIANTS.md` to answer: what must not be broken?
 - Use `API_CONTRACTS.md` to answer: what external HTTP/API shapes must stay stable?
+- Use `ROUTE_HANDLERS.md` to answer: which handler owns this route?
 - Use `DATABASE.md` to answer: how does persistence work?
 - Use `SOLANA.md` to answer: how do chain transaction flows work?
 - Use `AUTH_SECURITY.md` to answer: what security-sensitive rules apply?
@@ -36,9 +37,17 @@ For endpoint or route changes, read:
 - `PROJECT_MAP.md`
 - `ARCHITECTURE.md`
 - `API_CONTRACTS.md`
+- `ROUTE_HANDLERS.md`
 - `FRONTEND_BACKEND_CONTRACT.md`
 - `WORKFLOWS.md`
 - `CHANGE_PROTOCOL.md`
+
+For route ownership changes, read:
+
+- `PROJECT_MAP.md`
+- `ROUTE_HANDLERS.md`
+- `API_CONTRACTS.md`
+- `FRONTEND_BACKEND_CONTRACT.md`
 
 For business logic changes, read:
 

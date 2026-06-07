@@ -1,0 +1,5 @@
+interface:
+  display_name: "Revelcy API Contract Review"
+  short_description: "Review Revelcy API contract changes"
+  default_prompt: "Use $revelcy-api-contract-review to review route, DTO, and frontend-sensitive API changes."
+

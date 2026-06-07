@@ -57,6 +57,11 @@ Update `docs/agents/API_CONTRACTS.md` when:
 - API DTO ownership changes.
 - A breaking contract change is introduced intentionally.
 
+Update `docs/agents/ROUTE_HANDLERS.md` when:
+
+- A route is added, removed, moved, renamed, or pointed at a different handler.
+- A scope registration changes in `src/server/mod.rs`.
+
 Update `docs/agents/DATABASE.md` when:
 
 - Migrations, repository queries, storage row models, delete semantics, or database relationships change.
@@ -141,6 +146,7 @@ For documentation-only changes:
 
 ```powershell
 git diff --check
+.\scripts\check-agent-docs.ps1
 ```
 
 If dependency or network-related commands fail because of the local sandbox/environment, report that clearly.
@@ -199,6 +205,7 @@ Tasks:
 
 - Inspect changed `src/server` and `src/api` files.
 - Update route map in `docs/agents/PROJECT_MAP.md`.
+- Update route handler ownership in `docs/agents/ROUTE_HANDLERS.md`.
 - Update public contract details in `docs/agents/API_CONTRACTS.md`.
 - Note breaking request/response changes in the final response.
 

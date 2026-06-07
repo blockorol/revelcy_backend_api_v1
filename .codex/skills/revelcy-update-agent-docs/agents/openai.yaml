@@ -1,0 +1,5 @@
+interface:
+  display_name: "Revelcy Update Agent Docs"
+  short_description: "Update Revelcy agent documentation"
+  default_prompt: "Use $revelcy-update-agent-docs to update the agent documentation after backend changes."
+

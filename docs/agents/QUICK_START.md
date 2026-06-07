@@ -40,6 +40,7 @@ For documentation-only changes:
 
 ```powershell
 git diff --check
+.\scripts\check-agent-docs.ps1
 ```
 
 ## Quick Classification
@@ -59,4 +60,3 @@ git diff --check
 - Respect the three interface model levels.
 - Update agent docs when the change affects future navigation, safety, or workflow.
 - Report what was and was not verified.
-

@@ -111,6 +111,7 @@ For Solana transaction changes:
 - `docs/agents/DOMAIN.md`: domain concepts and behavior.
 - `docs/agents/INVARIANTS.md`: constraints agents should preserve.
 - `docs/agents/API_CONTRACTS.md`: API route and DTO contract rules.
+- `docs/agents/ROUTE_HANDLERS.md`: route-to-handler map.
 - `docs/agents/DATABASE.md`: database and repository map.
 - `docs/agents/SOLANA.md`: Solana transaction and integration map.
 - `docs/agents/AUTH_SECURITY.md`: auth, JWT, wallet, secret, file/proxy safety notes.

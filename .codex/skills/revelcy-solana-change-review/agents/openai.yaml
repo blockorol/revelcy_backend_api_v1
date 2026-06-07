@@ -1,0 +1,5 @@
+interface:
+  display_name: "Revelcy Solana Change Review"
+  short_description: "Review Revelcy Solana changes"
+  default_prompt: "Use $revelcy-solana-change-review to review Solana transaction, account, network, and signer changes."
+

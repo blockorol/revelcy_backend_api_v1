@@ -1,0 +1,5 @@
+interface:
+  display_name: "Revelcy DB Change Review"
+  short_description: "Review Revelcy database changes"
+  default_prompt: "Use $revelcy-db-change-review to review migrations, storage models, and repository changes."
+
