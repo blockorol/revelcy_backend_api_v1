@@ -28,6 +28,24 @@ Normal HTTP request flow:
 
 Keep these boundaries stable unless the task explicitly asks for architectural refactoring.
 
+## Interface Model Levels
+
+The intended model/interface design has three levels:
+
+- API interface: `src/api/*` is only for external HTTP contracts, request DTOs, response DTOs, and API-facing error shapes.
+- Internal interface: `src/models/*` is for in-process service/domain models passed between handlers, services, Solana integrations, and other internal modules.
+- Storage interface: `src/storage/models.rs` and repository-local row shapes are only for database persistence and SQLx row mapping.
+
+Data should cross boundaries through explicit mapping:
+
+1. HTTP request DTO from `src/api`.
+2. Internal/domain model from `src/models`.
+3. Storage model/query arguments in `src/storage`.
+4. Internal/domain result from service logic.
+5. HTTP response DTO from `src/api`.
+
+Some current code may not fully respect this separation. When touching an area that mixes these levels, avoid making the coupling worse. Prefer small, local mapping helpers over passing API DTOs into storage or returning storage rows directly from handlers.
+
 ## Layer Responsibilities
 
 ### Server Layer
@@ -146,4 +164,3 @@ Deployment-related files exist at the repository root:
 - `railway_key_gen.toml`
 
 Do not change deployment behavior unless the task is explicitly about deployment.
-

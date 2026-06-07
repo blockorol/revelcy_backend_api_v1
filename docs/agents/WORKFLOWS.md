@@ -7,10 +7,12 @@ Use these recipes when making code changes. Keep changes scoped and update agent
 1. Find the relevant scope in `src/server/mod.rs`.
 2. Edit the matching server file in `src/server/`.
 3. Add or update request/response DTOs in `src/api/` if needed.
-4. Put business logic in the matching `src/services/*_service.rs`.
-5. Put SQL in the matching `src/storage/*_repo.rs`.
-6. Update `docs/agents/PROJECT_MAP.md` if route names, scope ownership, or module ownership changed.
-7. Run `cargo fmt --check`, `cargo check`, and tests that cover the path.
+4. Map API DTOs into internal/domain models from `src/models` before service work.
+5. Put business logic in the matching `src/services/*_service.rs`.
+6. Put SQL in the matching `src/storage/*_repo.rs`.
+7. Update `docs/agents/API_CONTRACTS.md` if external request/response behavior changed.
+8. Update `docs/agents/PROJECT_MAP.md` if route names, scope ownership, or module ownership changed.
+9. Run `cargo fmt --check`, `cargo check`, and tests that cover the path.
 
 ## Add A Premarket Feature
 
@@ -28,10 +30,12 @@ Use these recipes when making code changes. Keep changes scoped and update agent
 1. Add a new numbered migration in `migrations/`.
 2. Update `src/storage/models.rs`.
 3. Update affected repository queries.
-4. Update service/domain/API models as needed.
-5. Check list/get endpoints for default behavior and backward compatibility.
-6. Update `docs/agents/PROJECT_MAP.md` if schema ownership or migration themes changed.
-7. Run database-backed checks if available.
+4. Update internal/domain models in `src/models` if service data shape changes.
+5. Update API models in `src/api` only if the external contract changes.
+6. Check list/get endpoints for default behavior and backward compatibility.
+7. Update `docs/agents/DATABASE.md` if schema or repository behavior changed.
+8. Update `docs/agents/PROJECT_MAP.md` if schema ownership or migration themes changed.
+9. Run database-backed checks if available.
 
 ## Change Auth Or JWT Behavior
 
@@ -49,7 +53,8 @@ Use these recipes when making code changes. Keep changes scoped and update agent
 3. Check input/output models in `src/models/premarket.rs`.
 4. Check any service calls in `src/services/premarket_service.rs` or `src/services/vesting_service.rs`.
 5. Preserve network selection and signer behavior.
-6. Update `docs/agents/DOMAIN.md` and `docs/agents/INVARIANTS.md` if transaction semantics changed.
+6. Update `docs/agents/SOLANA.md` if transaction flow or builder ownership changed.
+7. Update `docs/agents/DOMAIN.md` and `docs/agents/INVARIANTS.md` if transaction semantics changed.
 
 ## Change Whitelist Behavior
 
@@ -76,6 +81,10 @@ Use these recipes when making code changes. Keep changes scoped and update agent
 4. Put layer/data-flow design in `ARCHITECTURE.md`.
 5. Put business concepts in `DOMAIN.md`.
 6. Put must-preserve constraints in `INVARIANTS.md`.
-7. Put repeatable edit recipes in `WORKFLOWS.md`.
-8. Put check/update requirements in `CHANGE_PROTOCOL.md`.
-
+7. Put external HTTP contracts in `API_CONTRACTS.md`.
+8. Put persistence details in `DATABASE.md`.
+9. Put chain integration details in `SOLANA.md`.
+10. Put auth/security-sensitive details in `AUTH_SECURITY.md`.
+11. Put verification guidance in `TESTING.md`.
+12. Put repeatable edit recipes in `WORKFLOWS.md`.
+13. Put check/update requirements in `CHANGE_PROTOCOL.md`.

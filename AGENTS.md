@@ -12,6 +12,7 @@ Use this file as the first context document before making code changes. The deta
 - Treat Solana transaction logic, auth, JWT, wallet signature validation, and migrations as high-risk areas.
 - Do not edit existing migrations to change history. Add a new migration unless the user explicitly asks for a local-only rewrite.
 - Prefer narrow changes that follow the current layering: server handlers -> services -> storage -> models/API DTOs.
+- Preserve the three interface model levels: API models in `src/api` for external HTTP contracts, internal/domain models in `src/models` for in-process service flow, and storage models in `src/storage` for database rows.
 - Update agent documentation when a change alters routes, module ownership, architecture, database schema, domain behavior, invariants, workflows, or required checks.
 
 ## Repository Map
@@ -109,6 +110,10 @@ For Solana transaction changes:
 - `docs/agents/ARCHITECTURE.md`: runtime shape, layers, and cross-module data flow.
 - `docs/agents/DOMAIN.md`: domain concepts and behavior.
 - `docs/agents/INVARIANTS.md`: constraints agents should preserve.
+- `docs/agents/API_CONTRACTS.md`: API route and DTO contract rules.
+- `docs/agents/DATABASE.md`: database and repository map.
+- `docs/agents/SOLANA.md`: Solana transaction and integration map.
+- `docs/agents/AUTH_SECURITY.md`: auth, JWT, wallet, secret, file/proxy safety notes.
+- `docs/agents/TESTING.md`: verification strategy for agents.
 - `docs/agents/WORKFLOWS.md`: recipes for common code changes.
 - `docs/agents/CHANGE_PROTOCOL.md`: required checks and documentation update rules.
-

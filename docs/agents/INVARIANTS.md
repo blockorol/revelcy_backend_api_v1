@@ -16,6 +16,10 @@ Preserve these constraints unless the user explicitly asks to change the behavio
 - Storage repositories should own SQL and row mapping.
 - Domain models in `src/models` should not know about Actix request/response behavior.
 - API DTOs should not own persistence behavior.
+- API DTOs from `src/api` should not be used as storage row models.
+- Storage models from `src/storage` should not be returned directly as public API responses.
+- Internal/domain models from `src/models` should be the preferred data shape across service boundaries.
+- Keep mappings between API, internal, and storage model levels explicit.
 - Solana transaction builders should not be mixed into handler code if a service/builder already exists.
 
 ## Authentication And Authorization
@@ -68,4 +72,3 @@ Preserve these constraints unless the user explicitly asks to change the behavio
 - File paths should stay constrained to intended storage locations.
 - Upload handlers should avoid path traversal.
 - Proxy/IPFS helpers should not expose internal credentials.
-

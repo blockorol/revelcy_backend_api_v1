@@ -35,6 +35,7 @@ Update `docs/agents/ARCHITECTURE.md` when:
 
 - Layer responsibilities change.
 - Request flow changes.
+- The API/internal/storage model boundary changes.
 - Solana integration shape changes.
 - Configuration or deployment shape changes in a way agents must understand.
 
@@ -49,6 +50,31 @@ Update `docs/agents/INVARIANTS.md` when:
 - A rule future agents must preserve is introduced or removed.
 - Auth, authorization, Solana, database state transitions, file/proxy safety, or claim/vesting semantics change.
 - Existing code intentionally violates or replaces an older invariant.
+
+Update `docs/agents/API_CONTRACTS.md` when:
+
+- A public route, method, request DTO, response DTO, auth requirement, or error shape changes.
+- API DTO ownership changes.
+- A breaking contract change is introduced intentionally.
+
+Update `docs/agents/DATABASE.md` when:
+
+- Migrations, repository queries, storage row models, delete semantics, or database relationships change.
+- A storage model starts or stops mapping to a table/query shape.
+
+Update `docs/agents/SOLANA.md` when:
+
+- Transaction builders, network selection, account derivation, signer behavior, or Solana env requirements change.
+- A premarket/vesting chain flow changes.
+
+Update `docs/agents/AUTH_SECURITY.md` when:
+
+- Auth, JWT, wallet signature validation, authorization checks, secret handling, file upload, or proxy behavior changes.
+
+Update `docs/agents/TESTING.md` when:
+
+- Required verification commands change.
+- New test categories, fixtures, mocks, or external-service assumptions are added.
 
 Update `docs/agents/WORKFLOWS.md` when:
 
@@ -129,6 +155,7 @@ Tasks:
 
 - Inspect changed `src/server` and `src/api` files.
 - Update route map in `docs/agents/PROJECT_MAP.md`.
+- Update public contract details in `docs/agents/API_CONTRACTS.md`.
 - Note breaking request/response changes in the final response.
 
 ### `revelcy-update-db-docs`
@@ -139,7 +166,26 @@ Tasks:
 
 - Inspect new migration files.
 - Inspect `src/storage/models.rs` and affected repositories.
-- Update schema-related notes in `docs/agents/PROJECT_MAP.md`.
+- Update schema-related notes in `docs/agents/DATABASE.md` and `docs/agents/PROJECT_MAP.md`.
+
+### `revelcy-update-solana-docs`
+
+Trigger after Solana transaction, network, account, signer, or chain-flow changes.
+
+Tasks:
+
+- Inspect changed `src/services/solana_service_v2` files.
+- Inspect related models in `src/models/premarket.rs`.
+- Update `docs/agents/SOLANA.md`.
+
+### `revelcy-update-testing-docs`
+
+Trigger after test command, fixture, mock, or verification strategy changes.
+
+Tasks:
+
+- Inspect changed tests and config.
+- Update `docs/agents/TESTING.md`.
 
 ### `revelcy-security-pass`
 
@@ -151,4 +197,3 @@ Tasks:
 - Check for secret logging or tracked secret values.
 - Check authorization paths for mutations.
 - Report residual risks.
-
