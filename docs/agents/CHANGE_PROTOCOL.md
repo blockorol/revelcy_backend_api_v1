@@ -141,14 +141,17 @@ Update `docs/agents/WORKFLOWS.md` when:
 Update human-facing docs when code changes affect developer, contributor, operator, frontend, or public API behavior.
 
 - Route/API behavior changes: update `docs/API.md`, `docs/API_CHANGELOG.md`, and possibly `README.md`.
+- API examples or exact request/response examples change: update `docs/API_EXAMPLES.md`.
 - Frontend-sensitive behavior changes: update `docs/API.md`, `docs/API_CHANGELOG.md`, and `docs/agents/FRONTEND_BACKEND_CONTRACT.md`.
 - Env vars/config changes: update `docs/CONFIGURATION.md`, `docs/DEVELOPMENT.md`, and `README.md` if quick start changes.
 - Database/migration changes: update `docs/DATABASE.md` and `docs/DEVELOPMENT.md` if setup or migration workflow changes.
+- Local database setup/reset changes: update `docs/LOCAL_DATABASE.md`.
 - Auth/JWT/wallet changes: update `docs/AUTH.md` and `SECURITY.md` if security semantics change.
 - Solana transaction changes: update `docs/SOLANA.md`, `docs/API.md`, and `docs/API_CHANGELOG.md` if responses or flows change.
 - Testing changes: update `docs/TESTING.md` and `CONTRIBUTING.md`.
 - Deployment changes: update `docs/DEPLOYMENT.md` and `docs/TROUBLESHOOTING.md`.
-- Dependency constraints: update `README.md`, `docs/TROUBLESHOOTING.md`, or `docs/agents/DEPENDENCIES.md` as relevant.
+- Release workflow changes: update `docs/RELEASE_PROCESS.md`.
+- Dependency constraints: update `docs/DEPENDENCIES.md`, `README.md`, `docs/TROUBLESHOOTING.md`, or `docs/agents/DEPENDENCIES.md` as relevant.
 - Domain terminology changes: update `docs/GLOSSARY.md` and `docs/agents/GLOSSARY.md`.
 - Contributor workflow changes: update `CONTRIBUTING.md` and `.github/pull_request_template.md`.
 - Security reporting or sensitive-area changes: update `SECURITY.md`.

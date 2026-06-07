@@ -29,12 +29,16 @@ See [Configuration](docs/CONFIGURATION.md) for the full environment list.
 - [Developer setup](docs/DEVELOPMENT.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [API overview](docs/API.md)
+- [API examples](docs/API_EXAMPLES.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Database](docs/DATABASE.md)
+- [Local database](docs/LOCAL_DATABASE.md)
 - [Solana integration](docs/SOLANA.md)
 - [Auth and wallet login](docs/AUTH.md)
 - [Testing](docs/TESTING.md)
 - [Deployment](docs/DEPLOYMENT.md)
+- [Release process](docs/RELEASE_PROCESS.md)
+- [Dependencies](docs/DEPENDENCIES.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 
 Agent-facing documentation lives in [AGENTS.md](AGENTS.md) and [docs/agents](docs/agents/README.md).

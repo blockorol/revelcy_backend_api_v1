@@ -7,8 +7,10 @@ This file tells agents how to maintain human-facing documentation. Human docs ar
 - `README.md`: project overview, quick start, links.
 - `docs/README.md`: documentation index.
 - `docs/DEVELOPMENT.md`: local setup and common commands.
+- `docs/LOCAL_DATABASE.md`: local Postgres setup and reset notes.
 - `docs/CONFIGURATION.md`: environment variables.
 - `docs/API.md`: public API overview.
+- `docs/API_EXAMPLES.md`: example API requests/responses.
 - `docs/API_CHANGELOG.md`: API changes and frontend impact.
 - `docs/ARCHITECTURE.md`: human-readable architecture.
 - `docs/DATABASE.md`: database and migration guide.
@@ -16,7 +18,9 @@ This file tells agents how to maintain human-facing documentation. Human docs ar
 - `docs/AUTH.md`: auth, wallet, and JWT guide.
 - `docs/TESTING.md`: testing guide.
 - `docs/DEPLOYMENT.md`: Docker/Railway deployment notes.
+- `docs/RELEASE_PROCESS.md`: release checklist.
 - `docs/TROUBLESHOOTING.md`: common problems.
+- `docs/DEPENDENCIES.md`: human-facing dependency notes.
 - `docs/GLOSSARY.md`: human glossary.
 - `docs/OPEN_SOURCE_CHECKLIST.md`: open-source readiness checklist.
 - `CONTRIBUTING.md`: contribution guide.
@@ -30,10 +34,14 @@ This file tells agents how to maintain human-facing documentation. Human docs ar
 - API route/DTO/error changes: update `docs/API.md` and `docs/API_CHANGELOG.md`.
 - Env var changes: update `docs/CONFIGURATION.md` and possibly `README.md` or `docs/DEVELOPMENT.md`.
 - Database or migration changes: update `docs/DATABASE.md`.
+- Local DB setup changes: update `docs/LOCAL_DATABASE.md`.
 - Auth/wallet/JWT changes: update `docs/AUTH.md` and possibly `SECURITY.md`.
 - Solana transaction flow changes: update `docs/SOLANA.md`, `docs/API.md`, and `docs/API_CHANGELOG.md`.
+- API example changes: update `docs/API_EXAMPLES.md`.
 - Test command, fixture, or strategy changes: update `docs/TESTING.md` and possibly `CONTRIBUTING.md`.
 - Deployment changes: update `docs/DEPLOYMENT.md` and `docs/TROUBLESHOOTING.md`.
+- Release workflow changes: update `docs/RELEASE_PROCESS.md`.
+- Dependency changes: update `docs/DEPENDENCIES.md`.
 - Domain terminology changes: update `docs/GLOSSARY.md`.
 - Contributor process changes: update `CONTRIBUTING.md` and `.github/pull_request_template.md`.
 

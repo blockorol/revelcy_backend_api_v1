@@ -30,8 +30,10 @@ $requiredFiles = @(
     "README.md",
     "docs/README.md",
     "docs/DEVELOPMENT.md",
+    "docs/LOCAL_DATABASE.md",
     "docs/CONFIGURATION.md",
     "docs/API.md",
+    "docs/API_EXAMPLES.md",
     "docs/API_CHANGELOG.md",
     "docs/ARCHITECTURE.md",
     "docs/DATABASE.md",
@@ -39,16 +41,22 @@ $requiredFiles = @(
     "docs/AUTH.md",
     "docs/TESTING.md",
     "docs/DEPLOYMENT.md",
+    "docs/RELEASE_PROCESS.md",
     "docs/TROUBLESHOOTING.md",
+    "docs/DEPENDENCIES.md",
     "docs/GLOSSARY.md",
     "docs/OPEN_SOURCE_CHECKLIST.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
     "CHANGELOG.md",
     ".github/pull_request_template.md",
+    ".github/workflows/ci.yml",
+    ".github/workflows/security.yml",
+    ".github/dependabot.yml",
     ".github/ISSUE_TEMPLATE/bug_report.md",
     ".github/ISSUE_TEMPLATE/feature_request.md",
-    ".github/ISSUE_TEMPLATE/security_report.md"
+    ".github/ISSUE_TEMPLATE/security_report.md",
+    "deny.toml"
 )
 
 $requiredSkills = @(

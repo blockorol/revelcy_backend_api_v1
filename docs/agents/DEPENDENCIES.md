@@ -66,3 +66,17 @@ The system skill validator at `C:\Users\wking.korol\.codex\skills\.system\skill-
 ```powershell
 .\scripts\check-agent-docs.ps1
 ```
+
+## Repository Automation
+
+Dependency and security automation lives in:
+
+- `.github/dependabot.yml`
+- `.github/workflows/security.yml`
+- `deny.toml`
+
+CI lives in:
+
+- `.github/workflows/ci.yml`
+
+Update human-facing `docs/DEPENDENCIES.md` when dependency constraints or automation expectations change.

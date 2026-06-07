@@ -20,6 +20,8 @@ git diff --check
 .\scripts\check-agent-docs.ps1
 ```
 
+CI also runs documentation structure checks through `.github/workflows/ci.yml`.
+
 ## Current Test Assets
 
 - `test/set_mock_for_test.sql`: SQL fixture/setup helper.
