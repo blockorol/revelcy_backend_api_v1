@@ -120,5 +120,10 @@ For Solana transaction changes:
 - `docs/agents/LEGACY_NOTES.md`: known imperfect areas that should not be casually rewritten.
 - `docs/agents/ERROR_HANDLING.md`: error mapping and public/private error rules.
 - `docs/agents/DEPENDENCIES.md`: dependency constraints and upgrade cautions.
+- `docs/agents/QUICK_START.md`: short boot sequence for agents.
+- `docs/agents/CODE_STYLE.md`: local coding conventions and placement rules.
+- `docs/agents/MAPPING_GUIDE.md`: explicit API/internal/storage model mapping guidance.
+- `docs/agents/FRONTEND_BACKEND_CONTRACT.md`: frontend-sensitive backend contract notes.
+- `docs/agents/PR_REVIEW_CHECKLIST.md`: review-mode checklist for agents.
 - `docs/agents/WORKFLOWS.md`: recipes for common code changes.
 - `docs/agents/CHANGE_PROTOCOL.md`: required checks and documentation update rules.

@@ -99,6 +99,27 @@ Update `docs/agents/DEPENDENCIES.md` when:
 
 - Dependency versions, upgrade constraints, or sensitive dependency notes change.
 
+Update `docs/agents/QUICK_START.md` when:
+
+- The agent boot sequence, first-read documents, or core commands change.
+
+Update `docs/agents/CODE_STYLE.md` when:
+
+- Local coding conventions, function placement, naming, comments, or model placement rules change.
+
+Update `docs/agents/MAPPING_GUIDE.md` when:
+
+- API/internal/storage mapping rules change.
+- A new mapping pattern is introduced or an old violation is cleaned up.
+
+Update `docs/agents/FRONTEND_BACKEND_CONTRACT.md` when:
+
+- Backend routes, response shapes, auth/session behavior, transaction response expectations, upload/image behavior, or frontend-sensitive fields change.
+
+Update `docs/agents/PR_REVIEW_CHECKLIST.md` when:
+
+- Review criteria, required checks, high-risk review questions, or documentation expectations change.
+
 Update `docs/agents/WORKFLOWS.md` when:
 
 - A recurring change pattern appears.
@@ -238,3 +259,33 @@ Tasks:
 
 - Inspect error mapping in `src/api/errors.rs` and affected handlers/services.
 - Update `docs/agents/ERROR_HANDLING.md`.
+
+### `revelcy-update-mapping-docs`
+
+Trigger after changes to API/internal/storage model boundaries.
+
+Tasks:
+
+- Inspect changed files in `src/api`, `src/models`, and `src/storage`.
+- Update `docs/agents/MAPPING_GUIDE.md`.
+- Update `docs/agents/ARCHITECTURE.md` or `docs/agents/INVARIANTS.md` if the boundary rule changed.
+
+### `revelcy-frontend-contract-pass`
+
+Trigger after backend changes that may affect frontend behavior.
+
+Tasks:
+
+- Inspect route, DTO, auth, transaction, upload, and image URL changes.
+- Update `docs/agents/FRONTEND_BACKEND_CONTRACT.md`.
+- Note frontend impact in the final response.
+
+### `revelcy-pr-review`
+
+Trigger for review-mode work.
+
+Tasks:
+
+- Use `docs/agents/PR_REVIEW_CHECKLIST.md`.
+- Report findings by severity with file/line references.
+- Mention missing tests or residual risk.

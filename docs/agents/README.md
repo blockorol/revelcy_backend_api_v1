@@ -20,6 +20,11 @@ Before editing unfamiliar code, read the files that match the task.
 - Use `LEGACY_NOTES.md` to answer: what known imperfections should not be casually "fixed"?
 - Use `ERROR_HANDLING.md` to answer: how should errors cross API/service/storage boundaries?
 - Use `DEPENDENCIES.md` to answer: what dependency/version constraints matter?
+- Use `QUICK_START.md` to answer: how should an agent enter the project quickly?
+- Use `CODE_STYLE.md` to answer: where and how should new code be shaped?
+- Use `MAPPING_GUIDE.md` to answer: how should API/internal/storage models map?
+- Use `FRONTEND_BACKEND_CONTRACT.md` to answer: what backend behavior may affect the frontend?
+- Use `PR_REVIEW_CHECKLIST.md` to answer: what should a review-mode agent check?
 - Use `WORKFLOWS.md` to answer: how should this kind of change be made?
 - Use `CHANGE_PROTOCOL.md` to answer: what must be checked and documented after a change?
 
@@ -27,17 +32,21 @@ Before editing unfamiliar code, read the files that match the task.
 
 For endpoint or route changes, read:
 
+- `QUICK_START.md`
 - `PROJECT_MAP.md`
 - `ARCHITECTURE.md`
 - `API_CONTRACTS.md`
+- `FRONTEND_BACKEND_CONTRACT.md`
 - `WORKFLOWS.md`
 - `CHANGE_PROTOCOL.md`
 
 For business logic changes, read:
 
+- `CODE_STYLE.md`
 - `DOMAIN.md`
 - `GLOSSARY.md`
 - `INVARIANTS.md`
+- `MAPPING_GUIDE.md`
 - `RISK_REGISTER.md`
 - `WORKFLOWS.md`
 - `CHANGE_PROTOCOL.md`
@@ -47,6 +56,7 @@ For database changes, read:
 - `PROJECT_MAP.md`
 - `ARCHITECTURE.md`
 - `DATABASE.md`
+- `MAPPING_GUIDE.md`
 - `WORKFLOWS.md`
 - `CHANGE_PROTOCOL.md`
 
@@ -81,7 +91,16 @@ For dependency updates, read:
 
 For cleanup, rename, or refactor requests, read:
 
+- `CODE_STYLE.md`
+- `MAPPING_GUIDE.md`
 - `LEGACY_NOTES.md`
+- `RISK_REGISTER.md`
+- `INVARIANTS.md`
+- `CHANGE_PROTOCOL.md`
+
+For review requests, read:
+
+- `PR_REVIEW_CHECKLIST.md`
 - `RISK_REGISTER.md`
 - `INVARIANTS.md`
 - `CHANGE_PROTOCOL.md`
