@@ -138,7 +138,6 @@ Files:
 
 - `Dockerfile`
 - `Dockerfile.pump_gen`
-- `Dockerfile_old`
 - `docker-compose.yml`
 - `docker-compose.pupm_gen.yml`
 - `entrypoint.sh`
@@ -151,4 +150,3 @@ Risks:
 - Breaking migrations at startup.
 
 Do not change deployment files unless the user asks for deployment work.
-

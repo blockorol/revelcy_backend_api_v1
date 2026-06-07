@@ -13,6 +13,8 @@ cargo clippy -- -D warnings
 cargo test
 ```
 
+Current note: `cargo fmt --check` reports many existing formatting diffs. CI keeps formatting advisory/non-blocking until a dedicated rustfmt cleanup is performed.
+
 For documentation-only changes:
 
 ```powershell
@@ -20,7 +22,7 @@ git diff --check
 .\scripts\check-agent-docs.ps1
 ```
 
-CI also runs documentation structure checks through `.github/workflows/ci.yml`.
+CI runs Rust checks through `.github/workflows/ci.yml` and documentation structure checks through `.github/workflows/docs.yml`.
 
 ## Current Test Assets
 

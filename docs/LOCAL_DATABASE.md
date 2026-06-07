@@ -18,7 +18,13 @@ Do not commit real local credentials.
 
 Migration files live in `migrations/`.
 
-The Docker runtime includes Goose, but local migration workflow may vary by developer environment. Before applying migrations locally, inspect:
+Deployment applies migrations with Goose through `entrypoint.sh`:
+
+```sh
+goose -dir /migrations postgres "$DATABASE_URL" up
+```
+
+For local migration work, install Goose or run the same migration flow inside the Docker image. Before applying migrations locally, inspect:
 
 - `migrations/`
 - `entrypoint.sh`
@@ -42,4 +48,3 @@ When changing local schema:
 - Update affected repository queries.
 - Update `docs/DATABASE.md` if the schema area changes.
 - Update `docs/API.md` and `docs/API_EXAMPLES.md` only if public API behavior changes.
-

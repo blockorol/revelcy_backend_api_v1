@@ -31,11 +31,10 @@ Treat `solana_service_v2` as the current transaction-builder area, but inspect c
 
 ## Docker And Deployment File History
 
-Multiple Docker/Railway-related files exist. Some may be historical or specialized:
+Multiple Docker/Railway-related files exist. Some are specialized:
 
 - `Dockerfile`
 - `Dockerfile.pump_gen`
-- `Dockerfile_old`
 - `docker-compose.yml`
 - `docker-compose.pupm_gen.yml`
 - `railway.toml`
@@ -48,4 +47,3 @@ Do not remove or rename them unless the task is explicitly about deployment clea
 The root `README.md` is currently minimal. This agent documentation is not a replacement for human-facing open-source documentation.
 
 Do not expand human docs unless the user asks for human-facing documentation.
-

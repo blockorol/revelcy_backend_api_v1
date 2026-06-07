@@ -11,6 +11,9 @@ Use this before making the repository public.
 ## Safety Checks
 
 - Scan git history for secrets.
+- Search all commits for private keys, JWT secrets, RPC credentials, Pyth/IPFS tokens, seed material, and `.env` contents.
+- Revoke and rotate any secret that ever appeared in a commit, even if it was later removed.
+- Confirm leaked keys are invalidated at the provider/wallet/service level before making the repository public.
 - Confirm `.env` and `.env.*` are ignored.
 - Confirm no private keys, JWT secrets, RPC credentials, or tokens are tracked.
 - Review Docker and Railway files for sensitive values.
@@ -30,3 +33,6 @@ Use this before making the repository public.
 - Cargo check passes.
 - Tests pass or gaps are documented.
 - Dependency risks are documented.
+- CI workflow is enabled.
+- Docs workflow is enabled.
+- Security/dependency workflow is enabled.

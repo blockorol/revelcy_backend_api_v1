@@ -77,3 +77,5 @@ Transaction routes:
 ## Contract Notes
 
 Route paths, methods, request fields, response fields, auth requirements, and error shapes are frontend-sensitive. Breaking API changes should be recorded in [API changelog](API_CHANGELOG.md).
+
+Request and response examples live in [API examples](API_EXAMPLES.md). The source of truth for DTO fields is `src/api`.

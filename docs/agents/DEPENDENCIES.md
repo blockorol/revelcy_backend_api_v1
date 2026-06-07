@@ -5,11 +5,11 @@ This file records dependency constraints and upgrade cautions for agents.
 ## Rust Toolchain
 
 - Rust edition: `2021`.
-- Toolchain file: `.rust-toolchain.toml`.
+- Toolchain file: `.rust-toolchain.toml`, currently Rust `1.87`.
 - Main manifest: `Cargo.toml`.
 - Lockfile: `Cargo.lock`.
 
-Do not update the Rust toolchain or lockfile during unrelated work.
+Do not update the Rust toolchain or lockfile during unrelated work. Solana-related crates are sensitive to Rust/toolchain upgrades.
 
 ## Important Dependencies
 
@@ -80,3 +80,5 @@ CI lives in:
 - `.github/workflows/ci.yml`
 
 Update human-facing `docs/DEPENDENCIES.md` when dependency constraints or automation expectations change.
+
+License checks are intentionally not enforced yet. Do not add a license policy until the project chooses one.

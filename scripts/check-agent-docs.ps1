@@ -51,12 +51,14 @@ $requiredFiles = @(
     "CHANGELOG.md",
     ".github/pull_request_template.md",
     ".github/workflows/ci.yml",
+    ".github/workflows/docs.yml",
     ".github/workflows/security.yml",
     ".github/dependabot.yml",
     ".github/ISSUE_TEMPLATE/bug_report.md",
     ".github/ISSUE_TEMPLATE/feature_request.md",
     ".github/ISSUE_TEMPLATE/security_report.md",
-    "deny.toml"
+    "deny.toml",
+    "rustfmt.toml"
 )
 
 $requiredSkills = @(

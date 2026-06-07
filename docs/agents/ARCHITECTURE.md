@@ -156,7 +156,6 @@ Deployment-related files exist at the repository root:
 
 - `Dockerfile`
 - `Dockerfile.pump_gen`
-- `Dockerfile_old`
 - `docker-compose.yml`
 - `docker-compose.pupm_gen.yml`
 - `entrypoint.sh`

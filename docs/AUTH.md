@@ -19,6 +19,16 @@ The backend uses wallet-related authentication and JWT behavior.
 4. Backend issues or validates JWT-related auth state.
 5. Protected routes use middleware/extractors to identify the user.
 
+## DTOs
+
+Auth DTOs live in `src/api/dto.rs`.
+
+- `StartSessionResponseDto`: `nonce`, `jwt`.
+- `ConfirmLoginRequestDto`: `wallet_address`, `signature`, `jwt`.
+- `ConfirmLoginResponseDto`: `jwt`, `is_new_user`.
+- `WalletInfoResponseDto`: `creation_time`, `balance`, `tx_amount`.
+- `PremarketInfoResponseDto`: `users`, `end_timestamp`, `goal_sol`, `max_sol`, `mint`, `name`, `symbol`, `uri`, `creator`.
+
 ## Security Notes
 
 - Do not bypass wallet signature validation.

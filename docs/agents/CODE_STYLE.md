@@ -53,3 +53,8 @@ Do not introduce new code that passes API DTOs directly into storage or returns 
 - Do not update dependencies during unrelated work.
 - Read `DEPENDENCIES.md` before version or feature changes.
 
+## Formatting
+
+Rust formatting is configured by `rustfmt.toml`. Run `cargo fmt --check` before finalizing Rust code changes.
+
+Current state: existing code is not fully rustfmt-clean. Do not format the whole codebase during unrelated work; do that only as a dedicated cleanup.

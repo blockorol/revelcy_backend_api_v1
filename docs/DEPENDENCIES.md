@@ -18,6 +18,8 @@ This project uses Rust dependencies from `Cargo.toml` and locked versions in `Ca
 
 The project README historically notes that `sqlx 0.7` conflicts with `solana-sdk 1.17`.
 
+The CI toolchain intentionally uses Rust `1.87` from `.rust-toolchain.toml`. Solana-related crate compatibility is sensitive to Rust/toolchain upgrades; do not switch CI to latest stable casually.
+
 Be careful when upgrading:
 
 - SQLx.
@@ -41,7 +43,8 @@ The repository includes:
 
 - `.github/dependabot.yml`
 - `.github/workflows/security.yml`
+- `.github/workflows/ci.yml`
+- `.github/workflows/docs.yml`
 - `deny.toml`
 
-These help surface dependency updates, advisories, and license/security concerns.
-
+These help surface dependency updates and security concerns. License checks are intentionally not enforced yet.

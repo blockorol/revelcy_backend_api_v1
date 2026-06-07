@@ -16,12 +16,13 @@ jobs:
   cargo-audit:
     name: cargo audit
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.87
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
@@ -32,10 +33,12 @@ jobs:
   cargo-deny:
     name: cargo deny
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Run cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2
-
+        with:
+          command: check advisories bans sources

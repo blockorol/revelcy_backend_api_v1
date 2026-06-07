@@ -9,7 +9,6 @@ The repository includes Docker and Railway deployment files.
 - `docker-compose.yml`: compose setup.
 - `railway.toml`: Railway config.
 - `Dockerfile.pump_gen`, `docker-compose.pupm_gen.yml`, `railway_key_gen.toml`: key-generator related deployment files.
-- `Dockerfile_old`: historical Dockerfile.
 
 ## Main Docker Shape
 
@@ -20,6 +19,12 @@ The main Dockerfile:
 3. Installs Goose migration tool.
 4. Uses an Alpine runtime image.
 5. Copies migrations and `entrypoint.sh`.
+
+`entrypoint.sh` waits for Postgres with `pg_isready`, then applies migrations with Goose:
+
+```sh
+goose -dir /migrations postgres "$DATABASE_URL" up
+```
 
 ## Deployment Notes
 

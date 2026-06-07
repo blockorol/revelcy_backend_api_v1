@@ -19,6 +19,7 @@ This file tells agents how to maintain human-facing documentation. Human docs ar
 - `docs/TESTING.md`: testing guide.
 - `docs/DEPLOYMENT.md`: Docker/Railway deployment notes.
 - `docs/RELEASE_PROCESS.md`: release checklist.
+- `docs/DEPENDENCIES.md`: dependency groups and automation.
 - `docs/TROUBLESHOOTING.md`: common problems.
 - `docs/DEPENDENCIES.md`: human-facing dependency notes.
 - `docs/GLOSSARY.md`: human glossary.

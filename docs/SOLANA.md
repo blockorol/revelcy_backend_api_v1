@@ -12,16 +12,23 @@ The backend builds and supports Solana-related transactions for premarket and ve
 
 ## Transaction Builders
 
-- Create premarket.
-- Join premarket.
-- Out/leave premarket.
-- Finish premarket.
-- Kill/cancel premarket.
-- Extend premarket.
-- Update URI.
-- Update premarket data.
-- Claim tokens.
-- Withdraw vesting.
+- `tx_create_premarket.rs`: create premarket.
+- `tx_join_premarket.rs`: join premarket.
+- `tx_out_premarket.rs`: out/leave premarket.
+- `tx_finish_premarket.rs`: finish premarket.
+- `tx_kill_premarket.rs`: kill/cancel premarket.
+- `tx_extend_premarket.rs`: extend premarket.
+- `tx_update_uri.rs`: update URI.
+- `tx_update_premarket_data.rs`: update premarket data.
+- `tx_claim_tokens.rs`: claim tokens.
+- `tx_withdraw_vesting.rs`: withdraw vesting.
+- `vesting.rs`: vesting-specific helpers.
+
+## API Transaction DTOs
+
+Transaction request/response DTOs live in `src/api/premarket.rs`. Current common fields include `network`, `user_pubkey`, premarket account/pubkey identifiers, token mint identifiers, and base64 unsigned transaction data for sign/send flows.
+
+`TxOnlyResponse` returns `transaction`. `CreatePremarketTxResponse` returns `transaction`, `premarket_account_pda`, and `mint_address`.
 
 ## Configuration
 

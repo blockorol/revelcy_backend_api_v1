@@ -149,9 +149,13 @@ Update human-facing docs when code changes affect developer, contributor, operat
 - Auth/JWT/wallet changes: update `docs/AUTH.md` and `SECURITY.md` if security semantics change.
 - Solana transaction changes: update `docs/SOLANA.md`, `docs/API.md`, and `docs/API_CHANGELOG.md` if responses or flows change.
 - Testing changes: update `docs/TESTING.md` and `CONTRIBUTING.md`.
+- Formatting or Rust style changes: update `rustfmt.toml`, `CONTRIBUTING.md`, and `docs/agents/CODE_STYLE.md` if conventions change.
+- Do not run a whole-repo rustfmt cleanup during unrelated documentation or feature work.
 - Deployment changes: update `docs/DEPLOYMENT.md` and `docs/TROUBLESHOOTING.md`.
 - Release workflow changes: update `docs/RELEASE_PROCESS.md`.
 - Dependency constraints: update `docs/DEPENDENCIES.md`, `README.md`, `docs/TROUBLESHOOTING.md`, or `docs/agents/DEPENDENCIES.md` as relevant.
+- CI/docs/security workflow changes: update `docs/TESTING.md`, `docs/DEPENDENCIES.md`, and `docs/agents/TESTING.md`.
+- Before making the repository public: follow `docs/OPEN_SOURCE_CHECKLIST.md`, including git-history secret scanning and revoking/rotating any secret that ever appeared in commits.
 - Domain terminology changes: update `docs/GLOSSARY.md` and `docs/agents/GLOSSARY.md`.
 - Contributor workflow changes: update `CONTRIBUTING.md` and `.github/pull_request_template.md`.
 - Security reporting or sensitive-area changes: update `SECURITY.md`.
