@@ -25,7 +25,30 @@ $requiredFiles = @(
     "docs/agents/CHANGE_PROTOCOL.md",
     "docs/agents/TESTING.md",
     "docs/agents/FRONTEND_BACKEND_CONTRACT.md",
-    "docs/agents/PR_REVIEW_CHECKLIST.md"
+    "docs/agents/PR_REVIEW_CHECKLIST.md",
+    "docs/agents/HUMAN_DOCS.md",
+    "README.md",
+    "docs/README.md",
+    "docs/DEVELOPMENT.md",
+    "docs/CONFIGURATION.md",
+    "docs/API.md",
+    "docs/API_CHANGELOG.md",
+    "docs/ARCHITECTURE.md",
+    "docs/DATABASE.md",
+    "docs/SOLANA.md",
+    "docs/AUTH.md",
+    "docs/TESTING.md",
+    "docs/DEPLOYMENT.md",
+    "docs/TROUBLESHOOTING.md",
+    "docs/GLOSSARY.md",
+    "docs/OPEN_SOURCE_CHECKLIST.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    ".github/pull_request_template.md",
+    ".github/ISSUE_TEMPLATE/bug_report.md",
+    ".github/ISSUE_TEMPLATE/feature_request.md",
+    ".github/ISSUE_TEMPLATE/security_report.md"
 )
 
 $requiredSkills = @(

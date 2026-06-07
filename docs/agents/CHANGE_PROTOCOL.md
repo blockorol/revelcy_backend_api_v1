@@ -125,11 +125,33 @@ Update `docs/agents/PR_REVIEW_CHECKLIST.md` when:
 
 - Review criteria, required checks, high-risk review questions, or documentation expectations change.
 
+Update `docs/agents/HUMAN_DOCS.md` when:
+
+- Human-facing documentation files are added, removed, renamed, or change ownership.
+- Human documentation update rules change.
+
 Update `docs/agents/WORKFLOWS.md` when:
 
 - A recurring change pattern appears.
 - The steps for endpoints, migrations, auth, Solana, whitelist, or vesting change.
 - New checks become necessary for a class of change.
+
+## Human Documentation Update Rules
+
+Update human-facing docs when code changes affect developer, contributor, operator, frontend, or public API behavior.
+
+- Route/API behavior changes: update `docs/API.md`, `docs/API_CHANGELOG.md`, and possibly `README.md`.
+- Frontend-sensitive behavior changes: update `docs/API.md`, `docs/API_CHANGELOG.md`, and `docs/agents/FRONTEND_BACKEND_CONTRACT.md`.
+- Env vars/config changes: update `docs/CONFIGURATION.md`, `docs/DEVELOPMENT.md`, and `README.md` if quick start changes.
+- Database/migration changes: update `docs/DATABASE.md` and `docs/DEVELOPMENT.md` if setup or migration workflow changes.
+- Auth/JWT/wallet changes: update `docs/AUTH.md` and `SECURITY.md` if security semantics change.
+- Solana transaction changes: update `docs/SOLANA.md`, `docs/API.md`, and `docs/API_CHANGELOG.md` if responses or flows change.
+- Testing changes: update `docs/TESTING.md` and `CONTRIBUTING.md`.
+- Deployment changes: update `docs/DEPLOYMENT.md` and `docs/TROUBLESHOOTING.md`.
+- Dependency constraints: update `README.md`, `docs/TROUBLESHOOTING.md`, or `docs/agents/DEPENDENCIES.md` as relevant.
+- Domain terminology changes: update `docs/GLOSSARY.md` and `docs/agents/GLOSSARY.md`.
+- Contributor workflow changes: update `CONTRIBUTING.md` and `.github/pull_request_template.md`.
+- Security reporting or sensitive-area changes: update `SECURITY.md`.
 
 ## Verification Checklist
 

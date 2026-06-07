@@ -26,6 +26,7 @@ Before editing unfamiliar code, read the files that match the task.
 - Use `MAPPING_GUIDE.md` to answer: how should API/internal/storage models map?
 - Use `FRONTEND_BACKEND_CONTRACT.md` to answer: what backend behavior may affect the frontend?
 - Use `PR_REVIEW_CHECKLIST.md` to answer: what should a review-mode agent check?
+- Use `HUMAN_DOCS.md` to answer: which human-facing docs must be updated?
 - Use `WORKFLOWS.md` to answer: how should this kind of change be made?
 - Use `CHANGE_PROTOCOL.md` to answer: what must be checked and documented after a change?
 
@@ -112,6 +113,12 @@ For review requests, read:
 - `PR_REVIEW_CHECKLIST.md`
 - `RISK_REGISTER.md`
 - `INVARIANTS.md`
+- `HUMAN_DOCS.md`
+- `CHANGE_PROTOCOL.md`
+
+For human-facing documentation changes, read:
+
+- `HUMAN_DOCS.md`
 - `CHANGE_PROTOCOL.md`
 
 ## Interface Model Levels

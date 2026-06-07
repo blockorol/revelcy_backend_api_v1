@@ -25,6 +25,7 @@ Check for:
 - Are errors mapped safely?
 - Are secrets or local env values introduced?
 - Are tests or checks appropriate for the risk?
+- Are human-facing docs updated when public/developer behavior changed?
 - Are agent docs updated if routes, behavior, schema, architecture, or workflows changed?
 
 ## API Review
@@ -92,4 +93,3 @@ For reviews, lead with findings:
 - Suggested fix.
 
 Then include open questions, test gaps, and a short summary only after findings.
-

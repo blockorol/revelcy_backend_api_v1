@@ -126,5 +126,6 @@ For Solana transaction changes:
 - `docs/agents/MAPPING_GUIDE.md`: explicit API/internal/storage model mapping guidance.
 - `docs/agents/FRONTEND_BACKEND_CONTRACT.md`: frontend-sensitive backend contract notes.
 - `docs/agents/PR_REVIEW_CHECKLIST.md`: review-mode checklist for agents.
+- `docs/agents/HUMAN_DOCS.md`: human-facing documentation ownership and update rules.
 - `docs/agents/WORKFLOWS.md`: recipes for common code changes.
 - `docs/agents/CHANGE_PROTOCOL.md`: required checks and documentation update rules.
