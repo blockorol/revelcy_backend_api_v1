@@ -51,3 +51,5 @@ GitHub Actions includes:
 - `.github/workflows/ci.yml`: Rust checks. The format step is currently advisory/non-blocking.
 - `.github/workflows/docs.yml`: documentation structure check.
 - `.github/workflows/security.yml`: cargo audit and cargo deny. This workflow is currently advisory/non-blocking.
+
+The Rust CI workflow installs `rustfmt` and `clippy` for the pinned Rust `1.87` toolchain. The security workflow pins `cargo-audit` to `0.22.1`, the latest release line compatible with Rust `1.87`; do not unpin it without also reviewing the Rust toolchain constraint.

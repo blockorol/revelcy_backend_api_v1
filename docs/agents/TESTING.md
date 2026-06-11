@@ -24,6 +24,8 @@ git diff --check
 
 CI runs Rust checks through `.github/workflows/ci.yml` and documentation structure checks through `.github/workflows/docs.yml`.
 
+The Rust CI workflow requests the `rustfmt` and `clippy` components for Rust `1.87` before running format and clippy checks. The security workflow keeps cargo audit advisory/non-blocking and pins `cargo-audit` to `0.22.1` for Rust `1.87` compatibility.
+
 ## Current Test Assets
 
 - `test/set_mock_for_test.sql`: SQL fixture/setup helper.

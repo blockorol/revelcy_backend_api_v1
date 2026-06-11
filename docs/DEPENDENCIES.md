@@ -20,6 +20,8 @@ The project README historically notes that `sqlx 0.7` conflicts with `solana-sdk
 
 The CI toolchain intentionally uses Rust `1.87` from `.rust-toolchain.toml`. Solana-related crate compatibility is sensitive to Rust/toolchain upgrades; do not switch CI to latest stable casually.
 
+`cargo-audit` is pinned to `0.22.1` in `.github/workflows/security.yml` because newer `0.22.x` releases require Rust `1.88` or newer. Keep that pin aligned with the repository Rust toolchain.
+
 Be careful when upgrading:
 
 - SQLx.

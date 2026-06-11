@@ -8,6 +8,7 @@ This file records dependency constraints and upgrade cautions for agents.
 - Toolchain file: `.rust-toolchain.toml`, currently Rust `1.87`.
 - Main manifest: `Cargo.toml`.
 - Lockfile: `Cargo.lock`.
+- `.github/workflows/security.yml` pins `cargo-audit` to `0.22.1` because newer `0.22.x` releases require Rust `1.88` or newer.
 
 Do not update the Rust toolchain or lockfile during unrelated work. Solana-related crates are sensitive to Rust/toolchain upgrades.
 
