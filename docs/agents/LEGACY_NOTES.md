@@ -20,6 +20,7 @@ Resolved cleanup:
 
 - `src/models/premarket.rs` no longer imports premarket API DTOs for dynamic info mapping; internal-to-API conversions for those DTOs live in `src/api/premarket.rs`.
 - `src/services/user_info_service.rs` no longer imports API errors; it returns a service-owned error that `src/server/user_server.rs` maps to `ApiError`.
+- `src/services/premarket_service.rs` no longer imports `src/storage/models.rs` row structs; `src/storage/premarket_repo.rs` maps premarket storage rows to internal models before returning to services.
 
 ## `vesing_server_handler.rs` Typo
 

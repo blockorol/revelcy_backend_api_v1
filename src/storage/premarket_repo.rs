@@ -1,26 +1,74 @@
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use std::collections::HashSet;
 
-use crate::storage::models::{
-    BondingPostionDbModel,
-    HolderDbModel, HolderStats, PremarketInfoDbModel, CommunityInfoDbModel, CommunityLinkDbModel
-};
 use crate::models::premarket::{
-    PremarketInfoServiceModel,
-    BondingPostion
+    BondingPostion, CommunityInfoServiceModel, CommunityLink, CreatePremarketConceptModel,
+    CreatePremarketInfoServiceModel, HolderInfo, HolderStats, LinkType, PremarketInfoServiceModel,
+    PremarketInfoWithCommunity,
 };
-use sqlx::{PgPool};
-use uuid::Uuid;
+use crate::storage::models::{
+    BondingPostionDbModel, CommunityInfoDbModel, CommunityLinkDbModel, HolderDbModel,
+    PremarketInfoDbModel,
+};
 use chrono::Utc;
+use sqlx::PgPool;
+use uuid::Uuid;
+
+fn unix_seconds_to_utc_datetime(timestamp: i64) -> Result<chrono::DateTime<Utc>> {
+    chrono::DateTime::from_timestamp(timestamp, 0)
+        .ok_or_else(|| anyhow!("invalid concept_created_timestamp"))
+}
+
+fn link_type_to_storage(link_type: LinkType) -> String {
+    match link_type {
+        LinkType::X => "x".to_string(),
+        LinkType::Tg => "tg".to_string(),
+        LinkType::Other => "other".to_string(),
+    }
+}
+
+fn map_community_link(link: CommunityLinkDbModel) -> CommunityLink {
+    CommunityLink {
+        text: link.text,
+        url: link.url,
+        r#type: match link.r#type.as_str() {
+            "x" => LinkType::X,
+            "tg" => LinkType::Tg,
+            _ => LinkType::Other,
+        },
+    }
+}
+
+fn map_premarket_with_community(
+    premarket: PremarketInfoDbModel,
+    community: CommunityInfoDbModel,
+    links: Vec<CommunityLinkDbModel>,
+) -> Result<PremarketInfoWithCommunity> {
+    let main_info = PremarketInfoServiceModel::try_from(premarket)?;
+    let links = if links.is_empty() {
+        None
+    } else {
+        Some(links.into_iter().map(map_community_link).collect())
+    };
+
+    Ok(PremarketInfoWithCommunity {
+        main_info,
+        community: CommunityInfoServiceModel {
+            description: community.description,
+            token_banner_url: community.token_banner_url,
+            links,
+        },
+    })
+}
 
 pub async fn get_user_concept(
     pool: &PgPool,
-    creator_id: &Uuid
+    creator_id: &Uuid,
 ) -> Result<Option<PremarketInfoServiceModel>> {
     let premarket_db = sqlx::query_as::<_, PremarketInfoDbModel>(
         r#"
         SELECT * FROM premarket_info WHERE creator_id = $1 AND state = 'concept' LIMIT 1;
-        "#
+        "#,
     )
     .bind(creator_id)
     .fetch_optional(pool)
@@ -34,12 +82,13 @@ pub async fn get_user_concept(
     }
 }
 
-
 pub async fn get_premarket_id_by_bc_address(
     pool: &PgPool,
     bc_address: &str,
 ) -> Result<Option<Uuid>> {
-    let id = sqlx::query_scalar::<_, Uuid>(r#"SELECT id FROM premarket_info WHERE bc_address = $1 LIMIT 1;"#)
+    let id = sqlx::query_scalar::<_, Uuid>(
+        r#"SELECT id FROM premarket_info WHERE bc_address = $1 LIMIT 1;"#,
+    )
     .bind(bc_address)
     .fetch_optional(pool)
     .await?;
@@ -49,14 +98,14 @@ pub async fn get_premarket_id_by_bc_address(
 pub async fn get_premarket_info_by_name(
     pool: &PgPool,
     premarket_name: &str,
-) -> Result<Option<(PremarketInfoDbModel, CommunityInfoDbModel, Vec<CommunityLinkDbModel>)>> {
+) -> Result<Option<PremarketInfoWithCommunity>> {
     let premarket = sqlx::query_as::<_, PremarketInfoDbModel>(
         r#"
         SELECT *
         FROM premarket_info
         WHERE short_url_name = $1
         LIMIT 1
-        "#
+        "#,
     )
     .bind(premarket_name)
     .fetch_optional(pool)
@@ -64,7 +113,7 @@ pub async fn get_premarket_info_by_name(
 
     if let Some(pm) = &premarket {
         let community = sqlx::query_as::<_, CommunityInfoDbModel>(
-            r#"SELECT * FROM community_info WHERE id = $1"#
+            r#"SELECT * FROM community_info WHERE id = $1"#,
         )
         .bind(pm.id)
         .fetch_optional(pool)
@@ -72,7 +121,7 @@ pub async fn get_premarket_info_by_name(
 
         let (community, links_db) = if let Some(cm) = community {
             let links = sqlx::query_as::<_, CommunityLinkDbModel>(
-                r#"SELECT * FROM community_links WHERE community_info_id = $1"#
+                r#"SELECT * FROM community_links WHERE community_info_id = $1"#,
             )
             .bind(cm.id)
             .fetch_all(pool)
@@ -90,22 +139,25 @@ pub async fn get_premarket_info_by_name(
             )
         };
 
-        Ok(Some((pm.clone(), community, links_db)))
+        Ok(Some(map_premarket_with_community(
+            pm.clone(),
+            community,
+            links_db,
+        )?))
     } else {
         Ok(None)
     }
 }
 
-
 // todo: fix me to return service model with convertor simular to PremarketInfoServiceModel
 pub async fn get_premarket_info_by_bc_address(
     pool: &PgPool,
-    bc_address: &str
-) -> Result<Option<(PremarketInfoDbModel, CommunityInfoDbModel, Vec<CommunityLinkDbModel>)>> {
+    bc_address: &str,
+) -> Result<Option<PremarketInfoWithCommunity>> {
     let premarket = sqlx::query_as::<_, PremarketInfoDbModel>(
         r#"
         SELECT * FROM premarket_info WHERE bc_address = $1
-        "#
+        "#,
     )
     .bind(bc_address)
     .fetch_optional(pool)
@@ -113,52 +165,54 @@ pub async fn get_premarket_info_by_bc_address(
 
     if let Some(pm) = &premarket {
         let community = sqlx::query_as::<_, CommunityInfoDbModel>(
-    r#"
+            r#"
     SELECT * FROM community_info WHERE id = $1
-    "#
-)
-            .bind(pm.id)
-            .fetch_optional(pool)
+    "#,
+        )
+        .bind(pm.id)
+        .fetch_optional(pool)
+        .await?;
+
+        let (community, links_db) = if let Some(cm) = community {
+            let links = sqlx::query_as::<_, CommunityLinkDbModel>(
+                r#"SELECT * FROM community_links WHERE community_info_id = $1"#,
+            )
+            .bind(cm.id)
+            .fetch_all(pool)
             .await?;
 
-            let (community, links_db) = if let Some(cm) = community {
-                let links = sqlx::query_as::<_, CommunityLinkDbModel>(
-                    r#"SELECT * FROM community_links WHERE community_info_id = $1"#
-                )
-                .bind(cm.id)
-                .fetch_all(pool)
-                .await?;
+            (cm, links)
+        } else {
+            println!("community not found! set dummy");
+            (
+                CommunityInfoDbModel {
+                    id: pm.id,
+                    description: "".to_string(),
+                    token_banner_url: None,
+                },
+                vec![],
+            )
+        };
 
-                (cm, links)
-            } else {
-                println!("community not found! set dummy");
-                (
-                    CommunityInfoDbModel {
-                        id: pm.id,
-                        description: "".to_string(),
-                        token_banner_url: None,
-                    },
-                    vec![],
-                )
-            };
-
-
-        Ok(Some((pm.clone(), community, links_db)))
+        Ok(Some(map_premarket_with_community(
+            pm.clone(),
+            community,
+            links_db,
+        )?))
     } else {
         Ok(None)
     }
 }
 
-
 // todo: fix me to return service model with convertor simular to PremarketInfoServiceModel
 pub async fn get_premarket_info_by_id(
     pool: &PgPool,
-    premarket_id: &Uuid
-) -> Result<Option<(PremarketInfoDbModel, CommunityInfoDbModel, Vec<CommunityLinkDbModel>)>> {
+    premarket_id: &Uuid,
+) -> Result<Option<PremarketInfoWithCommunity>> {
     let premarket = sqlx::query_as::<_, PremarketInfoDbModel>(
         r#"
         SELECT * FROM premarket_info WHERE id = $1
-        "#
+        "#,
     )
     .bind(premarket_id)
     .fetch_optional(pool)
@@ -166,42 +220,44 @@ pub async fn get_premarket_info_by_id(
 
     if let Some(pm) = &premarket {
         let community = sqlx::query_as::<_, CommunityInfoDbModel>(
-    r#"
+            r#"
     SELECT * FROM community_info WHERE id = $1
-    "#
-)
-            .bind(pm.id)
-            .fetch_optional(pool)
+    "#,
+        )
+        .bind(pm.id)
+        .fetch_optional(pool)
+        .await?;
+
+        let (community, links_db) = if let Some(cm) = community {
+            let links = sqlx::query_as::<_, CommunityLinkDbModel>(
+                r#"SELECT * FROM community_links WHERE community_info_id = $1"#,
+            )
+            .bind(cm.id)
+            .fetch_all(pool)
             .await?;
 
-            let (community, links_db) = if let Some(cm) = community {
-                let links = sqlx::query_as::<_, CommunityLinkDbModel>(
-                    r#"SELECT * FROM community_links WHERE community_info_id = $1"#
-                )
-                .bind(cm.id)
-                .fetch_all(pool)
-                .await?;
+            (cm, links)
+        } else {
+            println!("community not found! set dummy");
+            (
+                CommunityInfoDbModel {
+                    id: pm.id,
+                    description: "".to_string(),
+                    token_banner_url: None,
+                },
+                vec![],
+            )
+        };
 
-                (cm, links)
-            } else {
-                println!("community not found! set dummy");
-                (
-                    CommunityInfoDbModel {
-                        id: pm.id,
-                        description: "".to_string(),
-                        token_banner_url: None,
-                    },
-                    vec![],
-                )
-            };
-
-
-        Ok(Some((pm.clone(), community, links_db)))
+        Ok(Some(map_premarket_with_community(
+            pm.clone(),
+            community,
+            links_db,
+        )?))
     } else {
         Ok(None)
     }
 }
-
 
 // right method -> because service works with service model. and shouldn't know about DB model
 pub async fn get_main_premarket_info_by_bc_address(
@@ -209,7 +265,7 @@ pub async fn get_main_premarket_info_by_bc_address(
     bc_address: &str,
 ) -> Result<Option<PremarketInfoServiceModel>> {
     let pm_db = sqlx::query_as::<_, PremarketInfoDbModel>(
-        r#"SELECT * FROM premarket_info WHERE bc_address = $1"#
+        r#"SELECT * FROM premarket_info WHERE bc_address = $1"#,
     )
     .bind(bc_address)
     .fetch_optional(pool)
@@ -224,7 +280,6 @@ pub async fn get_main_premarket_info_by_bc_address(
 
     Ok(Some(premarket_info))
 }
- 
 
 pub async fn get_list_public(
     pool: &PgPool,
@@ -232,7 +287,7 @@ pub async fn get_list_public(
     cursor: i64,
     limit: i64,
     states: Option<Vec<String>>,
- ) -> Result<(Vec<PremarketInfoDbModel>, i64)> {
+) -> Result<(Vec<PremarketInfoServiceModel>, i64)> {
     let limit = limit.clamp(1, 200);
     let offset = cursor.max(0);
 
@@ -300,7 +355,12 @@ pub async fn get_list_public(
     .fetch_all(pool)
     .await?;
 
-    Ok((rows, total))
+    let items = rows
+        .into_iter()
+        .map(PremarketInfoServiceModel::try_from)
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok((items, total))
 }
 
 pub async fn get_list_user_related(
@@ -309,7 +369,7 @@ pub async fn get_list_user_related(
     cursor: i64,
     limit: i64,
     states: Option<Vec<String>>,
-) -> Result<(Vec<PremarketInfoDbModel>, i64)> {
+) -> Result<(Vec<PremarketInfoServiceModel>, i64)> {
     let mut ids = HashSet::new();
 
     for id in get_premarket_ids_joined_by_user(pool, user_id).await? {
@@ -330,10 +390,7 @@ pub async fn get_list_user_related(
     get_premarkets_by_ids(pool, &ids, cursor, limit, states).await
 }
 
-async fn get_premarket_ids_joined_by_user(
-    pool: &PgPool,
-    user_id: Uuid,
-) -> Result<Vec<Uuid>> {
+async fn get_premarket_ids_joined_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Uuid>> {
     let ids = sqlx::query_scalar::<_, Uuid>(
         r#"
         SELECT DISTINCT premarket_info_id
@@ -349,10 +406,7 @@ async fn get_premarket_ids_joined_by_user(
     Ok(ids)
 }
 
-async fn get_premarket_ids_whitelisted_for_user(
-    pool: &PgPool,
-    user_id: Uuid,
-) -> Result<Vec<Uuid>> {
+async fn get_premarket_ids_whitelisted_for_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Uuid>> {
     let ids = sqlx::query_scalar::<_, Uuid>(
         r#"
         SELECT DISTINCT premarket_id
@@ -367,10 +421,7 @@ async fn get_premarket_ids_whitelisted_for_user(
     Ok(ids)
 }
 
-async fn get_premarket_ids_created_by_user(
-    pool: &PgPool,
-    user_id: Uuid,
-) -> Result<Vec<Uuid>> {
+async fn get_premarket_ids_created_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Uuid>> {
     let ids = sqlx::query_scalar::<_, Uuid>(
         r#"
         SELECT id
@@ -391,7 +442,7 @@ async fn get_premarkets_by_ids(
     cursor: i64,
     limit: i64,
     states: Option<Vec<String>>,
-) -> Result<(Vec<PremarketInfoDbModel>, i64)> {
+) -> Result<(Vec<PremarketInfoServiceModel>, i64)> {
     let limit = limit.clamp(1, 200);
     let offset = cursor.max(0);
 
@@ -431,17 +482,22 @@ async fn get_premarkets_by_ids(
     .fetch_all(pool)
     .await?;
 
-    Ok((rows, total))
-}
+    let items = rows
+        .into_iter()
+        .map(PremarketInfoServiceModel::try_from)
+        .collect::<Result<Vec<_>>>()?;
 
+    Ok((items, total))
+}
 
 pub async fn create_premarket_and_community(
     pool: &PgPool,
-    premarket: &PremarketInfoDbModel,
-    community: &CommunityInfoDbModel,
-    links: Option<Vec<CommunityLinkDbModel>>,
+    premarket: &CreatePremarketInfoServiceModel,
+    community: &CommunityInfoServiceModel,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
+    let premarket_id = premarket.id.unwrap_or_else(Uuid::new_v4);
+    let concept_created = unix_seconds_to_utc_datetime(premarket.concept_created_timestamp)?;
 
     let created_pm: PremarketInfoDbModel = sqlx::query_as::<_, PremarketInfoDbModel>(
         r#"
@@ -475,26 +531,26 @@ pub async fn create_premarket_and_community(
             $16, $17, $18, $19, $20, $21
         )
         RETURNING *
-        "#
+        "#,
     )
-    .bind(premarket.id)
-    .bind(premarket.creator_id)
-    .bind(&premarket.creator_address)
-    .bind(&premarket.bc_address)
-    .bind(&premarket.data_uri)
-    .bind(&premarket.name)
-    .bind(&premarket.description)
-    .bind(&premarket.symbol)
-    .bind(&premarket.image_url)
-    .bind(&premarket.telegram)
-    .bind(&premarket.twitter)
-    .bind(&premarket.web_site)
-    .bind(premarket.premarket_goal_sol_lamp)
-    .bind(premarket.premarket_deadline)
-    .bind(premarket.premarket_created)
-    .bind(premarket.concept_created)
-    .bind(&premarket.state)
-    .bind(&premarket.mint_address)
+    .bind(premarket_id)
+    .bind(premarket.creator.id)
+    .bind(&premarket.creator.blockchain_address)
+    .bind(&premarket.blockchain_address)
+    .bind(&premarket.token_info.data_uri)
+    .bind(&premarket.token_info.name)
+    .bind(&premarket.token_info.description)
+    .bind(&premarket.token_info.symbol)
+    .bind(&premarket.token_info.image_url)
+    .bind(&premarket.token_info.links.telegram)
+    .bind(&premarket.token_info.links.twitter)
+    .bind(&premarket.token_info.links.web_site)
+    .bind(premarket.goal.solana_lamp)
+    .bind(premarket.deadline_timestamp)
+    .bind(premarket.created_timestamp)
+    .bind(concept_created)
+    .bind(premarket.state.to_string())
+    .bind(&premarket.token_info.address)
     .bind(&premarket.is_hided)
     .bind(&premarket.is_concept_visible)
     .bind(&premarket.short_url_name)
@@ -505,7 +561,7 @@ pub async fn create_premarket_and_community(
         r#"
         INSERT INTO community_info (id, description, token_banner_url)
         VALUES ($1, $2, $3)
-        "#
+        "#,
     )
     .bind(created_pm.id)
     .bind(&community.description)
@@ -513,25 +569,23 @@ pub async fn create_premarket_and_community(
     .execute(&mut tx)
     .await?;
 
-    
-    if let Some(link_list) = links {
+    if let Some(link_list) = &community.links {
         for link in link_list {
             sqlx::query(
                 r#"
                 INSERT INTO community_links (id, community_info_id, text, url, type)
                 VALUES ($1, $2, $3, $4, $5)
-                "#
+                "#,
             )
             .bind(Uuid::new_v4())
             .bind(created_pm.id)
             .bind(&link.text)
             .bind(&link.url)
-            .bind(&link.r#type.to_string())
+            .bind(link_type_to_storage(link.r#type.clone()))
             .execute(&mut tx)
             .await?;
         }
     }
-
 
     if let Err(e) = tx.commit().await {
         eprintln!("❌ Failed to commit transaction: {:?}", e);
@@ -554,24 +608,10 @@ pub async fn hard_delete_premarket_by_id(pool: &PgPool, premarket_id: Uuid) -> R
     Ok(affected)
 }
 
-pub struct UpdateConceptPayload {
-    pub creator_address: String,
-    pub data_uri: String,
-    pub name: String,
-    pub description: String,
-    pub symbol: String,
-    pub image_url: Option<String>,
-    pub telegram: Option<String>,
-    pub twitter: Option<String>,
-    pub web_site: Option<String>,
-    pub premarket_goal_sol_lamp: i64,
-    pub premarket_deadline: i64,
-}
-
 pub async fn update_concept(
     pool: &PgPool,
     premarket_id: Uuid,
-    payload: UpdateConceptPayload,
+    concept_data: &CreatePremarketConceptModel,
 ) -> Result<u64> {
     let res = sqlx::query(
         r#"
@@ -593,23 +633,22 @@ pub async fn update_concept(
         "#,
     )
     .bind(premarket_id)
-    .bind(payload.creator_address)
-    .bind(payload.data_uri)
-    .bind(payload.name)
-    .bind(payload.description)
-    .bind(payload.symbol)
-    .bind(payload.image_url)
-    .bind(payload.telegram)
-    .bind(payload.twitter)
-    .bind(payload.web_site)
-    .bind(payload.premarket_goal_sol_lamp)
-    .bind(payload.premarket_deadline)
+    .bind(&concept_data.creator.blockchain_address)
+    .bind(&concept_data.token_info.data_uri)
+    .bind(&concept_data.token_info.name)
+    .bind(&concept_data.token_info.description)
+    .bind(&concept_data.token_info.symbol)
+    .bind(&concept_data.token_info.image_url)
+    .bind(&concept_data.token_info.links.telegram)
+    .bind(&concept_data.token_info.links.twitter)
+    .bind(&concept_data.token_info.links.web_site)
+    .bind(concept_data.goal.solana_lamp)
+    .bind(concept_data.deadline_timestamp)
     .execute(pool)
     .await?;
 
     Ok(res.rows_affected())
 }
-
 
 pub async fn update_availability_info(
     pool: &PgPool,
@@ -649,26 +688,25 @@ pub async fn update_community_info(
     bc_address: &str,
     description: &str,
     token_banner_url: Option<&str>,
-    links: Option<Vec<CommunityLinkDbModel>>,
+    links: Option<Vec<CommunityLink>>,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
 
-    let premarket_id: Uuid = sqlx::query_scalar(
-        r#"SELECT id FROM premarket_info WHERE bc_address = $1"#,
-    )
-    .bind(bc_address)
-    .fetch_one(&mut tx)
-    .await?;
+    let premarket_id: Uuid =
+        sqlx::query_scalar(r#"SELECT id FROM premarket_info WHERE bc_address = $1"#)
+            .bind(bc_address)
+            .fetch_one(&mut tx)
+            .await?;
 
     sqlx::query(
         r#"
         UPDATE community_info
         SET description = $1, token_banner_url = $2
         WHERE id = $3
-        "#
+        "#,
     )
     .bind(description)
-    .bind(token_banner_url)                    // <-- теперь Option<&str> => NULL при None
+    .bind(token_banner_url) // <-- теперь Option<&str> => NULL при None
     .bind(premarket_id)
     .execute(&mut tx)
     .await?;
@@ -684,13 +722,13 @@ pub async fn update_community_info(
                 r#"
                 INSERT INTO community_links (id, community_info_id, text, url, type)
                 VALUES ($1, $2, $3, $4, $5)
-                "#
+                "#,
             )
             .bind(Uuid::new_v4())
             .bind(premarket_id)
             .bind(&link.text)
             .bind(&link.url)
-            .bind(&link.r#type.to_string())
+            .bind(link_type_to_storage(link.r#type))
             .execute(&mut tx)
             .await?;
         }
@@ -703,7 +741,7 @@ pub async fn update_community_info(
 pub async fn insert_holder(
     pool: &PgPool,
     premarket_pubkey: &str,
-    holder: &HolderDbModel,
+    holder: &HolderInfo,
 ) -> Result<()> {
     let id_option = get_premarket_id_by_bc_address(pool, premarket_pubkey).await?;
     if let Some(id) = &id_option {
@@ -725,16 +763,16 @@ pub async fn insert_holder(
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
             "#,
         )
-        .bind(holder.id)
+        .bind(Uuid::new_v4())
         .bind(id)
-        .bind(holder.holder_id)
-        .bind(&holder.holder_wallet)
-        .bind(holder.amount_lamport)
+        .bind(holder.id)
+        .bind(&holder.wallet_address)
+        .bind(holder.amount_sol_lamp as i64)
         .bind(holder.join_timestamp)
-        .bind(holder.out_timestamp)
-        .bind(holder.claimed)
-        .bind(&holder.amount_token)
-        .bind(&holder.claimed_amount_token)
+        .bind(Option::<i64>::None)
+        .bind(false)
+        .bind(0_i64)
+        .bind(0_i64)
         .execute(pool)
         .await?;
 
@@ -752,7 +790,10 @@ pub async fn soft_delete_holder(
 ) -> Result<u64> {
     let id_option = get_premarket_id_by_bc_address(pool, premarket_pubkey).await?;
     if let Some(premarket_info_id) = id_option {
-        println!("out_timestamp:{}, premarket_info_id:{:?}, holder_wallet:{}", out_timestamp, premarket_info_id, holder_wallet);
+        println!(
+            "out_timestamp:{}, premarket_info_id:{:?}, holder_wallet:{}",
+            out_timestamp, premarket_info_id, holder_wallet
+        );
         let result = sqlx::query(
             r#"
             UPDATE premarket_holders
@@ -824,7 +865,6 @@ pub async fn get_holders_by_premarket_id(
     .fetch_all(pool)
     .await?;
 
-
     let total_active_count = sqlx::query_scalar::<_, i64>(
         r#"
         SELECT COUNT(*) FROM premarket_holders
@@ -884,6 +924,19 @@ pub async fn get_holders_by_premarket_id(
     .fetch_one(pool)
     .await?;
 
+    let holders = holders
+        .into_iter()
+        .map(|h| HolderInfo {
+            id: h.holder_id,
+            wallet_address: h.holder_wallet,
+            join_timestamp: h.join_timestamp,
+            icon_url: h.avatar_url,
+            username: h.username,
+            amount_sol_lamp: h.amount_lamport as u64,
+            claimed: h.claimed,
+        })
+        .collect();
+
     Ok(HolderStats {
         holders,
         total_active_count,
@@ -929,7 +982,7 @@ pub async fn get_holder_entry_by_premarket_id(
             h.amount_token AS amount_token,
             h.claimed_amount_token AS claimed_amount_token
         FROM holder h
-        "#
+        "#,
     )
     .bind(premarket_info_id)
     .bind(holder_wallet)
@@ -955,7 +1008,6 @@ pub async fn get_holder_entry_by_premarket_id(
         claimed_amount_token: row.claimed_amount_token,
     }))
 }
-
 
 pub async fn update_premarket_state_to_finish(
     pool: &PgPool,
@@ -1112,18 +1164,14 @@ pub async fn update_premarket_deadline(
     Ok(res.rows_affected())
 }
 
-
-pub struct UpdateLinks {
-    pub image_url: Option<String>,
-    pub data_uri: String,
-    pub telegram: Option<String>,
-    pub twitter: Option<String>,
-    pub web_site: Option<String>,
-}
 pub async fn update_all_links_premarket(
     pool: &PgPool,
     premarket_pubkey: &str,
-    liks_to_update: UpdateLinks,
+    image_url: Option<String>,
+    data_uri: String,
+    telegram: Option<String>,
+    twitter: Option<String>,
+    web_site: Option<String>,
 ) -> Result<u64> {
     let res = sqlx::query(
         r#"
@@ -1136,11 +1184,11 @@ pub async fn update_all_links_premarket(
         WHERE bc_address = $6
         "#,
     )
-    .bind(liks_to_update.image_url)
-    .bind(liks_to_update.data_uri)
-    .bind(liks_to_update.telegram)
-    .bind(liks_to_update.twitter)
-    .bind(liks_to_update.web_site)
+    .bind(image_url)
+    .bind(data_uri)
+    .bind(telegram)
+    .bind(twitter)
+    .bind(web_site)
     .bind(premarket_pubkey)
     .execute(pool)
     .await?;
@@ -1171,7 +1219,6 @@ pub async fn update_premarket_uri(
 
     Ok(res.rows_affected())
 }
-
 
 pub async fn update_holder_claimed_status(
     pool: &PgPool,

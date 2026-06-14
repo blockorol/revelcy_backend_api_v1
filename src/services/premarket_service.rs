@@ -1,22 +1,22 @@
 use crate::models::premarket::{
-    BondingPostion, HolderEntryData, HolderEntryInfo, HolderWhitelistInfo, TokenEntryInfo,
-    CreatePremarketInfoServiceModel,
-    CommunityInfoServiceModel, CommunityLink, CreatePremarketConceptModel, FullPremarketInfo, HolderInfo, LinkType, PremarketGoal, PremarketInfoServiceModel, PremarketListResult, PremarketLookupKeyType, PremarketOnchainData, PremarketOnchainUser, PremarketState, SolanaNetwork, TokenDynamicInfo, TokenInfo, TokenLinks, TxConfirmationStatusDTO, UserInfoShort
+    BondingPostion, CommunityInfoServiceModel, CommunityLink, CreatePremarketConceptModel,
+    CreatePremarketInfoServiceModel, FullPremarketInfo, HolderEntryData, HolderEntryInfo,
+    HolderInfo, HolderWhitelistInfo, LinkType, PremarketGoal, PremarketInfoServiceModel,
+    PremarketListResult, PremarketLookupKeyType, PremarketOnchainData, PremarketOnchainUser,
+    PremarketState, SolanaNetwork, TokenDynamicInfo, TokenEntryInfo, TokenInfo, TokenLinks,
+    TxConfirmationStatusDTO, UserInfoShort,
 };
 use crate::models::user::UserContextData;
 use crate::services::solana_service_v2::generate_premarket_pda;
 use crate::services::user_service;
 use crate::storage::signing_keys::{acquire_signing_key, update_premarket_pubkey};
 
-use crate::storage::models::{
-    CommunityInfoDbModel, CommunityLinkDbModel, HolderDbModel, PremarketInfoDbModel
-}; // todo: по хорошему убрать это. сервисный уровень не должен знать про модели БД. он рабоатет с моделями сервиса, и каст должен идти в репозитории
 use crate::storage::premarket_repo;
 use crate::storage::vesting_repo;
 use crate::storage::whitelist_repo;
 use actix_web::error::ErrorBadRequest;
 use actix_web::error::ErrorInternalServerError;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -24,109 +24,46 @@ use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 
-use crate::services::solana_price_service;
 use crate::models::vesting::VestingSettingsServiceModel;
+use crate::services::solana_price_service;
 
 pub const VIRTUAL_SUPPLY_RATIO: u64 = 30_000_000_000;
 pub const VIRTUAL_TOKEN_RATIO: u64 = 1_073_000_000_000_000;
 
-fn unix_seconds_to_utc_datetime(timestamp: i64) -> Result<DateTime<Utc>, actix_web::Error> {
-    DateTime::from_timestamp(timestamp, 0)
-        .ok_or_else(|| ErrorBadRequest("invalid concept_created_timestamp"))
-}
-
 pub async fn get_full_premarket_info(
     pool: &PgPool,
     key: &str,
-    key_type: PremarketLookupKeyType
+    key_type: PremarketLookupKeyType,
 ) -> Result<Option<FullPremarketInfo>, actix_web::Error> {
     let data = match key_type {
         PremarketLookupKeyType::BcAddress => {
             premarket_repo::get_premarket_info_by_bc_address(pool, key).await
         }
-        PremarketLookupKeyType::Name => {
-            premarket_repo::get_premarket_info_by_name(pool, key).await
-        }
+        PremarketLookupKeyType::Name => premarket_repo::get_premarket_info_by_name(pool, key).await,
         PremarketLookupKeyType::Id => {
-            let pm_id = Uuid::parse_str(key).map_err(|_| ErrorBadRequest("Invalid UUID format for premarket ID"))?;
+            let pm_id = Uuid::parse_str(key)
+                .map_err(|_| ErrorBadRequest("Invalid UUID format for premarket ID"))?;
             premarket_repo::get_premarket_info_by_id(pool, &pm_id).await
         }
     };
 
     match data {
-        Ok(Some((pm_db, cm_db, links_db))) => {
-            let premarket_info = PremarketInfoServiceModel {
-                id: pm_db.id,
-                blockchain_address: pm_db.bc_address,
-                short_url_name: pm_db.short_url_name,
-                creator: UserInfoShort {
-                    id: pm_db.creator_id,
-                    blockchain_address: pm_db.creator_address,
-                },
-                token_info: TokenInfo {
-                    address: pm_db.mint_address,
-                    name: pm_db.name,
-                    description: pm_db.description,
-                    symbol: pm_db.symbol,
-                    image_url: pm_db.image_url,
-                    data_uri: pm_db.data_uri,
-                    links: TokenLinks {
-                        telegram: pm_db.telegram,
-                        twitter: pm_db.twitter,
-                        web_site: pm_db.web_site,
-                    },
-                },
-                state: pm_db.state.into(),
-                goal: PremarketGoal {
-                    solana_lamp: pm_db.premarket_goal_sol_lamp,
-                },
-                is_extended: pm_db.is_extended,
-                is_hided: pm_db.is_hided,
-                is_whitelist_enabled: pm_db.is_whitelist_enabled,
-                deadline_timestamp: pm_db.premarket_deadline,
-                created_timestamp: pm_db.premarket_created,
-                concept_created_timestamp: pm_db.concept_created.timestamp(),
-                finished_timestamp: pm_db.premarket_finished,
-                is_concept_visible: pm_db.is_concept_visible,
-            };
-
-            let links = if links_db.is_empty() {
-                None
-            } else {
-                Some(
-                    links_db
-                        .into_iter()
-                        .map(|l| CommunityLink {
-                            text: l.text,
-                            url: l.url,
-                            r#type: match l.r#type.as_str() {
-                                "x" => LinkType::X,
-                                "tg" => LinkType::Tg,
-                                _ => LinkType::Other,
-                            },
-                        })
-                        .collect(),
-                )
-            };
-
-            let community_info = CommunityInfoServiceModel {
-                description: cm_db.description,
-                token_banner_url: cm_db.token_banner_url,
-                links,
-            };
-
-            let vesting_settings = vesting_repo::get_vesting_info_by_premarket_id(pool, pm_db.id)
-                .await
-                .map_err(ErrorInternalServerError)?
-                .map(|v| VestingSettingsServiceModel {
-                    enabled: v.timestamp_start.is_some() && v.timestamp_end.is_some(),
-                    vesting_period_sec: Some(v.vesting_period),
-                    unlock_at_launch_percent: Some(v.init_unlock),
-                });
+        Ok(Some(premarket_with_community)) => {
+            let vesting_settings = vesting_repo::get_vesting_info_by_premarket_id(
+                pool,
+                premarket_with_community.main_info.id,
+            )
+            .await
+            .map_err(ErrorInternalServerError)?
+            .map(|v| VestingSettingsServiceModel {
+                enabled: v.timestamp_start.is_some() && v.timestamp_end.is_some(),
+                vesting_period_sec: Some(v.vesting_period),
+                unlock_at_launch_percent: Some(v.init_unlock),
+            });
 
             Ok(Some(FullPremarketInfo {
-                main_info: premarket_info,
-                community: community_info,
+                main_info: premarket_with_community.main_info,
+                community: premarket_with_community.community,
                 vesting_settings,
             }))
         }
@@ -139,8 +76,9 @@ pub async fn get_user_concept(
     pool: &PgPool,
     creator_id: &Uuid,
 ) -> Result<Option<PremarketInfoServiceModel>, actix_web::Error> {
-    let data = premarket_repo::get_user_concept(pool, creator_id).await
-    .map_err(ErrorInternalServerError)?;
+    let data = premarket_repo::get_user_concept(pool, creator_id)
+        .await
+        .map_err(ErrorInternalServerError)?;
 
     Ok(data)
 }
@@ -149,8 +87,10 @@ pub async fn get_main_premarket_info(
     pool: &PgPool,
     bc_address: &str,
 ) -> Result<Option<PremarketInfoServiceModel>, actix_web::Error> {
-    let data: Option<PremarketInfoServiceModel> = premarket_repo::get_main_premarket_info_by_bc_address(pool, bc_address).await
-    .map_err(ErrorInternalServerError)?;
+    let data: Option<PremarketInfoServiceModel> =
+        premarket_repo::get_main_premarket_info_by_bc_address(pool, bc_address)
+            .await
+            .map_err(ErrorInternalServerError)?;
 
     Ok(data)
 }
@@ -161,7 +101,7 @@ pub async fn get_list(
     limit: i64,
     states: Option<Vec<PremarketState>>,
     only_user_token: bool,
-    user_opt: Option<UserContextData>
+    user_opt: Option<UserContextData>,
 ) -> Result<Option<PremarketListResult>, actix_web::Error> {
     let user_id_opt = user_opt.as_ref().map(|u| u.internal_id);
     let state_names = states.map(|items| {
@@ -173,7 +113,8 @@ pub async fn get_list(
     let state_names = state_names.filter(|items| !items.is_empty());
 
     let res = if only_user_token {
-        let user_id = user_id_opt.ok_or_else(|| ErrorBadRequest("user is required for only_user_token"))?;
+        let user_id =
+            user_id_opt.ok_or_else(|| ErrorBadRequest("user is required for only_user_token"))?;
         premarket_repo::get_list_user_related(pool, user_id, cursor, limit, state_names)
             .await
             .map_err(ErrorInternalServerError)?
@@ -183,45 +124,7 @@ pub async fn get_list(
             .map_err(ErrorInternalServerError)?
     };
 
-    let (rows, total) = res;
-
-    let items = rows
-        .into_iter()
-        .map(|pm_db: PremarketInfoDbModel | PremarketInfoServiceModel {
-            id: pm_db.id,
-            blockchain_address: pm_db.bc_address,
-            short_url_name: pm_db.short_url_name,
-            creator: UserInfoShort {
-                id: pm_db.creator_id,
-                blockchain_address: pm_db.creator_address,
-            },
-            token_info: TokenInfo {
-                address: pm_db.mint_address,
-                name: pm_db.name,
-                description: pm_db.description,
-                symbol: pm_db.symbol,
-                image_url: pm_db.image_url,
-                data_uri: pm_db.data_uri,
-                links: TokenLinks {
-                    telegram: pm_db.telegram,
-                    twitter: pm_db.twitter,
-                    web_site: pm_db.web_site,
-                },
-            },
-            state: pm_db.state.into(),
-            goal: PremarketGoal {
-                solana_lamp: pm_db.premarket_goal_sol_lamp,
-            },
-            is_extended: pm_db.is_extended,
-            is_hided: pm_db.is_hided,
-            is_whitelist_enabled: pm_db.is_whitelist_enabled,
-            deadline_timestamp: pm_db.premarket_deadline,
-            created_timestamp: pm_db.premarket_created,
-            concept_created_timestamp: pm_db.concept_created.timestamp(),
-            finished_timestamp: pm_db.premarket_finished,
-            is_concept_visible: pm_db.is_concept_visible,
-        })
-        .collect();
+    let (items, total) = res;
 
     Ok(Some(PremarketListResult {
         items,
@@ -237,26 +140,14 @@ pub async fn create_concept(
     let concept = get_user_concept(pool, &concept_data.creator.id).await?;
     let (concept_id, blockchain_address, mint_pubkey) = match concept {
         Some(c) => {
-            let payload = premarket_repo::UpdateConceptPayload {
-                creator_address: concept_data.creator.blockchain_address.clone(),
-                data_uri: concept_data.token_info.data_uri.clone(),
-                name: concept_data.token_info.name.clone(),
-                description: concept_data.token_info.description.clone(),
-                symbol: concept_data.token_info.symbol.clone(),
-                image_url: concept_data.token_info.image_url.clone(),
-                telegram: concept_data.token_info.links.telegram.clone(),
-                twitter: concept_data.token_info.links.twitter.clone(),
-                web_site: concept_data.token_info.links.web_site.clone(),
-                premarket_goal_sol_lamp: concept_data.goal.solana_lamp,
-                premarket_deadline: concept_data.deadline_timestamp,
-            };
-
-            let affected = premarket_repo::update_concept(pool, c.id, payload)
+            let affected = premarket_repo::update_concept(pool, c.id, concept_data)
                 .await
                 .map_err(ErrorInternalServerError)?;
 
             if affected == 0 {
-                return Err(ErrorInternalServerError("failed to update existing concept"));
+                return Err(ErrorInternalServerError(
+                    "failed to update existing concept",
+                ));
             }
 
             return Ok((c.id, c.blockchain_address));
@@ -265,26 +156,36 @@ pub async fn create_concept(
             let pm_uuid = uuid::Uuid::new_v4();
             let exp_keypair = acquire_signing_key(pool, &pm_uuid.to_string())
                 .await
-                .map_err(|_| actix_web::error::ErrorInternalServerError("acquire_signing_key failed"))?;
+                .map_err(|_| {
+                    actix_web::error::ErrorInternalServerError("acquire_signing_key failed")
+                })?;
 
-            let keypair = match exp_keypair  {
+            let keypair = match exp_keypair {
                 Some(k) => k,
-                None => return Err(actix_web::error::ErrorInternalServerError("No one mint keypair")),
+                None => {
+                    return Err(actix_web::error::ErrorInternalServerError(
+                        "No one mint keypair",
+                    ))
+                }
             };
 
             let pda = generate_premarket_pda(network, &keypair.priv_key)
                 .await
-                .map_err(|_| actix_web::error::ErrorInternalServerError("generate_premarket_pda failed"))?;
+                .map_err(|_| {
+                    actix_web::error::ErrorInternalServerError("generate_premarket_pda failed")
+                })?;
 
             update_premarket_pubkey(pool, &pda.to_string(), &keypair.id)
                 .await
-                .map_err(|_| actix_web::error::ErrorInternalServerError("update_premarket_pubkey failed"))?;
+                .map_err(|_| {
+                    actix_web::error::ErrorInternalServerError("update_premarket_pubkey failed")
+                })?;
 
             (pm_uuid, pda.to_string(), keypair.pub_key)
         }
     };
 
-    let premarket = CreatePremarketInfoServiceModel{
+    let premarket = CreatePremarketInfoServiceModel {
         id: Some(concept_id),
         blockchain_address: blockchain_address.clone(),
         goal: concept_data.goal.clone(),
@@ -306,10 +207,10 @@ pub async fn create_concept(
             symbol: concept_data.token_info.symbol.clone(),
             image_url: concept_data.token_info.image_url.clone(),
             data_uri: concept_data.token_info.data_uri.clone(),
-            links: concept_data.token_info.links.clone()
-        }
+            links: concept_data.token_info.links.clone(),
+        },
     };
-    let community = CommunityInfoServiceModel{
+    let community = CommunityInfoServiceModel {
         description: "".to_string(),
         token_banner_url: None,
         links: None,
@@ -324,65 +225,12 @@ pub async fn create_full_premarket_info(
     premarket: CreatePremarketInfoServiceModel,
     community: CommunityInfoServiceModel,
 ) -> Result<uuid::Uuid, actix_web::Error> {
-    let pm_id = match premarket.id {
-        Some(id) => id,
-        None => uuid::Uuid::new_v4()
-    };
+    let pm_id = premarket.id.unwrap_or_else(uuid::Uuid::new_v4);
 
-    let premarket_db: PremarketInfoDbModel = PremarketInfoDbModel {
-        id: pm_id,
-        bc_address: premarket.blockchain_address,
-        short_url_name: premarket.short_url_name,
-        creator_address: premarket.creator.blockchain_address,
-        creator_id: premarket.creator.id,
-        mint_address: premarket.token_info.address,
-        name: premarket.token_info.name,
-        description: premarket.token_info.description,
-        symbol: premarket.token_info.symbol,
-        image_url: premarket.token_info.image_url,
-        data_uri: premarket.token_info.data_uri,
-        telegram: premarket.token_info.links.telegram,
-        twitter: premarket.token_info.links.twitter,
-        web_site: premarket.token_info.links.web_site,
-        premarket_goal_sol_lamp: premarket.goal.solana_lamp,
-        premarket_deadline: premarket.deadline_timestamp,
-        premarket_created: premarket.created_timestamp,
-        concept_created: unix_seconds_to_utc_datetime(premarket.concept_created_timestamp)?,
-        premarket_finished: premarket.finished_timestamp,
-        is_extended: false,
-        is_hided: premarket.is_hided,
-        is_concept_visible: premarket.is_concept_visible,
-        is_whitelist_enabled: premarket.is_whitelist_enabled,
-        state: premarket.state.to_string(),
-    };
-
-    let community_db = CommunityInfoDbModel {
-        id: premarket_db.id,
-        description: community.description,
-        token_banner_url: community.token_banner_url,
-    };
-
-    let link_db = community.links.map(|links_vec| {
-        links_vec
-            .into_iter()
-            .map(|l: CommunityLink| CommunityLinkDbModel {
-                id: uuid::Uuid::new_v4(),
-                community_info_id: Uuid::nil(),
-                text: l.text,
-                url: l.url,
-                r#type: match l.r#type {
-                    LinkType::X => "x".to_string(),
-                    LinkType::Tg => "tg".to_string(),
-                    _ => "other".to_string(),
-                },
-            })
-            .collect::<Vec<_>>()
-    });
-
-    premarket_repo::create_premarket_and_community(pool, &premarket_db, &community_db, link_db)
+    premarket_repo::create_premarket_and_community(pool, &premarket, &community)
         .await
         .map_err(ErrorInternalServerError)?;
-    
+
     Ok(pm_id)
 }
 
@@ -411,29 +259,14 @@ pub async fn update_community_info(
     bc_address: &str,
     community: CommunityInfoServiceModel,
 ) -> Result<(), actix_web::Error> {
-    let link_db = community.links.map(|links_vec| {
-        links_vec
-            .into_iter()
-            .map(|l: CommunityLink| CommunityLinkDbModel {
-                id: uuid::Uuid::new_v4(),
-                community_info_id: Uuid::nil(),
-                text: l.text,
-                url: l.url,
-                r#type: match l.r#type {
-                    LinkType::X => "x".to_string(),
-                    LinkType::Tg => "tg".to_string(),
-                    _ => "other".to_string(),
-                },
-            })
-            .collect::<Vec<_>>()
-    });
+    let links = community.links;
 
     premarket_repo::update_community_info(
         pool,
         bc_address, // было &bc_address
         &community.description,
         community.token_banner_url.as_deref(), // Option<String> -> Option<&str>
-        link_db,                               // было &link_db
+        links,
     )
     .await
     .map_err(ErrorInternalServerError)
@@ -453,20 +286,6 @@ pub async fn get_dynamic_info(
         .await
         .map_err(ErrorInternalServerError)?;
 
-    let holder_service_list: Vec<HolderInfo> = holder_data
-        .holders
-        .into_iter()
-        .map(|h| HolderInfo {
-            id: h.holder_id,
-            wallet_address: h.holder_wallet,
-            join_timestamp: h.join_timestamp,
-            icon_url: h.avatar_url,
-            username: h.username,
-            amount_sol_lamp: h.amount_lamport as u64,
-            claimed: h.claimed,
-        })
-        .collect();
-
     let current_price_lamp = get_price_by_market_cap(holder_data.reserved_sol_lamp as u64).await;
 
     let price_24h_ago_lamp =
@@ -482,7 +301,10 @@ pub async fn get_dynamic_info(
 
     let now = Utc::now().timestamp();
     let total_tokens_i64 = holder_data.total_token_amount.max(0);
-    let total_claimed_i64 = holder_data.total_claimed_token_amount.max(0).min(total_tokens_i64);
+    let total_claimed_i64 = holder_data
+        .total_claimed_token_amount
+        .max(0)
+        .min(total_tokens_i64);
     let total_tokens = total_tokens_i64 as u64;
     let total_claimed = total_claimed_i64 as u64;
 
@@ -521,7 +343,7 @@ pub async fn get_dynamic_info(
         current_price_lamp,
         reserved_sol_lamp: holder_data.reserved_sol_lamp as u64,
         change_24h,
-        holders: holder_service_list,
+        holders: holder_data.holders,
         vesting_info,
     })
 }
@@ -531,9 +353,12 @@ pub async fn get_holder_entry_info(
     premarket_pubkey: &str,
     holder_pubkey: &str,
 ) -> Result<HolderEntryInfo, actix_web::Error> {
-    let premarket_id = match premarket_repo::get_premarket_id_by_bc_address(pool, premarket_pubkey).await.map_err(ErrorInternalServerError)? {
+    let premarket_id = match premarket_repo::get_premarket_id_by_bc_address(pool, premarket_pubkey)
+        .await
+        .map_err(ErrorInternalServerError)?
+    {
         Some(id) => id,
-        None => return Err(ErrorBadRequest("premarket not found"))
+        None => return Err(ErrorBadRequest("premarket not found")),
     };
 
     let pm_opt = premarket_repo::get_main_premarket_info_by_bc_address(pool, premarket_pubkey)
@@ -544,10 +369,10 @@ pub async fn get_holder_entry_info(
         None => return Err(ErrorBadRequest("premarket not found")),
     };
 
-    let holder_entry_data_opt = 
+    let holder_entry_data_opt =
         premarket_repo::get_holder_entry_by_premarket_id(pool, premarket_id, holder_pubkey)
             .await
-        .map_err(ErrorInternalServerError)?;
+            .map_err(ErrorInternalServerError)?;
 
     let whitelist = {
         if pm.is_whitelist_enabled {
@@ -608,10 +433,7 @@ pub async fn get_holder_entry_info(
         None
     };
 
-    Ok(HolderEntryInfo {
-        entry,
-        whitelist,
-    })
+    Ok(HolderEntryInfo { entry, whitelist })
 }
 
 fn calculate_vested_dec(
@@ -650,16 +472,29 @@ pub async fn set_premarket_state(
     new_state: PremarketState,
     update_time: i64,
 ) -> Result<(), actix_web::Error> {
-
     let affected = match new_state {
         PremarketState::Canceled | PremarketState::Finished => {
-            premarket_repo::update_premarket_state_to_finish(pool, premarket_pubkey, &new_state.to_string(), update_time).await.map_err(actix_web::error::ErrorInternalServerError)?
+            premarket_repo::update_premarket_state_to_finish(
+                pool,
+                premarket_pubkey,
+                &new_state.to_string(),
+                update_time,
+            )
+            .await
+            .map_err(actix_web::error::ErrorInternalServerError)?
         }
-        PremarketState::Premarket => {
-            premarket_repo::update_premarket_state_to_start(pool, premarket_pubkey, &new_state.to_string(), update_time).await.map_err(actix_web::error::ErrorInternalServerError)?
-        }
+        PremarketState::Premarket => premarket_repo::update_premarket_state_to_start(
+            pool,
+            premarket_pubkey,
+            &new_state.to_string(),
+            update_time,
+        )
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?,
         PremarketState::Concept => {
-            premarket_repo::update_premarket_state(pool, premarket_pubkey, &new_state.to_string()).await.map_err(actix_web::error::ErrorInternalServerError)?
+            premarket_repo::update_premarket_state(pool, premarket_pubkey, &new_state.to_string())
+                .await
+                .map_err(actix_web::error::ErrorInternalServerError)?
         }
     };
 
@@ -678,21 +513,6 @@ pub async fn add_holder(
     premarket_pubkey: &str,
     holder: HolderInfo,
 ) -> Result<(), actix_web::Error> {
-    let holder = HolderDbModel {
-        id: uuid::Uuid::new_v4(),
-        premarket_info_id: Uuid::nil(),
-        holder_wallet: holder.wallet_address,
-        holder_id: holder.id,
-        join_timestamp: holder.join_timestamp,
-        amount_lamport: holder.amount_sol_lamp as i64,
-        out_timestamp: None,
-        claimed: false,
-        avatar_url: None,
-        username: None,
-        amount_token: 0,
-        claimed_amount_token: 0,
-        updated_at: Utc::now(),
-    };
     premarket_repo::insert_holder(pool, premarket_pubkey, &holder)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)
@@ -868,7 +688,7 @@ pub async fn get_holder_entry_price(
 
 async fn calculate_entry_price(real_lamp_amount: u64) -> f64 {
     let current_sol_price = solana_price_service::get_sol_price().await;
-    
+
     let real_sol_amount: f64 = real_lamp_amount as f64 / 1_000_000_000.0;
 
     let real_token_bought_amount: u64 =
@@ -911,16 +731,17 @@ pub async fn update_premarket_links(
     twitter: Option<String>,
     web_site: Option<String>,
 ) -> Result<(), actix_web::Error> {
-    let payload = premarket_repo::UpdateLinks {
-        image_url:image_url,
-        data_uri: data_uri,
-        telegram: telegram,
-        twitter: twitter,
-        web_site: web_site,
-    };
-    let affected = premarket_repo::update_all_links_premarket(pool, premarket_pubkey, payload)
-        .await
-        .map_err(ErrorInternalServerError)?;
+    let affected = premarket_repo::update_all_links_premarket(
+        pool,
+        premarket_pubkey,
+        image_url,
+        data_uri,
+        telegram,
+        twitter,
+        web_site,
+    )
+    .await
+    .map_err(ErrorInternalServerError)?;
 
     if affected == 0 {
         return Err(actix_web::error::ErrorNotFound(format!(
@@ -934,10 +755,10 @@ pub async fn update_premarket_links(
 
 pub async fn update_premarket_uri(
     pool: &PgPool,
-    premarket_id: &Uuid, 
+    premarket_id: &Uuid,
     new_uri: &String,
     new_image_url: &String,
-) -> Result<(), actix_web::Error>  {
+) -> Result<(), actix_web::Error> {
     let affected = premarket_repo::update_premarket_uri(pool, premarket_id, new_uri, new_image_url)
         .await
         .map_err(ErrorInternalServerError)?;
@@ -958,14 +779,14 @@ pub async fn user_claimed_token(
     user_wallet: &str,
 ) -> Result<(), actix_web::Error> {
     let affected = premarket_repo::update_holder_claimed_status(
-                pool,
-                &premarket_pubkey.to_string(),
-                user_wallet,
-                true,
-            )
-            .await
-            .map_err(ErrorInternalServerError)?;
-    
+        pool,
+        &premarket_pubkey.to_string(),
+        user_wallet,
+        true,
+    )
+    .await
+    .map_err(ErrorInternalServerError)?;
+
     if affected == 0 {
         return Err(actix_web::error::ErrorNotFound(format!(
             "premarket '{}' or holder '{}' not found",
@@ -976,7 +797,7 @@ pub async fn user_claimed_token(
     Ok(())
 }
 
-fn calculate_token_amount(input: BondingPostion ) -> u64 {
+fn calculate_token_amount(input: BondingPostion) -> u64 {
     let amount_sol_in_curve_lamp = get_in_curve(input.amount_sol_lamp);
     let before_amount_sol_in_curve_lamp = get_in_curve(input.before_amount_sol_lamp);
 
@@ -996,19 +817,11 @@ fn get_in_curve(amount: u64) -> u64 {
 }
 
 fn get_after_pump_fee(amount: u64) -> u64 {
-    return amount
-        .checked_mul(985)
-        .unwrap()
-        .checked_div(1000)
-        .unwrap();
+    return amount.checked_mul(985).unwrap().checked_div(1000).unwrap();
 }
 
 fn get_after_revelcy_fee(amount: u64) -> u64 {
-    return amount
-        .checked_mul(985)
-        .unwrap()
-        .checked_div(1000)
-        .unwrap();
+    return amount.checked_mul(985).unwrap().checked_div(1000).unwrap();
 }
 
 /// Given:
@@ -1021,11 +834,7 @@ fn get_after_revelcy_fee(amount: u64) -> u64 {
 ///     X  = virtual_sol_reserves (SOL‐side reserve, in lamports)
 ///     Y  = virtual_token_reserves (token‐side reserve, in smallest units)
 ///     ΔX = sol_in (incoming SOL, in lamports)
-fn tokens_out_from_sol(
-    sol_in: u64,
-    virtual_sol_reserves: u64,
-    virtual_token_reserves: u64,
-) -> u64 {
+fn tokens_out_from_sol(sol_in: u64, virtual_sol_reserves: u64, virtual_token_reserves: u64) -> u64 {
     // Do multiplication in u128 to avoid overflow
     let numerator: u128 = (virtual_token_reserves as u128) * (sol_in as u128);
     let denominator: u128 = (virtual_sol_reserves as u128) + (sol_in as u128);

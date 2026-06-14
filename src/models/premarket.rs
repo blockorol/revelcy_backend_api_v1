@@ -247,6 +247,11 @@ pub struct FullPremarketInfo {
     pub vesting_settings: Option<VestingSettingsServiceModel>,
 }
 
+pub struct PremarketInfoWithCommunity {
+    pub main_info: PremarketInfoServiceModel,
+    pub community: CommunityInfoServiceModel,
+}
+
 pub struct PremarketListResult {
     pub items: Vec<PremarketInfoServiceModel>,
     pub total: Option<i64>,
@@ -260,6 +265,15 @@ pub struct TokenDynamicInfo {
     pub change_24h: f64,
     pub holders: Vec<HolderInfo>,
     pub vesting_info: Option<DynamicVestingInfo>,
+}
+
+pub struct HolderStats {
+    pub holders: Vec<HolderInfo>,
+    pub total_active_count: i64,
+    pub reserved_sol_lamp: i64,
+    pub reserved_sol_24h_before_lamp: i64,
+    pub total_token_amount: i64,
+    pub total_claimed_token_amount: i64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

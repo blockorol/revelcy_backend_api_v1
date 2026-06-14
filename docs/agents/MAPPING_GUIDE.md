@@ -30,6 +30,7 @@ Good:
 - `src/server` uses `src/api` for request/response and `src/models` for service calls.
 - `src/services` uses `src/models` and calls `src/storage`.
 - `src/storage` uses storage models and returns persistence results.
+- Repository functions that cross into `src/services` may return internal/domain models after mapping SQL rows inside `src/storage`.
 - `src/api` defines external shapes without importing storage rows.
 
 Avoid:
