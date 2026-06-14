@@ -1,21 +1,16 @@
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use std::str::FromStr;
 use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
+use uuid::Uuid;
 
-use crate::api::premarket::{
-    DynamicVestingInfoDTO, HolderInfoDTO, TokenDynamicInfoDTO, TokenEntryInfo as TokenEntryInfoDTO,
-};
 use crate::models::vesting::VestingSettingsServiceModel;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PremarketLookupKeyType {
     BcAddress,
     Name,
-    Id
+    Id,
 }
-
-
 
 #[derive(Debug, Clone)]
 pub struct BuildJoinTxParams {
@@ -32,12 +27,12 @@ pub struct BuildOutTxParams {
     pub premarket: solana_sdk::pubkey::Pubkey,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct BuildFinishTxParams {
     pub network: SolanaNetwork,
     pub user: solana_sdk::pubkey::Pubkey,
     pub premarket: solana_sdk::pubkey::Pubkey,
+    pub mint: solana_sdk::pubkey::Pubkey,
     pub timestamp_start: i64,
     pub timestamp_end: i64,
     pub init_unlock: u64,
@@ -72,7 +67,6 @@ pub struct GetPremarketDataParams {
     pub premarket: solana_sdk::pubkey::Pubkey,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct BuildPremarketTxParams {
     pub premarket_pda: Pubkey,
@@ -98,7 +92,7 @@ pub struct BuiltTx {
 pub struct BuiltTxCreation {
     pub tx_base64: String,
     pub premarket_pda: Pubkey,
-    pub mint_address: String
+    pub mint_address: String,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -106,7 +100,6 @@ pub enum SolanaNetwork {
     Devnet,
     MainnetBeta,
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CreatePremarketConceptModel {
@@ -165,8 +158,7 @@ pub struct UserInfoShort {
     pub blockchain_address: String,
 }
 
-
-#[derive(Serialize, Deserialize, Copy, Debug, Clone,PartialEq)]
+#[derive(Serialize, Deserialize, Copy, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum PremarketState {
     Concept,
@@ -209,7 +201,6 @@ pub struct PremarketGoal {
     pub solana_lamp: i64,
 }
 
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TokenInfo {
     pub address: String,
@@ -221,12 +212,10 @@ pub struct TokenInfo {
     pub links: TokenLinks,
 }
 
-
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TokenLinks {
     pub telegram: Option<String>,
-    pub twitter: Option<String>, 
+    pub twitter: Option<String>,
     pub web_site: Option<String>,
 }
 
@@ -259,6 +248,10 @@ pub struct FullPremarketInfo {
     pub vesting_settings: Option<VestingSettingsServiceModel>,
 }
 
+pub struct PremarketInfoWithCommunity {
+    pub main_info: PremarketInfoServiceModel,
+    pub community: CommunityInfoServiceModel,
+}
 
 pub struct PremarketListResult {
     pub items: Vec<PremarketInfoServiceModel>,
@@ -273,6 +266,15 @@ pub struct TokenDynamicInfo {
     pub change_24h: f64,
     pub holders: Vec<HolderInfo>,
     pub vesting_info: Option<DynamicVestingInfo>,
+}
+
+pub struct HolderStats {
+    pub holders: Vec<HolderInfo>,
+    pub total_active_count: i64,
+    pub reserved_sol_lamp: i64,
+    pub reserved_sol_24h_before_lamp: i64,
+    pub total_token_amount: i64,
+    pub total_claimed_token_amount: i64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -309,9 +311,7 @@ pub struct TokenEntryInfo {
     pub total_dec: u64,
     pub claimed_dec: u64,
     pub vested_dec: u64,
-
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TxConfirmationStatusDTO {
@@ -319,7 +319,6 @@ pub enum TxConfirmationStatusDTO {
     Confirmed,
     Failed,
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HolderInfo {
@@ -331,58 +330,11 @@ pub struct HolderInfo {
     pub amount_sol_lamp: u64,
     pub claimed: bool,
 }
-impl From<TokenDynamicInfo> for TokenDynamicInfoDTO {
-    fn from(info: TokenDynamicInfo) -> Self {
-        TokenDynamicInfoDTO {
-            holders_count: info.holders_count,
-            current_price_lamp: info.current_price_lamp,
-            reserved_sol_lamp: info.reserved_sol_lamp,
-            change_24h: info.change_24h,
-            holders: info.holders.into_iter().map(Into::into).collect(),
-            vesting_info: info.vesting_info.map(Into::into),
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DynamicVestingInfo {
     pub starttime_ms: Option<i64>,
     pub endtime_ms: Option<i64>,
     pub entry: TokenEntryInfo,
-}
-
-impl From<TokenEntryInfo> for TokenEntryInfoDTO {
-    fn from(info: TokenEntryInfo) -> Self {
-        TokenEntryInfoDTO {
-            total_dec: info.total_dec,
-            vested_dec: info.vested_dec,
-            claimed_dec: info.claimed_dec,
-        }
-    }
-}
-
-impl From<DynamicVestingInfo> for DynamicVestingInfoDTO {
-    fn from(info: DynamicVestingInfo) -> Self {
-        DynamicVestingInfoDTO {
-            starttime_ms: info.starttime_ms,
-            endtime_ms: info.endtime_ms,
-            entry: info.entry.into(),
-        }
-    }
-}
-
-impl From<HolderInfo> for HolderInfoDTO {
-    fn from(holder: HolderInfo) -> Self {
-        HolderInfoDTO {
-            id: holder.id,
-            wallet_address: holder.wallet_address,
-            join_timestamp: holder.join_timestamp,
-            icon_url: holder.icon_url,
-            username: holder.username,
-            amount_sol_lamp: holder.amount_sol_lamp,
-            claimed: holder.claimed,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -400,6 +352,32 @@ pub struct PremarketOnchainData {
     pub goal_lamports: u64,
     pub max_lamports: u64,
     pub mint: Pubkey,
+}
+
+#[derive(Debug, Clone)]
+pub struct PublicPremarketInfo {
+    pub users: Vec<(String, u64, bool)>,
+    pub end_timestamp: i64,
+    pub goal_sol: u64,
+    pub max_sol: u64,
+    pub mint: String,
+    pub name: String,
+    pub symbol: String,
+    pub uri: String,
+    pub creator: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct MintKeyMaterial {
+    pub pub_key: String,
+    pub priv_key: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AcquiredMintKeyMaterial {
+    pub id: Uuid,
+    pub pub_key: String,
+    pub priv_key: String,
 }
 
 #[derive(Debug, Deserialize)]

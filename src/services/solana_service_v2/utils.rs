@@ -4,11 +4,8 @@ use bs58;
 use sha2::{Digest, Sha256};
 use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
 use solana_sdk::{
-    commitment_config::CommitmentConfig,
-    hash::Hash,
-    instruction::CompiledInstruction,
-    message::Message,
-    pubkey::Pubkey,
+    commitment_config::CommitmentConfig, hash::Hash, instruction::CompiledInstruction,
+    message::Message, pubkey::Pubkey,
 };
 use std::str::FromStr;
 
@@ -39,19 +36,34 @@ pub fn anchor_sighash_global(name: &str) -> [u8; 8] {
     out
 }
 
-pub async fn get_valid_latest_blockhash(client: &AsyncRpcClient, max_retries: usize) -> Result<Hash> {
+pub async fn get_valid_latest_blockhash(
+    client: &AsyncRpcClient,
+    max_retries: usize,
+) -> Result<Hash> {
     let mut retries = 0;
-    let mut recent_blockhash = client.get_latest_blockhash().await.context("Failed to get blockhash")?;
+    let mut recent_blockhash = client
+        .get_latest_blockhash()
+        .await
+        .context("Failed to get blockhash")?;
 
     loop {
-        match client.is_blockhash_valid(&recent_blockhash, CommitmentConfig::processed()).await {
+        match client
+            .is_blockhash_valid(&recent_blockhash, CommitmentConfig::processed())
+            .await
+        {
             Ok(true) => return Ok(recent_blockhash),
             Ok(false) | Err(_) => {
                 retries += 1;
                 if retries >= max_retries {
-                    return Err(anyhow!("Blockhash still invalid after {} retries", max_retries));
+                    return Err(anyhow!(
+                        "Blockhash still invalid after {} retries",
+                        max_retries
+                    ));
                 }
-                recent_blockhash = client.get_latest_blockhash().await.context("Failed to get blockhash")?;
+                recent_blockhash = client
+                    .get_latest_blockhash()
+                    .await
+                    .context("Failed to get blockhash")?;
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
         }
@@ -77,7 +89,9 @@ pub fn find_anchor_instruction<'a>(
         if ix.data.len() < 8 {
             continue;
         }
-        let sighash: [u8; 8] = ix.data[0..8].try_into().unwrap();
+        let sighash: [u8; 8] = ix.data[0..8]
+            .try_into()
+            .context("invalid anchor sighash bytes")?;
         if &sighash == expected_sighash {
             return Ok(ix);
         }
@@ -98,31 +112,53 @@ pub fn parse_privkey_64(s: &str) -> Result<Vec<u8>> {
 
     if s.starts_with('[') && s.ends_with(']') {
         let v: Vec<u8> = serde_json::from_str(s).context("invalid JSON priv_key")?;
-        anyhow::ensure!(v.len() == 64, "json priv_key must be 64 bytes, got {}", v.len());
+        anyhow::ensure!(
+            v.len() == 64,
+            "json priv_key must be 64 bytes, got {}",
+            v.len()
+        );
         return Ok(v);
     }
 
     if s.contains(',') && !s.contains(':') && !s.contains('[') && !s.contains(']') {
         let v: Result<Vec<u8>, _> = s.split(',').map(|x| x.trim().parse::<u8>()).collect();
         let v = v.context("invalid CSV priv_key (non-numeric token)")?;
-        anyhow::ensure!(v.len() == 64, "csv priv_key must be 64 bytes, got {}", v.len());
+        anyhow::ensure!(
+            v.len() == 64,
+            "csv priv_key must be 64 bytes, got {}",
+            v.len()
+        );
         return Ok(v);
     }
 
     if let Some(b64) = s.strip_prefix("base64:") {
         let v = BASE64.decode(b64).context("invalid base64 priv_key")?;
-        anyhow::ensure!(v.len() == 64, "base64 priv_key must be 64 bytes, got {}", v.len());
+        anyhow::ensure!(
+            v.len() == 64,
+            "base64 priv_key must be 64 bytes, got {}",
+            v.len()
+        );
         return Ok(v);
     }
 
     if s.contains('=') || s.contains('/') || s.contains('+') {
         if let Ok(v) = BASE64.decode(s) {
-            anyhow::ensure!(v.len() == 64, "base64 priv_key must be 64 bytes, got {}", v.len());
+            anyhow::ensure!(
+                v.len() == 64,
+                "base64 priv_key must be 64 bytes, got {}",
+                v.len()
+            );
             return Ok(v);
         }
     }
 
-    let v = bs58::decode(s).into_vec().context("invalid base58 priv_key")?;
-    anyhow::ensure!(v.len() == 64, "base58 priv_key must be 64 bytes, got {}", v.len());
+    let v = bs58::decode(s)
+        .into_vec()
+        .context("invalid base58 priv_key")?;
+    anyhow::ensure!(
+        v.len() == 64,
+        "base58 priv_key must be 64 bytes, got {}",
+        v.len()
+    );
     Ok(v)
 }

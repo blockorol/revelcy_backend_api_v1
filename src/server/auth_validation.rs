@@ -1,12 +1,12 @@
 // src/server/auth_validation.rs
 
-use actix_web::{HttpRequest, HttpMessage};
+use actix_web::{HttpMessage, HttpRequest};
 use solana_sdk::pubkey::Pubkey;
 
 use crate::api::errors::ApiError;
-use crate::services::jwt_service;
 use crate::models::premarket::SolanaNetwork;
 use crate::models::user::UserContextData;
+use crate::services::jwt_service;
 
 pub struct BaseRequestContext {
     pub network: SolanaNetwork,
@@ -30,8 +30,7 @@ pub fn extract_user(req: &HttpRequest) -> Result<UserContextData, ApiError> {
         .as_deref()
         .ok_or_else(ApiError::auth_missing_wallet)?;
 
-    let token_pk = Pubkey::from_str(token_pk_str)
-        .map_err(|_| ApiError::invalid_user_pubkey())?;
+    let token_pk = Pubkey::from_str(token_pk_str).map_err(|_| ApiError::invalid_user_pubkey())?;
 
     Ok(UserContextData {
         internal_id: token_data.user_id,
@@ -48,8 +47,7 @@ pub fn validate_base_request(
     use std::str::FromStr;
 
     // ─── NETWORK ────────────────────────────────────────────
-    let network = SolanaNetwork::try_from(network_str)
-        .map_err(|_| ApiError::invalid_network())?;
+    let network = SolanaNetwork::try_from(network_str).map_err(|_| ApiError::invalid_network())?;
 
     // ─── USER FROM JWT ───────────────────────────────────────
     let user = extract_user(req)?;
@@ -57,8 +55,7 @@ pub fn validate_base_request(
     // ─── OPTIONAL USER PUBKEY OVERRIDE CHECK ─────────────────
     if let Some(req_pk_str) = user_pubkey_str {
         // validate request pubkey format
-        let req_pk = Pubkey::from_str(req_pk_str)
-            .map_err(|_| ApiError::invalid_user_pubkey())?;
+        let req_pk = Pubkey::from_str(req_pk_str).map_err(|_| ApiError::invalid_user_pubkey())?;
 
         // must match token wallet
         if req_pk != user.current_pubkey {

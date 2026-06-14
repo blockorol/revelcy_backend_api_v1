@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-
 // ======= HTTP DTO User =======
 
 #[derive(Debug, Clone, Deserialize)]
@@ -8,7 +7,6 @@ pub struct SearchUsersRequestDto {
     pub input: String,
     pub limit: i64,
 }
-
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchUsersResponseDto {
@@ -66,7 +64,6 @@ pub struct AddAvatarResponseDto {
     pub jwt: String,
 }
 
-
 // ======= HTTP DTO Additional info =======
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -97,8 +94,8 @@ pub struct ClientContextDTO {
     pub pixel_ratio: Option<f32>,
 
     // storage identifiers
-    pub install_id: Option<String>,    // for RN/Expo: persisted id
-    pub install_id_source: Option<String>,    // for RN/Expo: persisted id
+    pub install_id: Option<String>,        // for RN/Expo: persisted id
+    pub install_id_source: Option<String>, // for RN/Expo: persisted id
 
     // phantom
     pub phantom_version: Option<String>, // if you can detect it

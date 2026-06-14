@@ -47,6 +47,7 @@ Do not introduce new code that passes API DTOs directly into storage or returns 
 - Map internal errors to API responses intentionally.
 - Do not leak secrets or raw internal details through public errors.
 - See `ERROR_HANDLING.md`.
+- Use `tracing` macros for runtime logs; do not add new `println!`, `eprintln!`, or `dbg!` calls in application paths.
 
 ## Dependencies
 

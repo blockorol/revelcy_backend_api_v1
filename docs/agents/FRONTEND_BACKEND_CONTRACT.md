@@ -76,6 +76,7 @@ Risks:
 - Encoded transaction data shape changes.
 - Required accounts/signers change without frontend adjustment.
 - Network expectations change.
+- Error response shape changes can break transaction form handling. `POST /premarket/tx/kill` now uses structured `ApiError` JSON for validation/auth/build failures.
 
 ## Change Checklist
 

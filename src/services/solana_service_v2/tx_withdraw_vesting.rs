@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bincode;
-use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     message::Message,
@@ -10,7 +9,6 @@ use solana_sdk::{
     system_program,
     transaction::Transaction,
 };
-use std::time::Duration;
 
 use spl_associated_token_account::get_associated_token_address;
 use spl_associated_token_account::ID as associated_token_program_id;
@@ -21,8 +19,11 @@ use crate::services::solana_service_v2::vesting::generate_vesting_pda;
 use crate::models::premarket::{BuildWithdrawVestingTxParams, BuiltTx, SolanaNetwork};
 
 use super::constants::WITHDRAW_VESTING_METHOD_NAME;
-use super::env::{program_id_for, read_revelcy_auth, rpc_url};
-use super::utils::{anchor_sighash_global, find_anchor_instruction, get_valid_latest_blockhash, resolve_account};
+use super::env::{program_id_for, read_revelcy_auth};
+use super::solana_methods::make_async_rpc_client;
+use super::utils::{
+    anchor_sighash_global, find_anchor_instruction, get_valid_latest_blockhash, resolve_account,
+};
 
 #[derive(Debug, Clone)]
 pub struct ParsedWithdrawVestingTx {
@@ -32,13 +33,15 @@ pub struct ParsedWithdrawVestingTx {
     pub vesting_account: Pubkey,
 }
 
-pub async fn build_withdraw_vesting_tx_unsigned(params: BuildWithdrawVestingTxParams) -> Result<BuiltTx> {
+pub async fn build_withdraw_vesting_tx_unsigned(
+    params: BuildWithdrawVestingTxParams,
+) -> Result<BuiltTx> {
     let program_id = program_id_for(params.network);
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
+    let rpc = make_async_rpc_client(params.network);
     let revelcy_auth = read_revelcy_auth(params.network);
 
     // Calculate vesting_account PDA: seeds = ["vesting", token_mint]
-    let vesting_account =  generate_vesting_pda(params.network, params.token_mint);
+    let vesting_account = generate_vesting_pda(params.network, params.token_mint);
     // Get associated token accounts
     let vesting_ata = get_associated_token_address(&vesting_account, &params.token_mint);
     let user_ata = get_associated_token_address(&params.user, &params.token_mint);
@@ -69,7 +72,11 @@ pub async fn build_withdraw_vesting_tx_unsigned(params: BuildWithdrawVestingTxPa
     let mut data = Vec::with_capacity(8);
     data.extend_from_slice(&anchor_sighash_global(WITHDRAW_VESTING_METHOD_NAME));
 
-    let ix = Instruction { program_id, accounts, data };
+    let ix = Instruction {
+        program_id,
+        accounts,
+        data,
+    };
 
     let blockhash = get_valid_latest_blockhash(&rpc, 50)
         .await
@@ -153,8 +160,7 @@ pub fn parse_withdraw_vesting_tx_from_base64(
     }
 
     // Validate vesting_account PDA
-    let expected_vesting_account =  generate_vesting_pda(network, token_mint);
-
+    let expected_vesting_account = generate_vesting_pda(network, token_mint);
 
     if vesting_account != expected_vesting_account {
         return Err(anyhow!(
@@ -171,4 +177,3 @@ pub fn parse_withdraw_vesting_tx_from_base64(
         vesting_account,
     })
 }
-

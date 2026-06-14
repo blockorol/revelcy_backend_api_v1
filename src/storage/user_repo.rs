@@ -1,8 +1,7 @@
-use crate::storage::models::UserDbModel;
 use crate::models::user::{ApplyInviteCodeResult, User, UserShort};
-use sqlx::{PgPool, Row, Result};
+use crate::storage::models::UserDbModel;
+use sqlx::{PgPool, Result, Row};
 use uuid::Uuid;
-
 
 pub async fn get_user_by_wallet(pool: &PgPool, wallet_address: &str) -> Result<Option<User>> {
     let record = sqlx::query_as::<_, UserDbModel>(
@@ -11,7 +10,7 @@ pub async fn get_user_by_wallet(pool: &PgPool, wallet_address: &str) -> Result<O
         FROM users u
         JOIN wallets w ON w.user_id = u.id
         WHERE w.wallet_address = $1
-        "#
+        "#,
     )
     .bind(wallet_address)
     .fetch_optional(pool)
@@ -23,7 +22,7 @@ pub async fn get_user_by_wallet(pool: &PgPool, wallet_address: &str) -> Result<O
             SELECT wallet_address
             FROM wallets
             WHERE user_id = $1
-            "#
+            "#,
         )
         .bind(user_db.id)
         .fetch_all(pool)
@@ -73,7 +72,7 @@ pub async fn search_users_by_username_with_wallets(
             SELECT wallet_address
             FROM wallets
             WHERE user_id = $1
-            "#
+            "#,
         )
         .bind(user_db.id)
         .fetch_all(pool)
@@ -133,7 +132,7 @@ pub async fn create_user_with_wallet(pool: &PgPool, wallet_address: &str) -> Res
         INSERT INTO users (username, avatar_url, status)
         VALUES (NULL, NULL, 'INITIALISED')
         RETURNING id, username, avatar_url
-        "#
+        "#,
     )
     .fetch_one(&mut tx)
     .await?;
@@ -142,7 +141,7 @@ pub async fn create_user_with_wallet(pool: &PgPool, wallet_address: &str) -> Res
         r#"
         INSERT INTO wallets (wallet_address, user_id)
         VALUES ($1, $2)
-        "#
+        "#,
     )
     .bind(wallet_address)
     .bind(user_db.id)
@@ -169,7 +168,7 @@ pub async fn apply_invite_code_once(
         SELECT id
         FROM invite_codes
         WHERE code = $1 AND is_active = TRUE
-        "#
+        "#,
     )
     .bind(invite_code)
     .fetch_optional(pool)
@@ -184,7 +183,7 @@ pub async fn apply_invite_code_once(
         INSERT INTO user_invites (user_id, invite_code_id)
         VALUES ($1, $2)
         ON CONFLICT (user_id) DO NOTHING
-        "#
+        "#,
     )
     .bind(user_id)
     .bind(invite_code_id)
@@ -206,7 +205,7 @@ pub async fn update_username(pool: &PgPool, user_id: Uuid, new_username: &str) -
             username = $1,
             status = 'REGISTERED'
         WHERE id = $2
-        "#
+        "#,
     )
     .bind(new_username)
     .bind(user_id)
@@ -222,7 +221,7 @@ pub async fn update_avatar_url(pool: &PgPool, user_id: Uuid, new_avatar_url: &st
         UPDATE users
         SET avatar_url = $1
         WHERE id = $2
-        "#
+        "#,
     )
     .bind(new_avatar_url)
     .bind(user_id)
@@ -237,7 +236,7 @@ pub async fn delete_user_by_id(pool: &PgPool, user_id: Uuid) -> Result<()> {
         r#"
         DELETE FROM wallets
         WHERE user_id = $1
-        "#
+        "#,
     )
     .bind(user_id)
     .execute(pool)
@@ -247,7 +246,7 @@ pub async fn delete_user_by_id(pool: &PgPool, user_id: Uuid) -> Result<()> {
         r#"
         DELETE FROM users
         WHERE id = $1
-        "#
+        "#,
     )
     .bind(user_id)
     .execute(pool)

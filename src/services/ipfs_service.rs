@@ -1,9 +1,33 @@
-use actix_web::error::ErrorBadRequest;
 use serde::Deserialize;
+use std::error::Error;
+use std::fmt;
+
 use crate::models::premarket::{TokenInfo, TokenLinks};
+use crate::services::http_client;
 
-const REVELCY_SUFFIX: &str = "Premarket done with Revelcy; initial buy distributed to the community. More: beta.revelcy.com";
+const REVELCY_SUFFIX: &str =
+    "Premarket done with Revelcy; initial buy distributed to the community. More: beta.revelcy.com";
 
+#[derive(Debug)]
+pub enum IpfsServiceError {
+    ClientBuild(reqwest::Error),
+    Fetch(reqwest::Error),
+    HttpStatus(reqwest::StatusCode),
+    InvalidJson(reqwest::Error),
+}
+
+impl fmt::Display for IpfsServiceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ClientBuild(err) => write!(f, "failed to build http client: {err}"),
+            Self::Fetch(err) => write!(f, "failed to fetch metadata: {err}"),
+            Self::HttpStatus(status) => write!(f, "metadata fetch failed: http {status}"),
+            Self::InvalidJson(err) => write!(f, "invalid metadata json: {err}"),
+        }
+    }
+}
+
+impl Error for IpfsServiceError {}
 
 #[derive(Debug, Deserialize)]
 struct IpfsMetadata {
@@ -46,32 +70,24 @@ fn ipfs_to_gateway_url(s: &str) -> String {
     }
 }
 
-pub async fn get_ipfs_token_info(
-    uri: &String,
-) -> Result<TokenInfo, actix_web::Error> {
+pub async fn get_ipfs_token_info(uri: &String) -> Result<TokenInfo, IpfsServiceError> {
     // 1) convert uri to normal (for ipfs://)
     let url = ipfs_to_gateway_url(uri.as_str());
 
     // 2) get metadata
-    let client = reqwest::Client::new();
+    let client = http_client::default_client().map_err(IpfsServiceError::ClientBuild)?;
     let resp = client
         .get(&url)
         .send()
         .await
-        .map_err(|e| ErrorBadRequest(format!("failed to fetch metadata: {e}")))?;
+        .map_err(IpfsServiceError::Fetch)?;
 
     if !resp.status().is_success() {
-        return Err(ErrorBadRequest(format!(
-            "metadata fetch failed: http {}",
-            resp.status()
-        )));
+        return Err(IpfsServiceError::HttpStatus(resp.status()));
     }
 
     // 3) parce JSON
-    let meta: IpfsMetadata = resp
-        .json()
-        .await
-        .map_err(|e| ErrorBadRequest(format!("invalid metadata json: {e}")))?;
+    let meta: IpfsMetadata = resp.json().await.map_err(IpfsServiceError::InvalidJson)?;
 
     let external_url = meta.external_url.clone();
     // 4) links
@@ -90,9 +106,7 @@ pub async fn get_ipfs_token_info(
         });
 
     // 5) image_url (also can be ipfs://)
-    let image_url = meta
-        .image
-        .map(|img| ipfs_to_gateway_url(img.as_str()));
+    let image_url = meta.image.map(|img| ipfs_to_gateway_url(img.as_str()));
     let raw_description = meta.description.unwrap_or_default();
 
     let description = raw_description

@@ -6,7 +6,7 @@ This map tells agents where to look before editing.
 
 - `src/main.rs`: binary entrypoint for `revelcy-backend-api`; loads env, creates the Postgres pool and Solana RPC client, registers Actix scopes, and binds the server.
 - `src/lib.rs`: library root exposing project modules.
-- `src/bin/pump_keys_generator.rs`: additional binary using `DATABASE_URL` and `TARGET_SUFFIX`.
+- `src/bin/pump_keys_generator.rs`: additional binary using `DATABASE_URL` and optional `TARGET_SUFFIX` with default `pump`.
 
 ## Top-Level Directories
 
@@ -62,8 +62,11 @@ Business logic and external integrations.
 - `vesting_service.rs`: vesting business rules.
 - `background_finaliser.rs`: background finalization behavior.
 - `file_service.rs`: local file storage helpers.
+- `http_client.rs`: shared `reqwest` client factory and HTTP timeout presets.
 - `ipfs_service.rs`: IPFS upload/proxy logic.
+- `public_info_service.rs`: public wallet and premarket on-chain info lookups used by `/auth` public info routes.
 - `solana_price_service.rs`: Solana/Pyth price-related logic.
+- `solana_rpc_client.rs`: central factory for nonblocking Solana RPC clients and shared timeout/network URL selection.
 - `solana_service.rs`: older/general Solana helpers.
 - `solana_service_v2/`: current Solana transaction-building modules.
 
@@ -122,7 +125,17 @@ Request middleware.
 
 ### `src/config/`
 
-Environment accessors and defaults. Some defaults are development placeholders. Do not document or add real secrets in tracked files.
+Environment accessors, env-name constants, defaults, and startup validation. Some defaults are development placeholders. Do not document or add real secrets in tracked files.
+
+- `mod.rs`: public config facade, re-exports section accessors, and `validate_startup_config`.
+- `env.rs`: low-level `std::env` access helpers used only by config modules.
+- `database.rs`: database env accessors.
+- `server.rs`: host, port, and CORS env accessors.
+- `security.rs`: JWT and Revelcy signer secret accessors.
+- `pyth.rs`: Pyth integration env accessors.
+- `storage.rs`: local storage env accessors.
+- `solana.rs`: Solana RPC, network, and program id env accessors.
+- `pump_keys.rs`: pump key generator env accessors.
 
 ## Route Map
 

@@ -4,12 +4,14 @@ use bincode;
 use borsh::BorshDeserialize;
 use solana_sdk::{message::Message, pubkey::Pubkey, system_program, transaction::Transaction};
 
-use crate::models::premarket::{SolanaNetwork, BuiltTx};
+use crate::models::premarket::{BuiltTx, SolanaNetwork};
 
 use super::constants::UPDATE_PREMARKET_DATA_METHOD_NAME;
 use super::env::program_id_for;
 
-use super::tx_update_premarket_data::{UpdatePremarketDataArgs, build_update_premarket_data_tx_unsigned};
+use super::tx_update_premarket_data::{
+    build_update_premarket_data_tx_unsigned, UpdatePremarketDataArgs,
+};
 use super::utils::{anchor_sighash_global, find_anchor_instruction, resolve_account};
 
 #[derive(Debug, Clone)]

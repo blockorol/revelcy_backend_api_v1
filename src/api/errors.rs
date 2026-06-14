@@ -1,6 +1,6 @@
 // src/api/errors.rs
-use actix_web::{HttpResponse, ResponseError};
 use actix_web::http::StatusCode;
+use actix_web::{HttpResponse, ResponseError};
 use serde::Serialize;
 use std::fmt;
 
@@ -203,7 +203,6 @@ impl ApiError {
             },
         }
     }
-    
 
     pub fn internal_send_tx_failed() -> Self {
         Self {
@@ -228,7 +227,7 @@ impl ApiError {
             },
         }
     }
-    
+
     pub fn internal_sign_tx_failed_goal() -> Self {
         Self {
             response: ApiErrorResponse {
@@ -364,7 +363,6 @@ impl ApiError {
         }
     }
 
-
     pub fn invalid_auth_token() -> Self {
         Self {
             response: ApiErrorResponse {
@@ -436,7 +434,7 @@ impl ResponseError for ApiError {
             | PremarketCreatorAllocateGreaterThanGoal
             | ValidationError
             | InvalidTxType
-            | InvalidPremarketPubkey 
+            | InvalidPremarketPubkey
             | PremarketAmountZero
             | InvalidVestingPeriod
             | PremarketJoinAmountTooLarge
@@ -455,14 +453,11 @@ impl ResponseError for ApiError {
             | InvalidTimestamp
             | InvalidPercentage
             | MissingField
-            | InviteCodeNotFound
-            => StatusCode::BAD_REQUEST,
+            | InviteCodeNotFound => StatusCode::BAD_REQUEST,
 
-            InviteCodeAlreadyApplied 
-            => StatusCode::CONFLICT,
-            
-            WrongUserPubkeyForUser 
-            | ForbiddenAction => StatusCode::FORBIDDEN,
+            InviteCodeAlreadyApplied => StatusCode::CONFLICT,
+
+            WrongUserPubkeyForUser | ForbiddenAction => StatusCode::FORBIDDEN,
             AuthMissingWallet => StatusCode::UNAUTHORIZED,
 
             InternalBuildTxFailed
@@ -470,7 +465,6 @@ impl ResponseError for ApiError {
             | InternalGetFailed
             | InternalUnknownError
             | InternalSignTxFailed => StatusCode::INTERNAL_SERVER_ERROR,
-
         }
     }
 

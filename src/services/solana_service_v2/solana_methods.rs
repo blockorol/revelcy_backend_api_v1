@@ -1,11 +1,11 @@
+use crate::models::premarket::SolanaNetwork;
+use crate::services::solana_rpc_client;
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bincode::deserialize;
-use crate::models::premarket::SolanaNetwork;
-use crate::services::solana_service_v2::env::rpc_url;
 use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
-use solana_client::rpc_config::RpcTransactionConfig;
 use solana_client::rpc_config::RpcSendTransactionConfig;
+use solana_client::rpc_config::RpcTransactionConfig;
 use solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel};
 use solana_sdk::signature::Signature;
 use solana_sdk::transaction::Transaction;
@@ -15,7 +15,7 @@ use std::str::FromStr;
 use tokio::time::{sleep, Duration, Instant};
 
 pub fn make_async_rpc_client(network: SolanaNetwork) -> AsyncRpcClient {
-    AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15))
+    solana_rpc_client::make_async_rpc_client(network)
 }
 
 pub async fn send_signed_tx_base64(
@@ -28,8 +28,8 @@ pub async fn send_signed_tx_base64(
         .decode(signed_tx_base64.trim())
         .context("invalid base64 for signed tx")?;
 
-    let transaction: Transaction = deserialize(&raw)
-        .context("failed to deserialize Transaction")?;
+    let transaction: Transaction =
+        deserialize(&raw).context("failed to deserialize Transaction")?;
 
     let sig = rpc
         .send_transaction_with_config(
@@ -48,7 +48,7 @@ pub async fn send_signed_tx_base64(
     Ok(sig)
 }
 
-pub async fn wait_for_finalized(    
+pub async fn wait_for_finalized(
     network: SolanaNetwork,
     sig: &Signature,
     timeout: Duration,
@@ -87,7 +87,7 @@ pub async fn wait_for_finalized_with_client(
     }
 }
 
-pub async fn wait_for_confirmed( 
+pub async fn wait_for_confirmed(
     network: SolanaNetwork,
     sig: &Signature,
     timeout: Duration,
@@ -126,10 +126,7 @@ fn find_amount_for_mint_owner(
 ) -> u128 {
     balances
         .iter()
-        .find(|b| {
-            b.mint == mint
-                && matches!(&b.owner, OptionSerializer::Some(v) if v == owner)
-        })
+        .find(|b| b.mint == mint && matches!(&b.owner, OptionSerializer::Some(v) if v == owner))
         .map(|b| token_amount_u128(&b.ui_token_amount.amount))
         .unwrap_or(0)
 }
@@ -140,7 +137,7 @@ pub async fn get_spl_token_delta(
     mint: &str,
     owner: &str,
 ) -> Result<i128> {
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
+    let rpc = make_async_rpc_client(network);
 
     let tx = rpc
         .get_transaction_with_config(

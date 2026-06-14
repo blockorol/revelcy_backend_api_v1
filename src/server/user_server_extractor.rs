@@ -1,4 +1,4 @@
-use actix_web::{HttpRequest};
+use actix_web::HttpRequest;
 
 /// Tries to get a single header as String
 pub fn extract_header(req: &HttpRequest, name: &str) -> Option<String> {
@@ -27,7 +27,12 @@ pub fn extract_client_ip(req: &HttpRequest) -> Option<String> {
 
     // X-Forwarded-For: "client, proxy1, proxy2"
     if let Some(xff) = extract_header(req, "x-forwarded-for") {
-        if let Some(first) = xff.split(',').next().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        if let Some(first) = xff
+            .split(',')
+            .next()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
             return Some(first.to_string());
         }
     }

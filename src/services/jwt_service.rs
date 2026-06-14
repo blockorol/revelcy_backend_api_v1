@@ -1,8 +1,7 @@
-use serde::{Serialize, Deserialize};
-use jsonwebtoken::{encode, EncodingKey, Header, decode, DecodingKey, Validation, Algorithm};
-use uuid::Uuid;
 use crate::config;
-
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -25,12 +24,23 @@ pub fn create_jwt_handle(nonce: &str) -> String {
     let secret = config::get_jwt_secret();
     let claims = Claims {
         nonce: nonce.to_owned(),
-        exp: 2000000000,       // заглушка
+        exp: 2000000000, // заглушка
     };
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_ref())).unwrap()
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_ref()),
+    )
+    .unwrap()
 }
 
-pub fn create_jwt_with_user(user_id: Uuid, user_wallet: &str, username: Option<String>, avatar_url: Option<String>, nonce:&str) -> String {
+pub fn create_jwt_with_user(
+    user_id: Uuid,
+    user_wallet: &str,
+    username: Option<String>,
+    avatar_url: Option<String>,
+    nonce: &str,
+) -> String {
     let secret = config::get_jwt_secret();
 
     let token_info: TokenWithUserInfo = TokenWithUserInfo {
@@ -42,7 +52,12 @@ pub fn create_jwt_with_user(user_id: Uuid, user_wallet: &str, username: Option<S
         nonce: nonce.to_owned(),
         exp: 2000000000,
     };
-    encode(&Header::default(), &token_info, &EncodingKey::from_secret(secret.as_ref())).unwrap()
+    encode(
+        &Header::default(),
+        &token_info,
+        &EncodingKey::from_secret(secret.as_ref()),
+    )
+    .unwrap()
 }
 
 pub fn decode_jwt_handle(token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
@@ -56,7 +71,9 @@ pub fn decode_jwt_handle(token: &str) -> Result<Claims, jsonwebtoken::errors::Er
     Ok(token_data.claims)
 }
 
-pub fn decode_jwt_with_user_info(token: &str) -> Result<TokenWithUserInfo, jsonwebtoken::errors::Error> {
+pub fn decode_jwt_with_user_info(
+    token: &str,
+) -> Result<TokenWithUserInfo, jsonwebtoken::errors::Error> {
     let secret = config::get_jwt_secret();
     let token_data = decode::<TokenWithUserInfo>(
         token,

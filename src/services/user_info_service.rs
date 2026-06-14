@@ -1,15 +1,17 @@
 use chrono::Utc;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
-use serde_json::{json, Value};
 
-use crate::api::errors::{ApiError, ApiResult};
 use crate::models::user::{
-    UserFingerprintEventInsert,
-    UserFingerprintEventFrontendData,
-    UserFingerprintEventBackendData,
+    UserFingerprintEventBackendData, UserFingerprintEventFrontendData, UserFingerprintEventInsert,
 };
 use crate::storage::user_info_repo;
+
+#[derive(Debug)]
+pub enum UserInfoServiceError {
+    Storage(sqlx::Error),
+}
 
 pub async fn write_user_fingerprint_event(
     pool: &PgPool,
@@ -17,21 +19,17 @@ pub async fn write_user_fingerprint_event(
     premarket: Option<String>,
     frontend_related_data: UserFingerprintEventFrontendData,
     backend_related_data: UserFingerprintEventBackendData,
-) -> ApiResult<()> {
-    let insert: UserFingerprintEventInsert = FingerprintEventParts {
+) -> Result<(), UserInfoServiceError> {
+    let insert = UserFingerprintEventInsert::from(FingerprintEventParts {
         fe: frontend_related_data,
         be: backend_related_data,
         user_id,
         premarket,
-    }
-    .try_into()?;
+    });
 
     user_info_repo::insert_user_fingerprint_event(pool, &insert)
         .await
-        .map_err(|e| {
-            eprintln!("write_user_fingerprint_event: db error: {e:?}");
-            ApiError::internal_server_error()
-        })?;
+        .map_err(UserInfoServiceError::Storage)?;
 
     Ok(())
 }
@@ -45,7 +43,11 @@ pub struct FingerprintEventParts {
 
 impl FingerprintEventParts {
     fn default_str(s: String) -> String {
-        if s.trim().is_empty() { "default".to_string() } else { s }
+        if s.trim().is_empty() {
+            "default".to_string()
+        } else {
+            s
+        }
     }
 
     fn default_opt_str(s: Option<String>) -> String {
@@ -56,10 +58,8 @@ impl FingerprintEventParts {
     }
 }
 
-impl TryFrom<FingerprintEventParts> for UserFingerprintEventInsert {
-    type Error = ApiError;
-
-    fn try_from(p: FingerprintEventParts) -> Result<Self, Self::Error> {
+impl From<FingerprintEventParts> for UserFingerprintEventInsert {
+    fn from(p: FingerprintEventParts) -> Self {
         let server_ts_ms = Utc::now().timestamp_millis();
 
         // raw client json (в client складывай то, что реально есть во FrontendData)
@@ -75,7 +75,7 @@ impl TryFrom<FingerprintEventParts> for UserFingerprintEventInsert {
             "phantom_version": p.fe.phantom_version,
         });
 
-        Ok(UserFingerprintEventInsert {
+        UserFingerprintEventInsert {
             id: Uuid::new_v4(),
             user_id: p.user_id, // <-- IMPORTANT: user_id должен быть Option<Uuid> в модели
             event_type: p.fe.event_type.to_string(), // если это enum — ниже покажу как сделать to_string()
@@ -97,6 +97,6 @@ impl TryFrom<FingerprintEventParts> for UserFingerprintEventInsert {
             sec_ch_ua_mobile: FingerprintEventParts::default_str(p.be.sec_ch_ua_mobile),
 
             client,
-        })
+        }
     }
 }

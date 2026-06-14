@@ -1,8 +1,6 @@
-use solana_sdk::pubkey::Pubkey;
+use super::utils::pk;
 use crate::models::premarket::SolanaNetwork;
-use super::utils::{pk};
-
-
+use solana_sdk::pubkey::Pubkey;
 
 pub const CREATE_METHOD_NAME: &str = "create_premarket";
 pub const JOIN_METHOD_NAME: &str = "join_to_premarket";
@@ -13,7 +11,9 @@ pub const UPDATE_PREMARKET_DATA_METHOD_NAME: &str = "update_premarket_data";
 pub const CLAIM_TOKENS_METHOD_NAME: &str = "claim_tokens";
 pub const WITHDRAW_VESTING_METHOD_NAME: &str = "withdraw_vesting";
 
-pub fn constants(network: SolanaNetwork) -> (
+pub fn constants(
+    network: SolanaNetwork,
+) -> (
     Pubkey, // MINT_AUTH
     Pubkey, // PUMP_FUN_PROGRAM_ID
     Pubkey, // PUMPFUN_GLOBAL

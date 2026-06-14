@@ -17,6 +17,11 @@ Create local environment variables outside git-tracked files. At minimum, set:
 
 - `DATABASE_URL`
 - `SOLANA_RPC`
+- `JWT_SECRET`
+- `CURRENT_HOST`
+- `PYTH_MAINNET_URL`
+- `REVELCY_AUTH_PRIVATE_KEY_DEV`
+- `REVELCY_AUTH_PRIVATE_KEY_MAIN`
 
 See [Configuration](CONFIGURATION.md) for the full list.
 
@@ -27,6 +32,7 @@ cargo run --bin revelcy-backend-api
 ```
 
 The service binds to `PORT` or defaults to `8080`.
+Runtime logs use `tracing`; set `RUST_LOG` when you need a different filter.
 
 ## Common Commands
 

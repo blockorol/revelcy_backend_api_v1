@@ -1,27 +1,83 @@
-pub fn get_host() -> String {
-    std::env::var("CURRENT_HOST").unwrap_or_else(|_| "http://localhost:8080/".to_string())
-}
-pub fn get_jwt_secret() -> String {
-    std::env::var("JWT_SECRET").unwrap_or_else(|_| "SECRET_super_puper".to_string())
-}
-pub fn get_pyth_subdomain() -> String {
-    std::env::var("PYTH_SUBDOMAIN").unwrap_or_else(|_| "api".to_string())
-}
-pub fn get_pyth_secret_token() -> String {
-    std::env::var("PYTH_SECRET_TOKEN").unwrap_or_else(|_| "".to_string())
-}
-pub fn get_revelcy_auth_privite_key() -> String {
-    std::env::var("REVELCY_AUTH_PRIVATE_KEY").unwrap_or_else(|_| "".to_string())
-}
-pub fn get_pyth_mainnet_url() -> String {
-    std::env::var("PYTH_MAINNET_URL").unwrap_or_else(|_| "".to_string())
-}
-// todo: change to SolanaNetwork
-pub fn get_network() -> String {
-        std::env::var("NETWORK").unwrap_or_else(|_| "".to_string())
+use std::fmt;
+
+mod env;
+
+pub mod database;
+pub mod pump_keys;
+pub mod pyth;
+pub mod security;
+pub mod server;
+pub mod solana;
+pub mod storage;
+
+pub use database::*;
+pub use env::{get_optional_env, get_required_env};
+pub use pump_keys::*;
+pub use pyth::*;
+pub use security::*;
+pub use server::*;
+pub use solana::*;
+pub use storage::*;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigError {
+    missing_required: Vec<&'static str>,
 }
 
-// todo: Network -> enum (mainnet/devnet)
-// hosts -> Url
-// add vaildation on startup
-// make a config with banch
+impl ConfigError {
+    fn missing(required: Vec<&'static str>) -> Self {
+        Self {
+            missing_required: required,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.missing_required.is_empty()
+    }
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "missing required environment variables: {}",
+            self.missing_required.join(", ")
+        )
+    }
+}
+
+impl std::error::Error for ConfigError {}
+
+pub fn validate_startup_config() -> Result<(), ConfigError> {
+    validate_required_envs(&[
+        DATABASE_URL_ENV,
+        SOLANA_RPC_ENV,
+        JWT_SECRET_ENV,
+        CURRENT_HOST_ENV,
+        PYTH_MAINNET_URL_ENV,
+        REVELCY_AUTH_PRIVATE_KEY_DEV_ENV,
+        REVELCY_AUTH_PRIVATE_KEY_MAIN_ENV,
+    ])
+}
+
+pub fn validate_pump_keys_config() -> Result<(), ConfigError> {
+    validate_required_envs(&[DATABASE_URL_ENV])
+}
+
+fn validate_required_envs(required: &[&'static str]) -> Result<(), ConfigError> {
+    let missing_required = required
+        .into_iter()
+        .filter(|name| {
+            get_optional_env(name)
+                .map(|value| value.trim().is_empty())
+                .unwrap_or(true)
+        })
+        .copied()
+        .collect::<Vec<_>>();
+
+    if missing_required.is_empty() {
+        Ok(())
+    } else {
+        Err(ConfigError::missing(missing_required))
+    }
+}

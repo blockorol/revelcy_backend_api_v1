@@ -20,6 +20,7 @@ This file is for agents changing auth, JWT, wallet signature validation, secrets
 
 - Do not bypass wallet signature validation.
 - Do not weaken JWT validation for protected behavior.
+- Keep `JWT_SECRET` configured in real environments; API startup validation treats it as required even though older code has a development fallback.
 - Do not trust user identity until middleware/extractor/auth checks have run.
 - Do not expose internal errors, secrets, RPC credentials, private keys, or raw config in public responses.
 - Do not add real secret values to tracked files.

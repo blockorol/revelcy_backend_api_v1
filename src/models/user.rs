@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use solana_sdk::pubkey::Pubkey;
@@ -41,6 +41,13 @@ pub struct WalletAddress {
     pub address: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct WalletInfo {
+    pub creation_time: String,
+    pub balance: f64,
+    pub tx_amount: String,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct UserFingerprintEventInsert {
     pub id: Uuid,
@@ -77,7 +84,7 @@ pub struct ScreenInfo {
 pub struct UserFingerprintEventFrontendData {
     pub user_id: Option<String>,
     pub event_type: String,
-    
+
     pub install_id: String,
     pub install_id_source: String,
 
@@ -92,7 +99,6 @@ pub struct UserFingerprintEventFrontendData {
 
     pub user_agent: Option<String>,
     pub phantom_version: Option<String>,
-
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

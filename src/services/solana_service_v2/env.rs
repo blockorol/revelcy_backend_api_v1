@@ -1,21 +1,26 @@
-use std::str::FromStr;
+use super::utils::{assert_len_64, pk};
+use crate::config;
 use crate::models::premarket::SolanaNetwork;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use bs58;
 use solana_sdk::{
     pubkey::Pubkey,
     signature::{read_keypair_file, Keypair},
 };
 use std::path::Path;
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use bs58;
-use super::utils::{assert_len_64, pk};
+use std::str::FromStr;
 
 pub fn read_revelcy_auth(network: SolanaNetwork) -> Keypair {
-    let var = match network {
-        SolanaNetwork::Devnet => "REVELCY_AUTH_PRIVATE_KEY_DEV",
-        SolanaNetwork::MainnetBeta => "REVELCY_AUTH_PRIVATE_KEY_MAIN",
+    let raw = match network {
+        SolanaNetwork::Devnet => config::get_revelcy_auth_private_key_dev().unwrap_or_else(|_| {
+            panic!("env {} required", config::REVELCY_AUTH_PRIVATE_KEY_DEV_ENV)
+        }),
+        SolanaNetwork::MainnetBeta => {
+            config::get_revelcy_auth_private_key_main().unwrap_or_else(|_| {
+                panic!("env {} required", config::REVELCY_AUTH_PRIVATE_KEY_MAIN_ENV)
+            })
+        }
     };
-
-    let raw = std::env::var(var).unwrap_or_else(|_| panic!("env {var} required"));
     let s = raw.trim();
 
     if s.ends_with(".json") || Path::new(s).exists() {
@@ -45,26 +50,30 @@ pub fn read_revelcy_auth(network: SolanaNetwork) -> Keypair {
     Keypair::from_bytes(&bytes).expect("invalid keypair bytes (base58)")
 }
 
-
 pub fn rpc_url(network: SolanaNetwork) -> String {
-    match network {
-        SolanaNetwork::Devnet => std::env::var("SOLANA_DEVNET_RPC")
-            .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string()),
-        SolanaNetwork::MainnetBeta => std::env::var("SOLANA_MAINNET_RPC")
-            .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string()),
-    }
+    crate::services::solana_rpc_client::rpc_url_for_network(network)
 }
 
 pub fn program_id_for(network: SolanaNetwork) -> Pubkey {
-    let (env_key, fallback) = match network {
-        SolanaNetwork::Devnet => ("PURPLE_PROGRAM_ID_DEV", "AUf85EmXsTYGGgQnYJR2heKCxkTf5WtnKFvpkLtQ58sG"),
-        SolanaNetwork::MainnetBeta => ("PURPLE_PROGRAM_ID_MAIN", "AtuMMXXjyAW3fSJrnWYon1ynxUA7CyQ3Qz2E6JqiTmhu"),
+    let (env_key, configured, fallback) = match network {
+        SolanaNetwork::Devnet => (
+            config::PURPLE_PROGRAM_ID_DEV_ENV,
+            config::get_purple_program_id_dev(),
+            "AUf85EmXsTYGGgQnYJR2heKCxkTf5WtnKFvpkLtQ58sG",
+        ),
+        SolanaNetwork::MainnetBeta => (
+            config::PURPLE_PROGRAM_ID_MAIN_ENV,
+            config::get_purple_program_id_main(),
+            "AtuMMXXjyAW3fSJrnWYon1ynxUA7CyQ3Qz2E6JqiTmhu",
+        ),
     };
 
-    match std::env::var(env_key) {
-        Ok(v) => Pubkey::from_str(&v).unwrap_or_else(|_| panic!("invalid {} pubkey: {}", env_key, v)),
-        Err(_) => {
-            eprintln!("WARN: {} not set; using fallback {}", env_key, fallback);
+    match configured {
+        Some(v) => {
+            Pubkey::from_str(&v).unwrap_or_else(|_| panic!("invalid {} pubkey: {}", env_key, v))
+        }
+        None => {
+            tracing::error!("WARN: {} not set; using fallback {}", env_key, fallback);
             pk(fallback)
         }
     }

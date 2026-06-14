@@ -1,13 +1,14 @@
-
-use anyhow::{anyhow, Result, Context};
-use serde::{Serialize, Deserialize};
-use sqlx::FromRow;
-use uuid::Uuid;
-use std::convert::TryFrom;
-use chrono::{DateTime, Utc};
+use crate::models::premarket::{
+    PremarketGoal, PremarketInfoServiceModel, PremarketState, TokenInfo, TokenLinks, UserInfoShort,
+};
 use crate::models::user::User;
-use crate::models::premarket::{ UserInfoShort, PremarketInfoServiceModel, PremarketGoal, TokenLinks, TokenInfo, PremarketState};
 use crate::models::vesting::VestingInfo;
+use anyhow::{anyhow, Context, Result};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+use std::convert::TryFrom;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct WhitelistDbModel {
@@ -15,7 +16,6 @@ pub struct WhitelistDbModel {
     pub premarket_id: Uuid,
     pub user_id: Uuid,
 }
-
 
 #[derive(FromRow, Debug, Clone, Serialize, Deserialize)]
 pub struct SigningKeyDbModel {
@@ -38,7 +38,6 @@ pub struct SigningKeyPairWithId {
     pub pub_key: String,
     pub priv_key: String,
 }
-
 
 impl TryFrom<UserDbModel> for User {
     type Error = anyhow::Error;
@@ -64,8 +63,6 @@ pub struct WalletDbModel {
     pub wallet_address: String,
     pub user_id: Uuid,
 }
-
-
 
 #[derive(sqlx::FromRow, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -114,7 +111,6 @@ impl TryFrom<PremarketInfoDbModel> for PremarketInfoServiceModel {
             .parse::<PremarketState>()
             .map_err(|_| anyhow!("invalid premarket state: {}", pm_db.state))?;
 
-
         Ok(Self {
             id: pm_db.id,
             blockchain_address: pm_db.bc_address,
@@ -156,11 +152,10 @@ impl TryFrom<PremarketInfoDbModel> for PremarketInfoServiceModel {
     }
 }
 
-
 #[derive(sqlx::FromRow, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CommunityInfoDbModel {
-    pub id: Uuid,                     // тот же ID, что и у PremarketInfo (foreign key)
+    pub id: Uuid, // тот же ID, что и у PremarketInfo (foreign key)
     pub description: String,
     pub token_banner_url: Option<String>,
 }
@@ -169,12 +164,11 @@ pub struct CommunityInfoDbModel {
 #[serde(rename_all = "camelCase")]
 pub struct CommunityLinkDbModel {
     pub id: Uuid,
-    pub community_info_id: Uuid,   // внешний ключ на `CommunityInfoDbModel::id`
+    pub community_info_id: Uuid, // внешний ключ на `CommunityInfoDbModel::id`
     pub text: String,
     pub url: String,
-    pub r#type: String,            // 'x', 'tg', 'other'
+    pub r#type: String, // 'x', 'tg', 'other'
 }
-
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct HolderDbModel {
@@ -192,15 +186,6 @@ pub struct HolderDbModel {
     pub amount_token: i64,
     pub claimed_amount_token: i64,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-pub struct HolderStats {
-    pub holders: Vec<HolderDbModel>,
-    pub total_active_count: i64,
-    pub reserved_sol_lamp: i64,
-    pub reserved_sol_24h_before_lamp: i64,
-    pub total_token_amount: i64,
-    pub total_claimed_token_amount: i64,
 }
 
 #[derive(sqlx::FromRow)]

@@ -1,7 +1,8 @@
+use crate::config::{get_pyth_mainnet_url, PYTH_MAINNET_URL_ENV};
 use crate::models::premarket::PythResponse;
+use crate::services::http_client;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use crate::config::get_pyth_mainnet_url;
 
 pub const SOL_PRICE_CACHE_TTL: Duration = Duration::from_secs(60 * 10); // 10 minutes
 
@@ -15,7 +16,12 @@ struct CacheEntry {
 static SOL_PRICE_CACHE: RwLock<Option<CacheEntry>> = RwLock::const_new(None);
 
 async fn fetch_sol_price_uncached(url: &str) -> f64 {
-    match reqwest::get(url).await {
+    let client = match http_client::default_client() {
+        Ok(client) => client,
+        Err(_) => return 0.0,
+    };
+
+    match client.get(url).send().await {
         Ok(resp) => match resp.json::<PythResponse>().await {
             Ok(pyth_response) => {
                 if let Some(parsed) = pyth_response.parsed.first() {
@@ -35,7 +41,7 @@ async fn fetch_sol_price_uncached(url: &str) -> f64 {
 pub async fn get_sol_price() -> f64 {
     let url = get_pyth_mainnet_url();
     if url == "" {
-        println!("PYTH_MAINNET_URL environment variable not set");
+        tracing::info!("{} environment variable not set", PYTH_MAINNET_URL_ENV);
         return 0.0;
     };
 
@@ -59,7 +65,10 @@ pub async fn get_sol_price() -> f64 {
 
     let price = fetch_sol_price_uncached(&url).await;
     if price > 0.0 {
-        *c = Some(CacheEntry { value: price, fetched_at: Instant::now() });
+        *c = Some(CacheEntry {
+            value: price,
+            fetched_at: Instant::now(),
+        });
     }
     price
 }

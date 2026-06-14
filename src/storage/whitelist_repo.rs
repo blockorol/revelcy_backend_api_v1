@@ -1,6 +1,6 @@
-use anyhow::{Result, bail};
-use std::str::FromStr;
+use anyhow::{bail, Result};
 use sqlx::PgPool;
+use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::models::user::User;
@@ -23,11 +23,7 @@ struct WhitelistStatusRow {
 }
 
 /// is user exist in whitelist
-pub async fn exists(
-    pool: &PgPool,
-    premarket_id: Uuid,
-    user_id: Uuid,
-) -> Result<bool> {
+pub async fn exists(pool: &PgPool, premarket_id: Uuid, user_id: Uuid) -> Result<bool> {
     let v = sqlx::query_scalar::<_, bool>(
         r#"
         SELECT EXISTS(
@@ -70,7 +66,6 @@ pub async fn get_status(
 
     Ok(status)
 }
-
 
 pub async fn list_users_by_premarket(
     pool: &PgPool,
@@ -121,15 +116,17 @@ pub async fn list_users_by_premarket(
 
     let users: Vec<WhitelistUserInfo> = rows
         .into_iter()
-        .map(|u| Ok(WhitelistUserInfo {
-            user: User {
-                id: u.id,
-                username: u.username,
-                avatar_url: u.avatar_url,
-                wallets: u.wallets,
-            },
-            status: WhitelistStatus::from_str(&u.status)?,
-        }))
+        .map(|u| {
+            Ok(WhitelistUserInfo {
+                user: User {
+                    id: u.id,
+                    username: u.username,
+                    avatar_url: u.avatar_url,
+                    wallets: u.wallets,
+                },
+                status: WhitelistStatus::from_str(&u.status)?,
+            })
+        })
         .collect::<Result<Vec<_>>>()?;
 
     Ok((users, total))
@@ -217,20 +214,21 @@ pub async fn list_users_by_status(
 
     let users: Vec<WhitelistUserInfo> = rows
         .into_iter()
-        .map(|u| Ok(WhitelistUserInfo {
-            user: User {
-                id: u.id,
-                username: u.username,
-                avatar_url: u.avatar_url,
-                wallets: u.wallets,
-            },
-            status: WhitelistStatus::from_str(&u.status)?,
-        }))
+        .map(|u| {
+            Ok(WhitelistUserInfo {
+                user: User {
+                    id: u.id,
+                    username: u.username,
+                    avatar_url: u.avatar_url,
+                    wallets: u.wallets,
+                },
+                status: WhitelistStatus::from_str(&u.status)?,
+            })
+        })
         .collect::<Result<Vec<_>>>()?;
 
     Ok((users, total))
 }
-
 
 /// CREATE: add user to whitelist or get existing record
 pub async fn add(

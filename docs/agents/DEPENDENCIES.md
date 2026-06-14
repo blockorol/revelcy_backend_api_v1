@@ -20,7 +20,7 @@ Do not update the Rust toolchain or lockfile during unrelated work. Solana-relat
 - `jsonwebtoken`: JWT handling.
 - `solana-client`, `solana-sdk`, `solana-transaction-status`: Solana integration.
 - `spl-associated-token-account`, `spl-token`: SPL token helpers.
-- `reqwest` and `awc`: HTTP clients.
+- `reqwest`: outbound HTTP client. Use `src/services/http_client.rs` instead of constructing clients directly in integration code; direct project usage is configured with `rustls-tls` and `json`.
 - `dotenvy` and `dotenv`: env loading appears in different binaries/modules.
 - `tracing` and `tracing-subscriber`: logging/tracing.
 

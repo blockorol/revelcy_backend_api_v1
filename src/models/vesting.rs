@@ -38,6 +38,17 @@ pub struct VestingHolderInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VestingHolderPosition {
+    pub holder_id: Option<Uuid>,
+    pub holder_wallet: String,
+    pub amount_sol_lamp: i64,
+    pub amount_token: i64,
+    pub claimed_amount_token: i64,
+    pub username: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FullVestingInfo {
     pub vesting_info: VestingInfo,
     pub holders: Vec<VestingHolderInfo>,

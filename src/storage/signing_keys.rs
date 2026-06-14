@@ -1,3 +1,4 @@
+use crate::models::premarket::{AcquiredMintKeyMaterial, MintKeyMaterial};
 use crate::storage::models::{SigningKeyPair, SigningKeyPairWithId};
 use sqlx::{PgPool, Result};
 use uuid::Uuid;
@@ -8,7 +9,6 @@ pub async fn insert_mint_signing_key(
     pub_key: &str,
     priv_key: &str,
 ) -> Result<()> {
-
     sqlx::query(
         r#"
         INSERT INTO signing_keys (id, premarket_pubkey, pub_key, priv_key, type)
@@ -33,7 +33,7 @@ pub async fn insert_mint_signing_key(
 pub async fn get_mint_signing_keypair_by_premarket(
     pool: &PgPool,
     premarket_pubkey: &str,
-) -> Result<Option<SigningKeyPair>> {
+) -> Result<Option<MintKeyMaterial>> {
     let row = sqlx::query_as::<_, SigningKeyPair>(
         r#"
         SELECT pub_key, priv_key
@@ -47,14 +47,17 @@ pub async fn get_mint_signing_keypair_by_premarket(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row)
+    Ok(row.map(|key| MintKeyMaterial {
+        pub_key: key.pub_key,
+        priv_key: key.priv_key,
+    }))
 }
 
 // acquire_signing_key with uuid instead of premarket_pubkey
 pub async fn acquire_signing_key(
     pool: &PgPool,
     premarket_uuid: &str,
-) -> Result<Option<SigningKeyPairWithId>> {
+) -> Result<Option<AcquiredMintKeyMaterial>> {
     let key = sqlx::query_as::<_, SigningKeyPairWithId>(
         r#"
         UPDATE signing_keys
@@ -68,33 +71,36 @@ pub async fn acquire_signing_key(
             LIMIT 1
         )
         RETURNING id, pub_key, priv_key
-        "#
+        "#,
     )
     .bind(premarket_uuid)
     .fetch_optional(pool)
     .await?;
 
-    Ok(key)
+    Ok(key.map(|key| AcquiredMintKeyMaterial {
+        id: key.id,
+        pub_key: key.pub_key,
+        priv_key: key.priv_key,
+    }))
 }
 
 // second part of acquire_signing_key flow - update premarket_pubkey for the premarket pubkey key
 pub async fn update_premarket_pubkey(
     pool: &PgPool,
     premarket_pubkey: &str,
-    keypair_uuid: &Uuid
+    keypair_uuid: &Uuid,
 ) -> Result<u64> {
     let res = sqlx::query(
         r#"
         UPDATE signing_keys
         SET premarket_pubkey = $1
         WHERE id = $2
-        "#
+        "#,
     )
     .bind(premarket_pubkey)
     .bind(keypair_uuid)
     .execute(pool)
     .await?;
-
 
     Ok(res.rows_affected())
 }
