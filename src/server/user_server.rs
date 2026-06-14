@@ -110,12 +110,18 @@ pub async fn user_set_info(
         be_data,
     )
     .await
-    .map_err(|e| {
-        eprintln!("user_set_info: db write error: {e:?}");
-        ApiError::internal_server_error()
-    })?;
+    .map_err(map_user_info_service_error)?;
 
     Ok(HttpResponse::Ok().json(UserSetInfoResponseDTO { ok: true }))
+}
+
+fn map_user_info_service_error(error: user_info_service::UserInfoServiceError) -> ApiError {
+    match error {
+        user_info_service::UserInfoServiceError::Storage(e) => {
+            eprintln!("user_set_info: db write error: {e:?}");
+            ApiError::internal_server_error()
+        }
+    }
 }
 
 async fn set_invite_code(

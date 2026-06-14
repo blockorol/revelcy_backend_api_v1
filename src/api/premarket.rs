@@ -1,9 +1,11 @@
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use crate::models::premarket::{CommunityLink, LinkType};
 use crate::api::vesting::VestingSettingsDTO;
+use crate::models::premarket::{
+    CommunityLink, DynamicVestingInfo, HolderInfo, LinkType, TokenDynamicInfo,
+    TokenEntryInfo as TokenEntryInfoModel,
+};
+use serde::{Deserialize, Serialize};
 use std::fmt;
-
+use uuid::Uuid;
 
 // todo: unlock it and change network to that
 // #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -80,8 +82,8 @@ pub struct BlockchainInfoDTO {
     pub symbol: String,
     pub image_url: Option<String>,
     pub ipfs_uri: String,
-    pub creator_id:String,
-    pub creator_address:String,
+    pub creator_id: String,
+    pub creator_address: String,
     pub premarket_address: String,
     pub links: TokenLinksDTO,
     pub premarket_goal_sol_lamp: String,
@@ -159,7 +161,6 @@ impl From<LinkTypeDTO> for LinkType {
     }
 }
 
-
 // From Service → DTO
 impl From<LinkType> for LinkTypeDTO {
     fn from(value: LinkType) -> Self {
@@ -170,7 +171,6 @@ impl From<LinkType> for LinkTypeDTO {
         }
     }
 }
-
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -191,7 +191,6 @@ impl From<TokenState> for crate::models::premarket::PremarketState {
         }
     }
 }
-
 
 #[derive(Deserialize)]
 pub struct GetHolderEntryInfoQuery {
@@ -222,11 +221,21 @@ pub struct GetHolderWhitelistResponse {
 #[derive(Deserialize, Serialize)]
 pub struct TokenEntryInfo {
     #[serde(with = "string_as_number")]
-    pub total_dec: u64,  
+    pub total_dec: u64,
     #[serde(with = "string_as_number")]
     pub vested_dec: u64,
     #[serde(with = "string_as_number")]
     pub claimed_dec: u64,
+}
+
+impl From<TokenEntryInfoModel> for TokenEntryInfo {
+    fn from(info: TokenEntryInfoModel) -> Self {
+        TokenEntryInfo {
+            total_dec: info.total_dec,
+            vested_dec: info.vested_dec,
+            claimed_dec: info.claimed_dec,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -246,7 +255,6 @@ pub struct HolderEntryPriceDTO {
     pub entry_price_lamp: f64,
 }
 
-
 #[derive(Serialize, Deserialize)]
 pub struct TokenDynamicInfoDTO {
     pub holders_count: u32,
@@ -262,11 +270,34 @@ pub struct TokenDynamicInfoDTO {
     pub vesting_info: Option<DynamicVestingInfoDTO>,
 }
 
+impl From<TokenDynamicInfo> for TokenDynamicInfoDTO {
+    fn from(info: TokenDynamicInfo) -> Self {
+        TokenDynamicInfoDTO {
+            holders_count: info.holders_count,
+            current_price_lamp: info.current_price_lamp,
+            reserved_sol_lamp: info.reserved_sol_lamp,
+            change_24h: info.change_24h,
+            holders: info.holders.into_iter().map(Into::into).collect(),
+            vesting_info: info.vesting_info.map(Into::into),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct DynamicVestingInfoDTO {
     pub starttime_ms: Option<i64>,
     pub endtime_ms: Option<i64>,
     pub entry: TokenEntryInfo,
+}
+
+impl From<DynamicVestingInfo> for DynamicVestingInfoDTO {
+    fn from(info: DynamicVestingInfo) -> Self {
+        DynamicVestingInfoDTO {
+            starttime_ms: info.starttime_ms,
+            endtime_ms: info.endtime_ms,
+            entry: info.entry.into(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -279,6 +310,20 @@ pub struct HolderInfoDTO {
     #[serde(with = "string_as_number")]
     pub amount_sol_lamp: u64,
     pub claimed: bool,
+}
+
+impl From<HolderInfo> for HolderInfoDTO {
+    fn from(holder: HolderInfo) -> Self {
+        HolderInfoDTO {
+            id: holder.id,
+            wallet_address: holder.wallet_address,
+            join_timestamp: holder.join_timestamp,
+            icon_url: holder.icon_url,
+            username: holder.username,
+            amount_sol_lamp: holder.amount_sol_lamp,
+            claimed: holder.claimed,
+        }
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -299,64 +344,63 @@ pub struct OutPremarketTxRequest {
 
 #[derive(serde::Deserialize)]
 pub struct FinishPremarketTxRequest {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
-    pub premarket_account: String,// base58
+    pub network: String,           // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,       // base58
+    pub premarket_account: String, // base58
 }
 
 #[derive(serde::Deserialize)]
 
 pub struct DistributeTokensRequest {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
+    pub network: String,           // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,       // base58
     pub premarket_account: String, // base58
-    pub token_mint: String,       // base58
+    pub token_mint: String,        // base58
     pub users: Vec<String>,        // base58
 }
 
 #[derive(serde::Deserialize)]
 pub struct KillPremarketTxRequest {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
+    pub network: String,           // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,       // base58
     pub premarket_account: String, // base58
 }
 
 #[derive(serde::Deserialize)]
 pub struct UpdateURITxRequest {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
+    pub network: String,           // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,       // base58
     pub premarket_account: String, // base58
-    pub new_uri: String,        // new uri
+    pub new_uri: String,           // new uri
 }
 
 #[derive(serde::Deserialize)]
 pub struct ExtendPremarketTxRequest {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
+    pub network: String,           // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,       // base58
     pub premarket_account: String, // base58
-    pub new_deadline: i64,        // unix timestamp
+    pub new_deadline: i64,         // unix timestamp
 }
 
 #[derive(serde::Deserialize)]
 pub struct ClaimTokensTxRequest {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
+    pub network: String,           // "devnet" | "mainnet-beta"
+    pub user_pubkey: String,       // base58
     pub premarket_account: String, // base58
-    pub token_mint: String,       // base58
+    pub token_mint: String,        // base58
 }
 
 #[derive(serde::Deserialize)]
 pub struct WithdrawVestingTxRequest {
-    pub network: String,          // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,      // base58
-    pub token_mint: String,       // base58
+    pub network: String,     // "devnet" | "mainnet-beta"
+    pub user_pubkey: String, // base58
+    pub token_mint: String,  // base58
 }
 
 #[derive(serde::Serialize)]
 pub struct TxOnlyResponse {
     pub transaction: String,
 }
-
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -443,21 +487,20 @@ impl TxToSignRequest {
     }
 }
 
-
 #[derive(serde::Serialize)]
-pub struct SentTxResponse  {
+pub struct SentTxResponse {
     pub signature: String,
     pub status: TransactionStatus,
 }
 
 #[derive(Deserialize)]
-pub struct CreatePremarketConceptTokenInfo{
+pub struct CreatePremarketConceptTokenInfo {
     pub name: String,
     pub description: String,
     pub symbol: String,
     pub image_url: String,
     pub links: TokenLinksDTO,
-    pub deadline: i64,           // unix sec
+    pub deadline: i64, // unix sec
     #[serde(with = "string_as_number")]
     pub goal_sol_lamp: u64,
     #[serde(with = "string_as_number")]
@@ -468,21 +511,21 @@ pub struct CreatePremarketConceptTokenInfo{
 
 #[derive(Deserialize)]
 pub struct CreatePremarketConceptRequest {
-    pub network: String,         // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,     // base58
+    pub network: String,     // "devnet" | "mainnet-beta"
+    pub user_pubkey: String, // base58
     pub token_info: CreatePremarketConceptTokenInfo,
 }
 
 #[derive(Serialize)]
 pub struct CreatePremarketConceptResponse {
     pub premarket_account_pda: String, // base58
-    pub premarket_id: Uuid, 
+    pub premarket_id: Uuid,
 }
 
 #[derive(Deserialize)]
 pub struct CreatePremarketTxRequest {
-    pub network: String,         // "devnet" | "mainnet-beta"
-    pub user_pubkey: String,     // base58
+    pub network: String,     // "devnet" | "mainnet-beta"
+    pub user_pubkey: String, // base58
     pub uri: String,
     pub image_url: String,
     pub premarket_pubkey: String,
@@ -498,7 +541,7 @@ pub struct CreatePremarketTxResponse {
 }
 
 mod string_as_number {
-    use serde::{self, Serializer, Deserializer, Deserialize}; // <--- добавлен Deserialize
+    use serde::{self, Deserialize, Deserializer, Serializer}; // <--- добавлен Deserialize
     use std::fmt::Display;
     use std::str::FromStr;
 

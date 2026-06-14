@@ -16,6 +16,11 @@ Some current code may mix these levels. When touching such code:
 - Prefer explicit mapping at boundaries.
 - Keep refactors scoped unless the user asks for interface cleanup.
 
+Resolved cleanup:
+
+- `src/models/premarket.rs` no longer imports premarket API DTOs for dynamic info mapping; internal-to-API conversions for those DTOs live in `src/api/premarket.rs`.
+- `src/services/user_info_service.rs` no longer imports API errors; it returns a service-owned error that `src/server/user_server.rs` maps to `ApiError`.
+
 ## `vesing_server_handler.rs` Typo
 
 The file name `src/server/vesing_server_handler.rs` appears to be a typo. Keep the current name unless the user explicitly asks for rename/cleanup. Renaming may require module and import updates.

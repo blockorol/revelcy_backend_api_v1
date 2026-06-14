@@ -19,6 +19,8 @@ Errors should cross the three interface levels intentionally:
 
 Do not expose storage error strings directly as public API responses unless existing behavior requires it and the content is safe.
 
+For service cleanup work, prefer a small service-owned error enum and map it to `ApiError` in the handler or nearby API/server boundary where API DTOs are converted to internal models. Do not import `src/api/errors.rs` from `src/services`, `src/models`, or `src/storage`.
+
 ## API Error Rules
 
 Treat these as API contract changes:
