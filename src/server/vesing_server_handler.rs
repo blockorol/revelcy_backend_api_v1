@@ -1,12 +1,39 @@
 use actix_web::{web, HttpRequest, HttpResponse};
-use sqlx::PgPool;
 use solana_sdk::pubkey::Pubkey;
+use sqlx::PgPool;
 use std::str::FromStr;
 
 use crate::api::errors::{ApiError, ApiErrorCode, ApiResult, FieldError};
 use crate::api::vesting::{UpdateVestingInfoRequest, UpdateVestingInfoResponse};
-use crate::services::{premarket_service, vesting_service};
 use crate::server::auth_validation::validate_base_request;
+use crate::services::vesting_service::VestingServiceError;
+use crate::services::{premarket_service, vesting_service};
+
+fn map_vesting_service_update_error(error: VestingServiceError) -> ApiError {
+    match error {
+        VestingServiceError::InvalidPercentage => ApiError::from_field_errors(vec![FieldError {
+            field: "unlock_at_launch_percent",
+            code: ApiErrorCode::InvalidPercentage,
+            message: "unlock_at_launch_percent must be between 0 and 100",
+        }]),
+        VestingServiceError::InvalidVestingPeriod => {
+            ApiError::from_field_errors(vec![FieldError {
+                field: "vesting_period_sec",
+                code: ApiErrorCode::InvalidVestingPeriod,
+                message: "vesting_period_sec must be > 0 when enabled=true",
+            }])
+        }
+        VestingServiceError::NotFound(_) => ApiError::from_field_errors(vec![FieldError {
+            field: "vesting",
+            code: ApiErrorCode::VestingNotFound,
+            message: "vesting not found for this premarket",
+        }]),
+        VestingServiceError::InvalidUuid(_)
+        | VestingServiceError::InvalidMintAddress
+        | VestingServiceError::Storage(_)
+        | VestingServiceError::Chain(_) => ApiError::internal_update_db_error(),
+    }
+}
 
 pub async fn update_vesting(
     req: HttpRequest,
@@ -16,7 +43,6 @@ pub async fn update_vesting(
     let dto = body.into_inner();
 
     let ctx = validate_base_request(&req, &dto.network, Some(&dto.user_pubkey))?;
-
 
     // validate pubkey
     let premarket_pubkey = Pubkey::from_str(&dto.premarket_pubkey)
@@ -40,16 +66,17 @@ pub async fn update_vesting(
         }]));
     }
 
-    let premarket_info: crate::models::premarket::PremarketInfoServiceModel = premarket_service::get_main_premarket_info(pool.get_ref(), &premarket_pubkey)
-        .await
-        .map_err(|e| {
-            eprintln!(
-                "[update_vesting] DB error while loading premarket {}: {:?}",
-                premarket_pubkey, e
-            );
-            ApiError::internal_get_db_error()
-        })?
-        .ok_or_else(ApiError::missing_premarket)?;
+    let premarket_info: crate::models::premarket::PremarketInfoServiceModel =
+        premarket_service::get_main_premarket_info(pool.get_ref(), &premarket_pubkey)
+            .await
+            .map_err(|e| {
+                eprintln!(
+                    "[update_vesting] DB error while loading premarket {}: {:?}",
+                    premarket_pubkey, e
+                );
+                ApiError::internal_get_db_error()
+            })?
+            .ok_or_else(ApiError::missing_premarket)?;
 
     if premarket_info.creator.id != ctx.user.internal_id {
         return Err(ApiError::forbidden());
@@ -70,7 +97,7 @@ pub async fn update_vesting(
     .await
     .map_err(|e| {
         eprintln!("[update_vesting] failed: {:?}", e);
-        ApiError::internal_update_db_error()
+        map_vesting_service_update_error(e)
     })?;
 
     Ok(HttpResponse::Ok().json(UpdateVestingInfoResponse { ok: true }))
