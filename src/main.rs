@@ -1,45 +1,46 @@
-use actix_web::{App, HttpServer, web};
-use solana_client::nonblocking::rpc_client::RpcClient;
-use crate::server::init_servers;
 use crate::middleware::cors::cors_middleware;
-use sqlx::postgres::PgPoolOptions;
+use crate::server::init_servers;
+use actix_web::{web, App, HttpServer};
 use dotenvy::dotenv;
-use std::env;
+use solana_client::nonblocking::rpc_client::RpcClient;
+use sqlx::postgres::PgPoolOptions;
 
-mod middleware;
-mod server;
-mod services;
 mod api;
 mod config;
-mod models;
-mod storage;
 mod constants;
+mod middleware;
+mod models;
+mod server;
+mod services;
+mod storage;
 
-#[actix_web::main] 
+#[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // load .env
     dotenv().ok();
 
     // DB Connect
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let database_url = config::get_database_url()
+        .unwrap_or_else(|_| panic!("{} must be set", config::DATABASE_URL_ENV));
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
         .await
         .expect("Failed to connect to the database");
 
-    let rpc_url = env::var("SOLANA_RPC").expect("SOLANA_RPC must be set");
-    let rpc_client = web::Data::new(RpcClient::new(rpc_url)); 
+    let rpc_url = config::get_solana_rpc()
+        .unwrap_or_else(|_| panic!("{} must be set", config::SOLANA_RPC_ENV));
+    let rpc_client = web::Data::new(RpcClient::new(rpc_url));
 
     // run server
     HttpServer::new(move || {
         App::new()
             .wrap(cors_middleware())
             .app_data(web::Data::new(pool.clone()))
-            .app_data(rpc_client.clone()) 
+            .app_data(rpc_client.clone())
             .configure(init_servers)
     })
-    .bind(format!("0.0.0.0:{}", std::env::var("PORT").unwrap_or_else(|_| "8080".to_string())))?
+    .bind(format!("0.0.0.0:{}", config::get_port()))?
     .run()
     .await
 }

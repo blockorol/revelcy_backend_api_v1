@@ -23,7 +23,7 @@ pub struct AddWhitelistUserRequest {
 
     // one of these required
     pub user_id: Option<Uuid>,
-    pub user_pubkey: Option<String>, 
+    pub user_pubkey: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -70,7 +70,6 @@ pub struct GetWhitelistResponse {
     pub items: Vec<WhitelistUserDTO>,
     pub total: Option<i64>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WhitelistSetStatusRequest {

@@ -1,26 +1,24 @@
-
+use chrono::{DateTime, Utc};
+use solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config;
 use solana_client::rpc_client::RpcClient;
+use solana_client::rpc_config::RpcTransactionConfig;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
-use solana_client::rpc_config::RpcTransactionConfig;
-use solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config;
 use solana_transaction_status::UiTransactionEncoding;
 use std::str::FromStr;
-use chrono::{DateTime, Utc};   
 
 use crate::constants::MAX_AMOUNT_SIG;
 
-pub fn get_signatures_for_wallet(
-    client: &RpcClient,
-    wallet_pubkey: &Pubkey,
-) -> Vec<String> {
-
+pub fn get_signatures_for_wallet(client: &RpcClient, wallet_pubkey: &Pubkey) -> Vec<String> {
     let mut all_signatures = Vec::new();
     let mut before = None;
 
     loop {
         if all_signatures.len() >= MAX_AMOUNT_SIG as usize {
-            println!("Reached {:?} signatures, stopping further fetch.",MAX_AMOUNT_SIG);
+            println!(
+                "Reached {:?} signatures, stopping further fetch.",
+                MAX_AMOUNT_SIG
+            );
             break;
         }
         match client.get_signatures_for_address_with_config(
@@ -45,20 +43,19 @@ pub fn get_signatures_for_wallet(
                 eprintln!("Failed to fetch signatures: {}", err);
                 std::process::exit(1);
             }
-        } 
+        }
     }
 
     println!("Signatures for wallet {}:", wallet_pubkey);
     println!("Total signatures: {}", all_signatures.len());
 
     return all_signatures;
-
 }
 
 pub fn get_creation_time(
     client: &RpcClient,
     all_signatures: &Vec<String>,
-) -> Option<DateTime<Utc>>{
+) -> Option<DateTime<Utc>> {
     if let Some(last_signature) = all_signatures.last() {
         let signature = Signature::from_str(last_signature).unwrap();
         let config = RpcTransactionConfig {
@@ -72,16 +69,19 @@ pub fn get_creation_time(
                 println!("Block number (slot): {}", transaction.slot);
                 if let Some(block_time) = transaction.block_time {
                     // Convert Unix timestamp to DateTime<Utc>
-                    let dt_first_sig = DateTime::<Utc>::from_timestamp(block_time, 0)
-                        .unwrap_or_default();
+                    let dt_first_sig =
+                        DateTime::<Utc>::from_timestamp(block_time, 0).unwrap_or_default();
                     return Some(dt_first_sig);
                 } else {
                     println!("Timestamp: Not available");
-                    return None
+                    return None;
                 }
             }
             Err(err) => {
-                eprintln!("Failed to fetch transaction details for the last signature: {}", err);
+                eprintln!(
+                    "Failed to fetch transaction details for the last signature: {}",
+                    err
+                );
                 return None;
             }
         }

@@ -7,8 +7,8 @@ use solana_sdk::{
     compute_budget::ComputeBudgetInstruction,
     instruction::{AccountMeta, Instruction},
     message::Message,
-    signature::{Keypair, Signer},
     pubkey::Pubkey,
+    signature::{Keypair, Signer},
     system_program,
     transaction::Transaction,
 };
@@ -64,8 +64,10 @@ pub async fn build_finish_premarket_tx_unsigned(
 
     // PDAs/ATAs
     let (bonding_curve, _) = pda(&pump_fun_program_id, &[b"bonding-curve", mint_pub.as_ref()]);
-    let (bonding_curve_v2, _) =
-        pda(&pump_fun_program_id, &[b"bonding-curve-v2", mint_pub.as_ref()]);
+    let (bonding_curve_v2, _) = pda(
+        &pump_fun_program_id,
+        &[b"bonding-curve-v2", mint_pub.as_ref()],
+    );
     let bonding_curve_ata = get_associated_token_address(&bonding_curve, &mint_pub);
     let (metadata, _) = pda(
         &metaplex_program,
@@ -75,7 +77,7 @@ pub async fn build_finish_premarket_tx_unsigned(
     let revelcy = read_revelcy_auth(params.network);
     let revelcy_pub = revelcy.pubkey();
     let revelcy_ata = get_associated_token_address(&revelcy_pub, &mint_pub);
-    
+
     // Vesting account PDA and ATA
     let (vesting_account, _) = pda(&program_id, &[b"vesting", mint_pub.as_ref()]);
     let vesting_ata = get_associated_token_address(&vesting_account, &mint_pub);
@@ -116,7 +118,10 @@ pub async fn build_finish_premarket_tx_unsigned(
     println!("  vesting_ata: {}", vesting_ata);
     println!("  system_program: {}", system_program::ID);
     println!("  token_program: {}", token_program_id);
-    println!("  associated_token_program: {}", associated_token_program_id);
+    println!(
+        "  associated_token_program: {}",
+        associated_token_program_id
+    );
     println!("  rent: {}", rent_sysvar);
     println!("  event_auth: {}", event_auth);
     println!("  pump_fun_program_id: {}", pump_fun_program_id);
@@ -131,7 +136,7 @@ pub async fn build_finish_premarket_tx_unsigned(
     // Serialize discriminator + args
     let mut data = Vec::with_capacity(32);
     data.extend_from_slice(&anchor_sighash_global(FINISH_METHOD_NAME));
-    
+
     // Serialize FinishPremarketArgs: timestamp_start (i64), timestamp_end (i64), init_unlock (u64)
     data.extend_from_slice(&params.timestamp_start.to_le_bytes());
     data.extend_from_slice(&params.timestamp_end.to_le_bytes());
@@ -139,33 +144,33 @@ pub async fn build_finish_premarket_tx_unsigned(
 
     // IDL порядок (based on finish_premarket instruction)
     let accounts = vec![
-        AccountMeta::new(revelcy_pub, true),                  // 1. revelcy_auth
-        AccountMeta::new(revelcy_ata, false),                 // 2. revelcy_ata
-        AccountMeta::new(vesting_account, false),             // 3. vesting_account (PDA)
-        AccountMeta::new(vesting_ata, false),                 // 4. vesting_ata
-        AccountMeta::new(params.premarket, false),            // 5. premarket_account
-        AccountMeta::new(mint_pub, true),                     // 6. token_mint (writable, signer)
-        AccountMeta::new_readonly(mint_auth, false),          // 7. mint_auth
-        AccountMeta::new(bonding_curve, false),               // 8. bonding_curve
-        AccountMeta::new(bonding_curve_ata, false),           // 9. bonding_curve_ata
-        AccountMeta::new(pumpfun_global, false),              // 10. global
-        AccountMeta::new(metaplex_program, false),            // 11. mpl_token_metadata
-        AccountMeta::new(metadata, false),                    // 12. metadata
-        AccountMeta::new(params.user, true),                  // 13. user (writable, signer)
+        AccountMeta::new(revelcy_pub, true),         // 1. revelcy_auth
+        AccountMeta::new(revelcy_ata, false),        // 2. revelcy_ata
+        AccountMeta::new(vesting_account, false),    // 3. vesting_account (PDA)
+        AccountMeta::new(vesting_ata, false),        // 4. vesting_ata
+        AccountMeta::new(params.premarket, false),   // 5. premarket_account
+        AccountMeta::new(mint_pub, true),            // 6. token_mint (writable, signer)
+        AccountMeta::new_readonly(mint_auth, false), // 7. mint_auth
+        AccountMeta::new(bonding_curve, false),      // 8. bonding_curve
+        AccountMeta::new(bonding_curve_ata, false),  // 9. bonding_curve_ata
+        AccountMeta::new(pumpfun_global, false),     // 10. global
+        AccountMeta::new(metaplex_program, false),   // 11. mpl_token_metadata
+        AccountMeta::new(metadata, false),           // 12. metadata
+        AccountMeta::new(params.user, true),         // 13. user (writable, signer)
         AccountMeta::new_readonly(system_program::ID, false), // 14. system_program
-        AccountMeta::new_readonly(token_program_id, false),   // 15. token_program
+        AccountMeta::new_readonly(token_program_id, false), // 15. token_program
         AccountMeta::new_readonly(associated_token_program_id, false), // 16. associated_token_program
-        AccountMeta::new_readonly(rent_sysvar, false),        // 17. rent
-        AccountMeta::new(event_auth, false),                  // 18. event_auth
-        AccountMeta::new_readonly(pump_fun_program_id, false), // 19. pump_fun_program_id
-        AccountMeta::new(fee_recipient, false),               // 20. fee_recipient
-        AccountMeta::new(associated_user_ata, false),         // 21. associated_user
-        AccountMeta::new(creator_vault, false),               // 22. creator_vault
-        AccountMeta::new(global_volume_accum, false),         // 23. global_volume_accumulator
-        AccountMeta::new(user_volume_accum, false),           // 24. user_volume_accumulator
-        AccountMeta::new(fee_config, false),                  // 25. fee_config
-        AccountMeta::new(fee_program, false),                 // 26. fee_program
-        AccountMeta::new_readonly(bonding_curve_v2, false),   // 27. bonding_curve_v2
+        AccountMeta::new_readonly(rent_sysvar, false),                 // 17. rent
+        AccountMeta::new(event_auth, false),                           // 18. event_auth
+        AccountMeta::new_readonly(pump_fun_program_id, false),         // 19. pump_fun_program_id
+        AccountMeta::new(fee_recipient, false),                        // 20. fee_recipient
+        AccountMeta::new(associated_user_ata, false),                  // 21. associated_user
+        AccountMeta::new(creator_vault, false),                        // 22. creator_vault
+        AccountMeta::new(global_volume_accum, false), // 23. global_volume_accumulator
+        AccountMeta::new(user_volume_accum, false),   // 24. user_volume_accumulator
+        AccountMeta::new(fee_config, false),          // 25. fee_config
+        AccountMeta::new(fee_program, false),         // 26. fee_program
+        AccountMeta::new_readonly(bonding_curve_v2, false), // 27. bonding_curve_v2
     ];
 
     let ix_finish = Instruction {

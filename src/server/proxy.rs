@@ -1,11 +1,10 @@
-use actix_web::{web, HttpResponse, Scope, HttpRequest};
 use actix_web::http::header;
-use futures_util::TryStreamExt as _;
+use actix_web::{web, HttpRequest, HttpResponse, Scope};
 use awc::Client;
+use futures_util::TryStreamExt as _;
 
 pub fn proxy_scope() -> Scope {
-    web::scope("/proxy")
-        .route("/pump_ipfs", web::post().to(pump_ipfs))
+    web::scope("/proxy").route("/pump_ipfs", web::post().to(pump_ipfs))
 }
 
 async fn pump_ipfs(req: HttpRequest, mut payload: web::Payload) -> actix_web::Result<HttpResponse> {
@@ -39,8 +38,7 @@ async fn pump_ipfs(req: HttpRequest, mut payload: web::Payload) -> actix_web::Re
             eprintln!("!!! upstream send error: {:?}", e);
             // ВАЖНО: возвращаем Ok(HttpResponse), а не Err(...)
             return Ok(
-                HttpResponse::BadGateway()
-                    .body("upstream (pump.fun) error while sending request")
+                HttpResponse::BadGateway().body("upstream (pump.fun) error while sending request")
             );
         }
     };
@@ -51,8 +49,7 @@ async fn pump_ipfs(req: HttpRequest, mut payload: web::Payload) -> actix_web::Re
         Err(e) => {
             eprintln!("!!! upstream read error: {:?}", e);
             return Ok(
-                HttpResponse::BadGateway()
-                    .body("upstream (pump.fun) error while reading response")
+                HttpResponse::BadGateway().body("upstream (pump.fun) error while reading response")
             );
         }
     };

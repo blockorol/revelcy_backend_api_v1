@@ -1,20 +1,13 @@
-use std::env;
+use crate::config;
 use std::fs::{self, File};
 use std::io::{self, Write};
-use std::path::PathBuf;
 use std::path::Path;
-
+use std::path::PathBuf;
 
 const DEFAULT_AVATAR_FILE: &str = "default_avatar.png";
-const STORAGE_DIR: &str = "./storage";
+
 fn storage_dir() -> PathBuf {
-    match env::var("STORAGE_DIR") {
-        Ok(path) => PathBuf::from(path),
-        Err(_) => {
-            println!("env STORAGE_DIR not found, setted ./storage");
-            PathBuf::from("./storage")
-        }
-    }
+    PathBuf::from(config::get_storage_dir())
 }
 
 pub fn save_png(name: &str, data: &[u8]) -> io::Result<String> {

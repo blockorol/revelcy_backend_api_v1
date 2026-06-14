@@ -1,11 +1,13 @@
 use chrono::Utc;
 
 use crate::api::errors::{ApiErrorCode, FieldError};
-use crate::models::premarket::{BuildJoinTxParams, BuildPremarketTxParams, FullPremarketInfo, PremarketInfoServiceModel, PremarketState};
+use crate::models::premarket::{
+    BuildJoinTxParams, BuildPremarketTxParams, FullPremarketInfo, PremarketInfoServiceModel,
+    PremarketState,
+};
 use solana_sdk::pubkey::Pubkey;
 
 const MAX_JOIN_SOL_LAMPORTS: u64 = 2 * solana_sdk::native_token::LAMPORTS_PER_SOL;
-
 
 pub fn validate_create_premarket(
     current_pubkey: &str,
@@ -90,7 +92,6 @@ pub fn validate_create_premarket(
     }
 }
 
-
 pub fn validate_create_premarket_base(
     deadline: i64,
     goal: u64,
@@ -151,7 +152,7 @@ pub fn validate_join_premarket(params: &BuildJoinTxParams) -> Result<(), Vec<Fie
             message: "amount_sol_lamp must be > 0",
         });
     }
-    
+
     if params.amount > MAX_JOIN_SOL_LAMPORTS {
         errors.push(FieldError {
             field: "amount_sol_lamp",
@@ -160,7 +161,11 @@ pub fn validate_join_premarket(params: &BuildJoinTxParams) -> Result<(), Vec<Fie
         });
     }
 
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 // todo: check me and add other fields
@@ -200,7 +205,11 @@ pub fn validate_update_uri_premarket(
     //     });
     // }
 
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 pub fn validate_extend_premarket(
@@ -245,7 +254,11 @@ pub fn validate_extend_premarket(
         });
     }
 
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 pub fn validate_finish_premarket(
@@ -317,7 +330,7 @@ pub fn validate_finish_premarket(
     // Reasonable vesting duration: at least 1 hour, max 1 year
     let vesting_duration = timestamp_end - timestamp_start;
 
-    if vesting_duration > 60 * 60 * 24 * 365{
+    if vesting_duration > 60 * 60 * 24 * 365 {
         errors.push(FieldError {
             field: "timestamp_end",
             code: ApiErrorCode::InvalidTimestamp,
@@ -334,12 +347,16 @@ pub fn validate_finish_premarket(
         });
     }
 
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 pub fn validate_refund_premarket(
-    main_info: &PremarketInfoServiceModel
-)  -> Result<(), Vec<FieldError>> {
+    main_info: &PremarketInfoServiceModel,
+) -> Result<(), Vec<FieldError>> {
     let mut errors = Vec::new();
     let now = Utc::now().timestamp();
 
@@ -382,7 +399,11 @@ pub fn validate_refund_premarket(
     //     });
     // }
 
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 pub fn validate_withdraw_vesting() -> Result<(), Vec<FieldError>> {
@@ -390,6 +411,10 @@ pub fn validate_withdraw_vesting() -> Result<(), Vec<FieldError>> {
 
     // TODO: Add validation logic for withdraw vesting
     // For now, this is a placeholder that accepts all requests
-    
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }

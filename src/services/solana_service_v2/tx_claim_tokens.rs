@@ -44,7 +44,11 @@ pub async fn build_claim_tokens_tx_unsigned(params: BuildClaimTokensTxParams) ->
     let mut data = Vec::with_capacity(8);
     data.extend_from_slice(&anchor_sighash_global(CLAIM_TOKENS_METHOD_NAME));
 
-    let ix = Instruction { program_id, accounts, data };
+    let ix = Instruction {
+        program_id,
+        accounts,
+        data,
+    };
 
     let blockhash = get_valid_latest_blockhash(&rpc, 50)
         .await

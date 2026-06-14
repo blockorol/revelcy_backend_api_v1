@@ -27,6 +27,8 @@ Resolved cleanup:
 - `src/services/premarket_service.rs` no longer imports Actix HTTP errors; it returns `PremarketServiceError` and handlers map it at the server/API boundary.
 - `src/services/premarket_service.rs` no longer imports `src/storage/models.rs` row structs; `src/storage/premarket_repo.rs` maps premarket storage rows to internal models before returning to services.
 - `src/storage/vesting_repo.rs` and `src/storage/signing_keys.rs` no longer expose storage row structs in their public return types; they map rows to internal models before returning to services.
+- `src/services/file_service.rs` no longer reads `STORAGE_DIR` directly; it uses the `src/config` accessor.
+- Runtime env access is centralized in `src/config/mod.rs`; application modules should use config accessors instead of reading env vars directly.
 
 ## `vesing_server_handler.rs` Typo
 

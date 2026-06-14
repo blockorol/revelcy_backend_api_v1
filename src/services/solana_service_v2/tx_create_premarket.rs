@@ -43,24 +43,17 @@ pub struct ParsedCreatePremarketTx {
     pub params: BuildPremarketTxParams,
 }
 
-pub async fn generate_premarket_pda(
-    network: SolanaNetwork,
-    mint_priv: &str,
-) -> Result<Pubkey> {
-    let bytes= parse_privkey_64(mint_priv)
-        .context("mint_priv parse failed")?;
+pub async fn generate_premarket_pda(network: SolanaNetwork, mint_priv: &str) -> Result<Pubkey> {
+    let bytes = parse_privkey_64(mint_priv).context("mint_priv parse failed")?;
 
-    let mint = Keypair::from_bytes(&bytes)
-        .context("invalid mint keypair bytes")?;
+    let mint = Keypair::from_bytes(&bytes).context("invalid mint keypair bytes")?;
 
     let program_id = program_id_for(network);
     let revelcy = read_revelcy_auth(network);
     let revelcy_pub = revelcy.pubkey();
 
-    let (premarket_pda, _bump) = Pubkey::find_program_address(
-        &[revelcy_pub.as_ref(), mint.pubkey().as_ref()],
-        &program_id,
-    );
+    let (premarket_pda, _bump) =
+        Pubkey::find_program_address(&[revelcy_pub.as_ref(), mint.pubkey().as_ref()], &program_id);
 
     Ok(premarket_pda)
 }

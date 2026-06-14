@@ -1,8 +1,8 @@
-use anyhow::{bail};
+use anyhow::bail;
 
-use std::str::FromStr;
-use serde::{Serialize, Deserialize};
 use crate::models::user::User;
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WhitelistUserInfo {

@@ -120,12 +120,14 @@ Transaction modules should keep account derivation, instruction data, program co
 
 ## Configuration
 
-Environment values are read in:
+Environment access is centralized in `src/config/mod.rs`. Other modules should call config accessors instead of reading `std::env::var` directly.
+
+Current callers include:
 
 - `src/main.rs`
-- `src/config/mod.rs`
 - `src/middleware/cors.rs`
 - `src/server/public_server.rs`
+- `src/services/file_service.rs`
 - `src/services/solana_service.rs`
 - `src/services/solana_service_v2/env.rs`
 - `src/bin/pump_keys_generator.rs`
@@ -146,6 +148,10 @@ Important names:
 - `PYTH_SECRET_TOKEN`
 - `PYTH_MAINNET_URL`
 - `REVELCY_AUTH_PRIVATE_KEY`
+- `REVELCY_AUTH_PRIVATE_KEY_DEV`
+- `REVELCY_AUTH_PRIVATE_KEY_MAIN`
+- `PURPLE_PROGRAM_ID_DEV`
+- `PURPLE_PROGRAM_ID_MAIN`
 - `TARGET_SUFFIX`
 
 Do not add real values to tracked files.

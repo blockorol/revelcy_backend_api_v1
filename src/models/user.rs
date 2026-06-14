@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use solana_sdk::pubkey::Pubkey;
@@ -77,7 +77,7 @@ pub struct ScreenInfo {
 pub struct UserFingerprintEventFrontendData {
     pub user_id: Option<String>,
     pub event_type: String,
-    
+
     pub install_id: String,
     pub install_id_source: String,
 
@@ -92,7 +92,6 @@ pub struct UserFingerprintEventFrontendData {
 
     pub user_agent: Option<String>,
     pub phantom_version: Option<String>,
-
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

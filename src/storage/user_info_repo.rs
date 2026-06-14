@@ -1,5 +1,5 @@
-use sqlx::{PgPool, Result};
 use crate::models::user::UserFingerprintEventInsert;
+use sqlx::{PgPool, Result};
 
 pub async fn insert_user_fingerprint_event(
     pool: &PgPool,
