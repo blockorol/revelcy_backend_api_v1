@@ -1,0 +1,21 @@
+name: Docs
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  structure:
+    name: Documentation structure
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check required docs
+        shell: pwsh
+        run: .\scripts\check-agent-docs.ps1
+

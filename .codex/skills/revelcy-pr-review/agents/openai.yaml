@@ -1,0 +1,5 @@
+interface:
+  display_name: "Revelcy PR Review"
+  short_description: "Review Revelcy backend changes"
+  default_prompt: "Use $revelcy-pr-review to review backend changes for bugs, security risks, contract breaks, and missing tests."
+
