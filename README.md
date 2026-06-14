@@ -21,6 +21,11 @@ Required local environment includes at least:
 
 - `DATABASE_URL`
 - `SOLANA_RPC`
+- `JWT_SECRET`
+- `CURRENT_HOST`
+- `PYTH_MAINNET_URL`
+- `REVELCY_AUTH_PRIVATE_KEY_DEV`
+- `REVELCY_AUTH_PRIVATE_KEY_MAIN`
 
 See [Configuration](docs/CONFIGURATION.md) for the full environment list.
 

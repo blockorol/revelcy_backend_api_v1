@@ -6,7 +6,7 @@ This map tells agents where to look before editing.
 
 - `src/main.rs`: binary entrypoint for `revelcy-backend-api`; loads env, creates the Postgres pool and Solana RPC client, registers Actix scopes, and binds the server.
 - `src/lib.rs`: library root exposing project modules.
-- `src/bin/pump_keys_generator.rs`: additional binary using `DATABASE_URL` and `TARGET_SUFFIX`.
+- `src/bin/pump_keys_generator.rs`: additional binary using `DATABASE_URL` and optional `TARGET_SUFFIX` with default `pump`.
 
 ## Top-Level Directories
 

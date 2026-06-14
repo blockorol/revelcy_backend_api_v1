@@ -8,6 +8,12 @@ The server requires `DATABASE_URL` at startup. Set it in your local environment 
 
 The server requires `SOLANA_RPC` at startup. Use a devnet or mainnet RPC endpoint appropriate for your environment.
 
+## Missing Startup Config
+
+The API server validates `DATABASE_URL`, `SOLANA_RPC`, `JWT_SECRET`, `CURRENT_HOST`, `PYTH_MAINNET_URL`, `REVELCY_AUTH_PRIVATE_KEY_DEV`, and `REVELCY_AUTH_PRIVATE_KEY_MAIN` after loading `.env`.
+
+The `pump-key-generator` worker only validates `DATABASE_URL`; `TARGET_SUFFIX` defaults to `pump`.
+
 ## CORS Issues
 
 Check `CORS_ORIGINS`. CORS behavior is implemented in `src/middleware/cors.rs`.

@@ -17,6 +17,11 @@ Create local environment variables outside git-tracked files. At minimum, set:
 
 - `DATABASE_URL`
 - `SOLANA_RPC`
+- `JWT_SECRET`
+- `CURRENT_HOST`
+- `PYTH_MAINNET_URL`
+- `REVELCY_AUTH_PRIVATE_KEY_DEV`
+- `REVELCY_AUTH_PRIVATE_KEY_MAIN`
 
 See [Configuration](CONFIGURATION.md) for the full list.
 

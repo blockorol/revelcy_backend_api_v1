@@ -132,7 +132,16 @@ Environment access is centralized under `src/config/`. Other modules should call
 - `src/config/solana.rs`: Solana RPC URLs, network, and program ids.
 - `src/config/pump_keys.rs`: pump key generator settings.
 
-`src/main.rs` calls `config::validate_startup_config()` after loading `.env` and before creating clients. At startup, `DATABASE_URL` and `SOLANA_RPC` are required because the process cannot create the Postgres pool or shared Solana RPC client without them.
+`src/main.rs` calls `config::validate_startup_config()` after loading `.env` and before creating clients. At startup, the API process requires:
+
+- `DATABASE_URL`: needed to create the Postgres pool.
+- `SOLANA_RPC`: needed to create the shared Solana RPC client.
+- `JWT_SECRET`: required for non-development JWT signing/validation safety.
+- `CURRENT_HOST`: required so generated file/avatar URLs are not silently built with a localhost default.
+- `PYTH_MAINNET_URL`: required so price lookups do not silently return zero.
+- `REVELCY_AUTH_PRIVATE_KEY_DEV` and `REVELCY_AUTH_PRIVATE_KEY_MAIN`: required by Solana transaction builders; without them transaction endpoints panic when signer material is needed.
+
+`src/bin/pump_keys_generator.rs` calls `config::validate_pump_keys_config()` and only requires `DATABASE_URL`; `TARGET_SUFFIX` defaults to `pump`.
 
 Current callers include:
 

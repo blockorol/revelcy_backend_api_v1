@@ -31,11 +31,11 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::new("info"))
         .init();
+    config::validate_pump_keys_config()?;
 
     let db_url = config::get_database_url()
         .with_context(|| format!("{} not set", config::DATABASE_URL_ENV))?;
-    let target_suffix = config::get_target_suffix()
-        .with_context(|| format!("{} not set", config::TARGET_SUFFIX_ENV))?;
+    let target_suffix = config::get_target_suffix();
 
     let pool = PgPoolOptions::new()
         .max_connections(5)

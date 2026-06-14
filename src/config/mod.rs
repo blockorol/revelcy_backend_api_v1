@@ -49,13 +49,30 @@ impl fmt::Display for ConfigError {
 impl std::error::Error for ConfigError {}
 
 pub fn validate_startup_config() -> Result<(), ConfigError> {
-    let missing_required = [DATABASE_URL_ENV, SOLANA_RPC_ENV]
+    validate_required_envs(&[
+        DATABASE_URL_ENV,
+        SOLANA_RPC_ENV,
+        JWT_SECRET_ENV,
+        CURRENT_HOST_ENV,
+        PYTH_MAINNET_URL_ENV,
+        REVELCY_AUTH_PRIVATE_KEY_DEV_ENV,
+        REVELCY_AUTH_PRIVATE_KEY_MAIN_ENV,
+    ])
+}
+
+pub fn validate_pump_keys_config() -> Result<(), ConfigError> {
+    validate_required_envs(&[DATABASE_URL_ENV])
+}
+
+fn validate_required_envs(required: &[&'static str]) -> Result<(), ConfigError> {
+    let missing_required = required
         .into_iter()
         .filter(|name| {
             get_optional_env(name)
                 .map(|value| value.trim().is_empty())
                 .unwrap_or(true)
         })
+        .copied()
         .collect::<Vec<_>>();
 
     if missing_required.is_empty() {

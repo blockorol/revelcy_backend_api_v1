@@ -35,7 +35,7 @@ Treat this area as security and funds sensitive. Do not change account derivatio
 
 ## Environment
 
-Solana-related env names appear in `src/main.rs`, `src/config/mod.rs`, `src/services/solana_service.rs`, and `src/services/solana_service_v2/env.rs`.
+Solana-related env names live under `src/config/`; Solana modules should use config accessors instead of reading env vars directly.
 
 Important names:
 
@@ -44,6 +44,12 @@ Important names:
 - `SOLANA_MAINNET_RPC`
 - `NETWORK`
 - `REVELCY_AUTH_PRIVATE_KEY`
+- `REVELCY_AUTH_PRIVATE_KEY_DEV`
+- `REVELCY_AUTH_PRIVATE_KEY_MAIN`
+- `PURPLE_PROGRAM_ID_DEV`
+- `PURPLE_PROGRAM_ID_MAIN`
+
+`REVELCY_AUTH_PRIVATE_KEY_DEV` and `REVELCY_AUTH_PRIVATE_KEY_MAIN` are required by API startup validation because transaction builders need network-specific signer material. `PURPLE_PROGRAM_ID_DEV` and `PURPLE_PROGRAM_ID_MAIN` have code fallbacks but should be reviewed carefully before relying on them.
 
 Do not log private key material, signatures, seed material, or secret config.
 
