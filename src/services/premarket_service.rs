@@ -376,7 +376,9 @@ pub async fn get_holder_entry_info(
 
     let whitelist = {
         if pm.is_whitelist_enabled {
-            let user_opt = user_service::get_by_wallet_address(pool, holder_pubkey).await?;
+            let user_opt = user_service::get_by_wallet_address(pool, holder_pubkey)
+                .await
+                .map_err(ErrorInternalServerError)?;
             if let Some(user) = user_opt {
                 whitelist_repo::get_status_with_updated_at(pool, premarket_id, user.id)
                     .await

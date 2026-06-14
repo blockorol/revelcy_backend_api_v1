@@ -1,28 +1,25 @@
-use actix_web::{web, web::BytesMut, HttpResponse, HttpRequest, HttpMessage, Scope};
-use actix_multipart::Multipart;
-use sqlx::PgPool;
+use crate::api::errors::{ApiError, ApiErrorCode, ApiResult, FieldError};
 use crate::api::user::{
-    AddAvatarResponseDto,
-    AddUserNameRequestDto, AddUserNameResponseDto,
-    GetUsersShortListRequestDto, GetUsersShortListResponseDto,
-    SearchUsersRequestDto, SearchUsersResponseDto,
-    SetInviteCodeRequestDto, SetInviteCodeResponseDto,
-    UserDto, UserSetInfoRequestDTO, UserSetInfoResponseDTO, UserShortDto
+    AddAvatarResponseDto, AddUserNameRequestDto, AddUserNameResponseDto,
+    GetUsersShortListRequestDto, GetUsersShortListResponseDto, SearchUsersRequestDto,
+    SearchUsersResponseDto, SetInviteCodeRequestDto, SetInviteCodeResponseDto, UserDto,
+    UserSetInfoRequestDTO, UserSetInfoResponseDTO, UserShortDto,
 };
-use crate::api::errors::{ApiError, ApiErrorCode, FieldError, ApiResult};
+use actix_multipart::Multipart;
+use actix_web::{web, web::BytesMut, HttpMessage, HttpRequest, HttpResponse, Scope};
+use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::user::{ApplyInviteCodeResult, ScreenInfo, UserFingerprintEventFrontendData, UserFingerprintEventBackendData};
-use crate::services::jwt_service;
-use crate::services::user_service;
-use futures_util::{StreamExt, TryStreamExt};
-use crate::server::user_server_extractor::{
-    extract_client_ip,
-    extract_header,
+use crate::models::user::{
+    ApplyInviteCodeResult, ScreenInfo, UserFingerprintEventBackendData,
+    UserFingerprintEventFrontendData,
 };
+use crate::server::user_server_extractor::{extract_client_ip, extract_header};
+use crate::services::jwt_service;
 use crate::services::user_info_service;
-
-
+use crate::services::user_service;
+use crate::services::user_service::UserServiceError;
+use futures_util::{StreamExt, TryStreamExt};
 
 pub fn user_scope() -> Scope {
     web::scope("/user")
@@ -50,22 +47,23 @@ pub async fn user_set_info(
         .cloned()
         .unwrap_or_default();
 
-    let token_data = jwt_service::decode_jwt_with_user_info(&token)
-        .ok();
+    let token_data = jwt_service::decode_jwt_with_user_info(&token).ok();
 
-    let user_id_opt: Option<Uuid> = token_data
-        .and_then(|t| Some(t.user_id));
+    let user_id_opt: Option<Uuid> = token_data.and_then(|t| Some(t.user_id));
 
     // ─────────────────────────────────────────────────────────────
     // Backend-collected request context (source of truth)
     // ─────────────────────────────────────────────────────────────
     let ip = extract_client_ip(&req).unwrap_or_else(|| "default".into());
     let user_agent = extract_header(&req, "user-agent").unwrap_or_else(|| "default".into());
-    let accept_language = extract_header(&req, "accept-language").unwrap_or_else(|| "default".into());
+    let accept_language =
+        extract_header(&req, "accept-language").unwrap_or_else(|| "default".into());
 
     let sec_ch_ua = extract_header(&req, "sec-ch-ua").unwrap_or_else(|| "default".into());
-    let sec_ch_ua_platform = extract_header(&req, "sec-ch-ua-platform").unwrap_or_else(|| "default".into());
-    let sec_ch_ua_mobile = extract_header(&req, "sec-ch-ua-mobile").unwrap_or_else(|| "default".into());
+    let sec_ch_ua_platform =
+        extract_header(&req, "sec-ch-ua-platform").unwrap_or_else(|| "default".into());
+    let sec_ch_ua_mobile =
+        extract_header(&req, "sec-ch-ua-mobile").unwrap_or_else(|| "default".into());
     let event_type_str = serde_json::to_value(&dto.event_type)
         .ok()
         .and_then(|v| v.as_str().map(|s| s.to_string()))
@@ -76,7 +74,10 @@ pub async fn user_set_info(
         event_type: event_type_str,
 
         install_id: dto.client.install_id.unwrap_or_else(|| "default".into()),
-        install_id_source: dto.client.install_id_source.unwrap_or_else(|| "default".into()),
+        install_id_source: dto
+            .client
+            .install_id_source
+            .unwrap_or_else(|| "default".into()),
 
         client_ts_ms: dto.client_timestamp_ms,
 
@@ -88,13 +89,13 @@ pub async fn user_set_info(
             height: dto.client.screen_height,
             width: dto.client.screen_width,
         },
-        
+
         pixel_ratio: dto.client.pixel_ratio,
         user_agent: dto.client.user_agent,
         phantom_version: dto.client.phantom_version,
     };
-    
-    let be_data: UserFingerprintEventBackendData= UserFingerprintEventBackendData{
+
+    let be_data: UserFingerprintEventBackendData = UserFingerprintEventBackendData {
         ip,
         user_agent,
         accept_language,
@@ -124,6 +125,32 @@ fn map_user_info_service_error(error: user_info_service::UserInfoServiceError) -
     }
 }
 
+fn map_user_service_get_error(error: UserServiceError) -> ApiError {
+    match error {
+        UserServiceError::Storage(e) => {
+            eprintln!("user service get storage error: {e:?}");
+            ApiError::internal_get_db_error()
+        }
+        UserServiceError::File(e) => {
+            eprintln!("user service get file error: {e:?}");
+            ApiError::internal_server_error()
+        }
+    }
+}
+
+fn map_user_service_update_error(error: UserServiceError) -> ApiError {
+    match error {
+        UserServiceError::Storage(e) => {
+            eprintln!("user service update storage error: {e:?}");
+            ApiError::internal_update_db_error()
+        }
+        UserServiceError::File(e) => {
+            eprintln!("user service update file error: {e:?}");
+            ApiError::internal_update_db_error()
+        }
+    }
+}
+
 async fn set_invite_code(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -131,8 +158,8 @@ async fn set_invite_code(
 ) -> ApiResult<HttpResponse> {
     let dto = payload.into_inner();
 
-    let user_info = extract_user_info_from_request(&req)
-        .map_err(|_| ApiError::auth_invalid_token())?;
+    let user_info =
+        extract_user_info_from_request(&req).map_err(|_| ApiError::auth_invalid_token())?;
 
     let invite_code = dto.invite_code.trim();
     if invite_code.is_empty() {
@@ -147,7 +174,7 @@ async fn set_invite_code(
         .await
         .map_err(|e| {
             eprintln!("set_invite_code db error: {e:?}");
-            ApiError::internal_update_db_error()
+            map_user_service_update_error(e)
         })?;
 
     match result {
@@ -166,7 +193,6 @@ async fn set_invite_code(
     }
 }
 
-
 pub async fn update_username(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -174,8 +200,8 @@ pub async fn update_username(
 ) -> ApiResult<HttpResponse> {
     let dto = payload.into_inner();
 
-    let user_info = extract_user_info_from_request(&req)
-        .map_err(|_| ApiError::auth_invalid_token())?;
+    let user_info =
+        extract_user_info_from_request(&req).map_err(|_| ApiError::auth_invalid_token())?;
 
     let username = dto.username.trim();
     if username.is_empty() {
@@ -190,7 +216,7 @@ pub async fn update_username(
         .await
         .map_err(|e| {
             eprintln!("update_username db error: {e:?}");
-            ApiError::internal_update_db_error()
+            map_user_service_update_error(e)
         })?;
 
     let token = jwt_service::create_jwt_with_user(
@@ -212,21 +238,24 @@ pub async fn update_avatar(
     pool: web::Data<PgPool>,
     mut payload: Multipart,
 ) -> ApiResult<HttpResponse> {
-    let user_info = extract_user_info_from_request(&req)
-        .map_err(|_| ApiError::auth_invalid_token())?;
+    let user_info =
+        extract_user_info_from_request(&req).map_err(|_| ApiError::auth_invalid_token())?;
 
-    let bytes = extract_single_png_from_multipart(&mut payload).await
-        .map_err(|_| ApiError::from_field_errors(vec![FieldError {
-            field: "avatar",
-            code: ApiErrorCode::ValidationError,
-            message: "invalid image upload".into(),
-        }]))?;
+    let bytes = extract_single_png_from_multipart(&mut payload)
+        .await
+        .map_err(|_| {
+            ApiError::from_field_errors(vec![FieldError {
+                field: "avatar",
+                code: ApiErrorCode::ValidationError,
+                message: "invalid image upload".into(),
+            }])
+        })?;
 
     let avatar_url = user_service::set_avatar(pool.get_ref(), user_info.user_id, &bytes)
         .await
         .map_err(|e| {
             eprintln!("update_avatar save error: {e:?}");
-            ApiError::internal_update_db_error()
+            map_user_service_update_error(e)
         })?;
 
     let token = jwt_service::create_jwt_with_user(
@@ -260,7 +289,7 @@ pub async fn search_users(
         .await
         .map_err(|e| {
             eprintln!("search_username db error: {e:?}");
-            ApiError::internal_get_db_error()
+            map_user_service_get_error(e)
         })?;
 
     let items = users
@@ -298,7 +327,7 @@ pub async fn get_users_short_list(
         .await
         .map_err(|e| {
             eprintln!("get_users_short_list db error: {e:?}");
-            ApiError::internal_get_db_error()
+            map_user_service_get_error(e)
         })?;
 
     let items = users
@@ -313,8 +342,9 @@ pub async fn get_users_short_list(
     Ok(HttpResponse::Ok().json(GetUsersShortListResponseDto { items }))
 }
 
-
-pub fn extract_user_info_from_request(req: &HttpRequest) -> Result<jwt_service::TokenWithUserInfo, HttpResponse> {
+pub fn extract_user_info_from_request(
+    req: &HttpRequest,
+) -> Result<jwt_service::TokenWithUserInfo, HttpResponse> {
     let token = req
         .headers()
         .get("Authorization")
@@ -322,9 +352,8 @@ pub fn extract_user_info_from_request(req: &HttpRequest) -> Result<jwt_service::
         .and_then(|s| s.strip_prefix("Bearer "))
         .ok_or_else(|| HttpResponse::Unauthorized().body("Missing or invalid token"))?;
 
-    jwt_service::decode_jwt_with_user_info(token).map_err(|err| {
-        HttpResponse::Unauthorized().body(format!("JWT is broken: {}", err))
-    })
+    jwt_service::decode_jwt_with_user_info(token)
+        .map_err(|err| HttpResponse::Unauthorized().body(format!("JWT is broken: {}", err)))
 }
 
 pub async fn extract_single_png_from_multipart(
@@ -336,9 +365,10 @@ pub async fn extract_single_png_from_multipart(
         match payload.try_next().await {
             Ok(Some(mut field)) => {
                 field_count += 1;
-                println!("📄 [EXTRACT_PNG] Processing field #{} - Name: {:?}, Content-Type: {:?}", 
-                    field_count, 
-                    field.name(), 
+                println!(
+                    "📄 [EXTRACT_PNG] Processing field #{} - Name: {:?}, Content-Type: {:?}",
+                    field_count,
+                    field.name(),
                     field.content_type()
                 );
 
@@ -349,11 +379,18 @@ pub async fn extract_single_png_from_multipart(
                     chunk_count += 1;
                     match chunk {
                         Ok(data) => {
-                            println!("📦 [EXTRACT_PNG] Received chunk #{} - Size: {} bytes", chunk_count, data.len());
+                            println!(
+                                "📦 [EXTRACT_PNG] Received chunk #{} - Size: {} bytes",
+                                chunk_count,
+                                data.len()
+                            );
                             bytes.extend_from_slice(&data);
-                        },
+                        }
                         Err(err) => {
-                            println!("❌ [EXTRACT_PNG] Multipart read error on chunk #{}: {:?}", chunk_count, err);
+                            println!(
+                                "❌ [EXTRACT_PNG] Multipart read error on chunk #{}: {:?}",
+                                chunk_count, err
+                            );
                             return Err(HttpResponse::BadRequest().body("Invalid file upload"));
                         }
                     }
@@ -363,37 +400,57 @@ pub async fn extract_single_png_from_multipart(
 
                 // Check image signature (PNG or JPEG)
                 if bytes.len() < 4 {
-                    println!("❌ [EXTRACT_PNG] File too small to be a valid image ({} bytes)", bytes.len());
+                    println!(
+                        "❌ [EXTRACT_PNG] File too small to be a valid image ({} bytes)",
+                        bytes.len()
+                    );
                     return Err(HttpResponse::BadRequest().body("File too small"));
                 }
 
                 let image_signature = &bytes[0..4];
-                println!("🔍 [EXTRACT_PNG] Checking image signature - First 4 bytes: {:?}", image_signature);
-                
+                println!(
+                    "🔍 [EXTRACT_PNG] Checking image signature - First 4 bytes: {:?}",
+                    image_signature
+                );
+
                 let is_png = bytes.starts_with(&[0x89, b'P', b'N', b'G']);
                 let is_jpeg = bytes.starts_with(&[0xFF, 0xD8, 0xFF]);
-                
+
                 if !is_png && !is_jpeg {
                     println!("❌ [EXTRACT_PNG] Invalid image signature - Expected PNG [137, 80, 78, 71] or JPEG [255, 216, 255], Got: {:?}", image_signature);
-                    return Err(HttpResponse::UnsupportedMediaType().body("Only PNG and JPEG supported"));
+                    return Err(
+                        HttpResponse::UnsupportedMediaType().body("Only PNG and JPEG supported")
+                    );
                 }
 
                 let image_type = if is_png { "PNG" } else { "JPEG" };
-                println!("✅ [EXTRACT_PNG] Valid {} file extracted - Size: {} bytes", image_type, bytes.len());
+                println!(
+                    "✅ [EXTRACT_PNG] Valid {} file extracted - Size: {} bytes",
+                    image_type,
+                    bytes.len()
+                );
                 return Ok(bytes);
-            },
+            }
             Ok(None) => {
-                println!("❌ [EXTRACT_PNG] No more fields in multipart payload (processed {} fields)", field_count);
+                println!(
+                    "❌ [EXTRACT_PNG] No more fields in multipart payload (processed {} fields)",
+                    field_count
+                );
                 break;
-            },
+            }
             Err(err) => {
-                println!("❌ [EXTRACT_PNG] Error parsing multipart payload: {:?}", err);
+                println!(
+                    "❌ [EXTRACT_PNG] Error parsing multipart payload: {:?}",
+                    err
+                );
                 return Err(HttpResponse::BadRequest().body("Invalid multipart data"));
             }
         }
     }
 
-    println!("❌ [EXTRACT_PNG] No fields found in multipart payload (processed {} fields)", field_count);
+    println!(
+        "❌ [EXTRACT_PNG] No fields found in multipart payload (processed {} fields)",
+        field_count
+    );
     Err(HttpResponse::BadRequest().body("No file uploaded"))
 }
-

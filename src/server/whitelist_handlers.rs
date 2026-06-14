@@ -1,22 +1,21 @@
 use std::str::FromStr;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use sqlx::PgPool;
 use solana_sdk::pubkey::Pubkey;
+use sqlx::PgPool;
 
-use crate::api::errors::{ApiError, ApiErrorCode,FieldError, ApiResult};
+use crate::api::errors::{ApiError, ApiErrorCode, ApiResult, FieldError};
 use crate::api::whitelist::{
-    WhitelistSetStatusRequest, WhitelistSetStatusResponse,
-    RemoveWhitelistUserRequest, RemoveWhitelistUserResponse,
-    AddWhitelistUserRequest, AddWhitelistUserListRequest,
-    ApplyWhitelistRequest, ApplyWhitelistResponse,
-    GetWhitelistRequest, GetWhitelistResponse,
+    AddWhitelistUserListRequest, AddWhitelistUserRequest, ApplyWhitelistRequest,
+    ApplyWhitelistResponse, GetWhitelistRequest, GetWhitelistResponse, RemoveWhitelistUserRequest,
+    RemoveWhitelistUserResponse, WhitelistSetStatusRequest, WhitelistSetStatusResponse,
     WhitelistUserDTO,
 };
-use crate::server::auth_validation::validate_base_request;
-use crate::services::{premarket_service, user_service, whitelist_service};
-use crate::models::whitelist::{WhitelistStatus, WhitelistUserInfo};
 use crate::models::premarket::PremarketLookupKeyType;
+use crate::models::whitelist::{WhitelistStatus, WhitelistUserInfo};
+use crate::server::auth_validation::validate_base_request;
+use crate::services::whitelist_service::WhitelistServiceError;
+use crate::services::{premarket_service, user_service, whitelist_service};
 // ─────────────────────────────────────────────────────────────
 // Helper: ensure caller is creator of premarket
 // ─────────────────────────────────────────────────────────────
@@ -25,21 +24,28 @@ async fn ensure_creator(
     premarket_id: uuid::Uuid,
     caller_user_id: uuid::Uuid,
 ) -> Result<(), ApiError> {
-    let premarket_info = match premarket_service::get_full_premarket_info(pool, &premarket_id.to_string(), PremarketLookupKeyType::Id)
-        .await
-        .map_err(|e| {
+    let premarket_info = match premarket_service::get_full_premarket_info(
+        pool,
+        &premarket_id.to_string(),
+        PremarketLookupKeyType::Id,
+    )
+    .await
+    .map_err(|e| {
+        eprintln!(
+            "[whitelist] Failed to get premarket info for premarket_id={} err={:?}",
+            premarket_id, e
+        );
+        ApiError::internal_get_db_error()
+    })? {
+        Some(info) => info,
+        None => {
             eprintln!(
-                "[whitelist] Failed to get premarket info for premarket_id={} err={:?}",
-                premarket_id, e
+                "[whitelist] Failed to get premarket info for premarket_id={}",
+                premarket_id
             );
-            ApiError::internal_get_db_error()
-        })? {
-            Some(info) => info,
-            None => {
-                eprintln!("[whitelist] Failed to get premarket info for premarket_id={}", premarket_id);
-                return Err(ApiError::missing_premarket());
-            }
-        };
+            return Err(ApiError::missing_premarket());
+        }
+    };
 
     if premarket_info.main_info.creator.id != caller_user_id {
         eprintln!(
@@ -76,14 +82,15 @@ async fn resolve_user_id_strict(
     let user_opt = user_service::get_by_wallet_address(pool, &pk)
         .await
         .map_err(|e| {
-            eprintln!("[whitelist] user_service::get_by_wallet_address err={:?}", e);
+            eprintln!(
+                "[whitelist] user_service::get_by_wallet_address err={:?}",
+                e
+            );
             ApiError::internal_get_db_error()
         })?;
 
     Ok(user_opt.map(|u| u.id))
 }
-
-
 
 fn map_user_to_dto(u: WhitelistUserInfo) -> WhitelistUserDTO {
     WhitelistUserDTO {
@@ -92,6 +99,46 @@ fn map_user_to_dto(u: WhitelistUserInfo) -> WhitelistUserDTO {
         avatar_url: u.user.avatar_url,
         wallets: u.user.wallets,
         status: u.status.as_str().to_string(),
+    }
+}
+
+fn map_whitelist_service_get_error(err: WhitelistServiceError) -> ApiError {
+    match err {
+        WhitelistServiceError::MissingUserIdentifier => {
+            ApiError::from_field_errors(vec![FieldError {
+                field: "user_id or user_pubkey",
+                code: ApiErrorCode::ValidationError,
+                message: "user_id or user_pubkey required",
+            }])
+        }
+        WhitelistServiceError::UserLookup(err) => {
+            eprintln!("[whitelist] user lookup failed: {err}");
+            ApiError::internal_get_db_error()
+        }
+        WhitelistServiceError::Storage(err) => {
+            eprintln!("[whitelist] storage get failed: {err:?}");
+            ApiError::internal_get_db_error()
+        }
+    }
+}
+
+fn map_whitelist_service_update_error(err: WhitelistServiceError) -> ApiError {
+    match err {
+        WhitelistServiceError::MissingUserIdentifier => {
+            ApiError::from_field_errors(vec![FieldError {
+                field: "user_id or user_pubkey",
+                code: ApiErrorCode::ValidationError,
+                message: "user_id or user_pubkey required",
+            }])
+        }
+        WhitelistServiceError::UserLookup(err) => {
+            eprintln!("[whitelist] user lookup failed: {err}");
+            ApiError::internal_update_db_error()
+        }
+        WhitelistServiceError::Storage(err) => {
+            eprintln!("[whitelist] storage update failed: {err:?}");
+            ApiError::internal_update_db_error()
+        }
     }
 }
 
@@ -131,7 +178,7 @@ pub async fn add_whitelist_user(
             "[whitelist/add_user] Failed premarket_id={} caller={} user_id={:?} user_pubkey={:?} err={:?}",
             dto.premarket_id, ctx.user.internal_id, dto.user_id, dto.user_pubkey, e
         );
-        ApiError::internal_update_db_error()
+        map_whitelist_service_update_error(e)
     })?;
 
     Ok(HttpResponse::Ok().finish())
@@ -158,7 +205,7 @@ pub async fn add_whitelist_user_list(
             let mut out = Vec::with_capacity(list.len());
             for pk in list {
                 let s = Pubkey::from_str(&pk)
-                    .map_err(|_| ApiError::invalid_user_pubkey())?// todo: fix me
+                    .map_err(|_| ApiError::invalid_user_pubkey())? // todo: fix me
                     .to_string();
                 out.push(s);
             }
@@ -179,7 +226,7 @@ pub async fn add_whitelist_user_list(
             "[whitelist/add_user_list] Failed premarket_id={} caller={} err={:?}",
             dto.premarket_id, ctx.user.internal_id, e
         );
-        ApiError::internal_update_db_error()
+        map_whitelist_service_update_error(e)
     })?;
 
     Ok(HttpResponse::Ok().finish())
@@ -196,19 +243,16 @@ pub async fn apply_whitelist(
     let dto = payload.into_inner();
     let ctx = validate_base_request(&req, &dto.network.to_string(), None)?;
 
-    let created = whitelist_service::apply_user(
-        pool.get_ref(),
-        dto.premarket_id,
-        ctx.user.internal_id,
-    )
-    .await
-    .map_err(|e| {
-        eprintln!(
-            "[whitelist/apply] Failed premarket_id={} user_id={} err={:?}",
-            dto.premarket_id, ctx.user.internal_id, e
-        );
-        ApiError::internal_update_db_error()
-    })?;
+    let created =
+        whitelist_service::apply_user(pool.get_ref(), dto.premarket_id, ctx.user.internal_id)
+            .await
+            .map_err(|e| {
+                eprintln!(
+                    "[whitelist/apply] Failed premarket_id={} user_id={} err={:?}",
+                    dto.premarket_id, ctx.user.internal_id, e
+                );
+                map_whitelist_service_update_error(e)
+            })?;
 
     Ok(HttpResponse::Ok().json(ApplyWhitelistResponse { created }))
 }
@@ -220,14 +264,18 @@ pub async fn get_premarket_whitelist(
 ) -> ApiResult<HttpResponse> {
     let dto = payload.into_inner();
 
-    let status: Option<WhitelistStatus> = dto.status.map(|s| {
-        WhitelistStatus::from_str(&s)
-            .map_err(|_| ApiError::from_field_errors(vec![FieldError {
-                field: "status",
-                code: ApiErrorCode::ValidationError,
-                message: "invalid status value".into(),
-            }]))
-    }).transpose()?;
+    let status: Option<WhitelistStatus> = dto
+        .status
+        .map(|s| {
+            WhitelistStatus::from_str(&s).map_err(|_| {
+                ApiError::from_field_errors(vec![FieldError {
+                    field: "status",
+                    code: ApiErrorCode::ValidationError,
+                    message: "invalid status value".into(),
+                }])
+            })
+        })
+        .transpose()?;
 
     let res = whitelist_service::get_users(
         pool.get_ref(),
@@ -242,7 +290,7 @@ pub async fn get_premarket_whitelist(
             "[whitelist/get] Failed premarket_id={} cursor={} limit={} err={:?}",
             dto.premarket_id, dto.cursor, dto.limit, e
         );
-        ApiError::internal_get_db_error()
+        map_whitelist_service_get_error(e)
     })?;
 
     let response = GetWhitelistResponse {
@@ -288,7 +336,7 @@ pub async fn remove_whitelist_user(
             "[whitelist/remove_user] Failed premarket_id={} caller={} user_id={:?} user_pubkey={:?} err={:?}",
             dto.premarket_id, ctx.user.internal_id, dto.user_id, dto.user_pubkey, e
         );
-        ApiError::internal_update_db_error()
+        map_whitelist_service_update_error(e)
     })?;
 
     Ok(HttpResponse::Ok().json(RemoveWhitelistUserResponse { removed }))
@@ -306,30 +354,22 @@ pub async fn whitelist_approve(
 
     ensure_creator(pool.get_ref(), dto.premarket_id, ctx.user.internal_id).await?;
 
-    let uid_opt = resolve_user_id_strict(
-        pool.get_ref(),
-        dto.user_id,
-        dto.user_pubkey.as_deref(),
-    )
-    .await?;
+    let uid_opt =
+        resolve_user_id_strict(pool.get_ref(), dto.user_id, dto.user_pubkey.as_deref()).await?;
 
     let Some(user_id) = uid_opt else {
         return Ok(HttpResponse::Ok().json(WhitelistSetStatusResponse { updated: 0 }));
     };
 
-    whitelist_service::approve_user(
-        pool.get_ref(),
-        dto.premarket_id,
-        user_id,
-    )
-    .await
-    .map_err(|e| {
-        eprintln!(
-            "[whitelist/approve] Failed premarket_id={} caller={} user_id={} err={:?}",
-            dto.premarket_id, ctx.user.internal_id, user_id, e
-        );
-        ApiError::internal_update_db_error()
-    })?;
+    whitelist_service::approve_user(pool.get_ref(), dto.premarket_id, user_id)
+        .await
+        .map_err(|e| {
+            eprintln!(
+                "[whitelist/approve] Failed premarket_id={} caller={} user_id={} err={:?}",
+                dto.premarket_id, ctx.user.internal_id, user_id, e
+            );
+            map_whitelist_service_update_error(e)
+        })?;
 
     Ok(HttpResponse::Ok().json(WhitelistSetStatusResponse { updated: 1 }))
 }
@@ -344,30 +384,22 @@ pub async fn whitelist_reject(
 
     ensure_creator(pool.get_ref(), dto.premarket_id, ctx.user.internal_id).await?;
 
-    let uid_opt = resolve_user_id_strict(
-        pool.get_ref(),
-        dto.user_id,
-        dto.user_pubkey.as_deref(),
-    )
-    .await?;
+    let uid_opt =
+        resolve_user_id_strict(pool.get_ref(), dto.user_id, dto.user_pubkey.as_deref()).await?;
 
     let Some(user_id) = uid_opt else {
         return Ok(HttpResponse::Ok().json(WhitelistSetStatusResponse { updated: 0 }));
     };
 
-    whitelist_service::reject_user(
-        pool.get_ref(),
-        dto.premarket_id,
-        user_id,
-    )
-    .await
-    .map_err(|e| {
-        eprintln!(
-            "[whitelist/reject] Failed premarket_id={} caller={} user_id={} err={:?}",
-            dto.premarket_id, ctx.user.internal_id, user_id, e
-        );
-        ApiError::internal_update_db_error()
-    })?;
+    whitelist_service::reject_user(pool.get_ref(), dto.premarket_id, user_id)
+        .await
+        .map_err(|e| {
+            eprintln!(
+                "[whitelist/reject] Failed premarket_id={} caller={} user_id={} err={:?}",
+                dto.premarket_id, ctx.user.internal_id, user_id, e
+            );
+            map_whitelist_service_update_error(e)
+        })?;
 
     Ok(HttpResponse::Ok().json(WhitelistSetStatusResponse { updated: 1 }))
 }

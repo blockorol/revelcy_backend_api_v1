@@ -20,6 +20,9 @@ Resolved cleanup:
 
 - `src/models/premarket.rs` no longer imports premarket API DTOs for dynamic info mapping; internal-to-API conversions for those DTOs live in `src/api/premarket.rs`.
 - `src/services/user_info_service.rs` no longer imports API errors; it returns a service-owned error that `src/server/user_server.rs` maps to `ApiError`.
+- `src/services/user_service.rs` no longer imports Actix HTTP errors; it returns `UserServiceError` that handlers map at the server/API boundary.
+- `src/services/whitelist_service.rs` no longer imports Actix HTTP errors; it returns `WhitelistServiceError` that `src/server/whitelist_handlers.rs` maps to `ApiError`.
+- `src/services/ipfs_service.rs` no longer imports Actix HTTP errors; it returns `IpfsServiceError` for callers to map at the API/server boundary when re-enabled.
 - `src/services/premarket_service.rs` no longer imports `src/storage/models.rs` row structs; `src/storage/premarket_repo.rs` maps premarket storage rows to internal models before returning to services.
 - `src/storage/vesting_repo.rs` and `src/storage/signing_keys.rs` no longer expose storage row structs in their public return types; they map rows to internal models before returning to services.
 
