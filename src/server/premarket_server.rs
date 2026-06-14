@@ -1934,7 +1934,7 @@ pub async fn update_community_info(
 
     if let Err(e) = premarket_service::update_community_info(&pool, &pubkey, community).await {
         eprintln!("❌ Failed to create full premarket info: {:?}", e);
-        return Err(e);
+        return Err(ErrorInternalServerError(e));
     }
     Ok(HttpResponse::Ok().body("Saved"))
 }

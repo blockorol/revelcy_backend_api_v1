@@ -24,6 +24,7 @@ Resolved cleanup:
 - `src/services/whitelist_service.rs` no longer imports Actix HTTP errors; it returns `WhitelistServiceError` that `src/server/whitelist_handlers.rs` maps to `ApiError`.
 - `src/services/ipfs_service.rs` no longer imports Actix HTTP errors; it returns `IpfsServiceError` for callers to map at the API/server boundary when re-enabled.
 - `src/services/vesting_service.rs` no longer imports Actix HTTP errors; it returns `VestingServiceError` that `src/server/vesing_server_handler.rs` and premarket transaction handlers map at the server/API boundary.
+- `src/services/premarket_service.rs` no longer imports Actix HTTP errors; it returns `PremarketServiceError` and handlers map it at the server/API boundary.
 - `src/services/premarket_service.rs` no longer imports `src/storage/models.rs` row structs; `src/storage/premarket_repo.rs` maps premarket storage rows to internal models before returning to services.
 - `src/storage/vesting_repo.rs` and `src/storage/signing_keys.rs` no longer expose storage row structs in their public return types; they map rows to internal models before returning to services.
 
