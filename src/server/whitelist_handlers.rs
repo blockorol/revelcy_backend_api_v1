@@ -31,15 +31,16 @@ async fn ensure_creator(
     )
     .await
     .map_err(|e| {
-        eprintln!(
+        tracing::error!(
             "[whitelist] Failed to get premarket info for premarket_id={} err={:?}",
-            premarket_id, e
+            premarket_id,
+            e
         );
         ApiError::internal_get_db_error()
     })? {
         Some(info) => info,
         None => {
-            eprintln!(
+            tracing::error!(
                 "[whitelist] Failed to get premarket info for premarket_id={}",
                 premarket_id
             );
@@ -48,9 +49,11 @@ async fn ensure_creator(
     };
 
     if premarket_info.main_info.creator.id != caller_user_id {
-        eprintln!(
+        tracing::error!(
             "[whitelist] Forbidden: user {} is not creator of premarket {} (creator_id={})",
-            caller_user_id, premarket_id, premarket_info.main_info.creator.id
+            caller_user_id,
+            premarket_id,
+            premarket_info.main_info.creator.id
         );
         return Err(ApiError::forbidden());
     }
@@ -82,7 +85,7 @@ async fn resolve_user_id_strict(
     let user_opt = user_service::get_by_wallet_address(pool, &pk)
         .await
         .map_err(|e| {
-            eprintln!(
+            tracing::error!(
                 "[whitelist] user_service::get_by_wallet_address err={:?}",
                 e
             );
@@ -112,11 +115,11 @@ fn map_whitelist_service_get_error(err: WhitelistServiceError) -> ApiError {
             }])
         }
         WhitelistServiceError::UserLookup(err) => {
-            eprintln!("[whitelist] user lookup failed: {err}");
+            tracing::error!("[whitelist] user lookup failed: {err}");
             ApiError::internal_get_db_error()
         }
         WhitelistServiceError::Storage(err) => {
-            eprintln!("[whitelist] storage get failed: {err:?}");
+            tracing::error!("[whitelist] storage get failed: {err:?}");
             ApiError::internal_get_db_error()
         }
     }
@@ -132,11 +135,11 @@ fn map_whitelist_service_update_error(err: WhitelistServiceError) -> ApiError {
             }])
         }
         WhitelistServiceError::UserLookup(err) => {
-            eprintln!("[whitelist] user lookup failed: {err}");
+            tracing::error!("[whitelist] user lookup failed: {err}");
             ApiError::internal_update_db_error()
         }
         WhitelistServiceError::Storage(err) => {
-            eprintln!("[whitelist] storage update failed: {err:?}");
+            tracing::error!("[whitelist] storage update failed: {err:?}");
             ApiError::internal_update_db_error()
         }
     }
@@ -174,7 +177,7 @@ pub async fn add_whitelist_user(
     )
     .await
     .map_err(|e| {
-        eprintln!(
+        tracing::error!(
             "[whitelist/add_user] Failed premarket_id={} caller={} user_id={:?} user_pubkey={:?} err={:?}",
             dto.premarket_id, ctx.user.internal_id, dto.user_id, dto.user_pubkey, e
         );
@@ -222,9 +225,11 @@ pub async fn add_whitelist_user_list(
     )
     .await
     .map_err(|e| {
-        eprintln!(
+        tracing::error!(
             "[whitelist/add_user_list] Failed premarket_id={} caller={} err={:?}",
-            dto.premarket_id, ctx.user.internal_id, e
+            dto.premarket_id,
+            ctx.user.internal_id,
+            e
         );
         map_whitelist_service_update_error(e)
     })?;
@@ -247,9 +252,11 @@ pub async fn apply_whitelist(
         whitelist_service::apply_user(pool.get_ref(), dto.premarket_id, ctx.user.internal_id)
             .await
             .map_err(|e| {
-                eprintln!(
+                tracing::error!(
                     "[whitelist/apply] Failed premarket_id={} user_id={} err={:?}",
-                    dto.premarket_id, ctx.user.internal_id, e
+                    dto.premarket_id,
+                    ctx.user.internal_id,
+                    e
                 );
                 map_whitelist_service_update_error(e)
             })?;
@@ -286,9 +293,12 @@ pub async fn get_premarket_whitelist(
     )
     .await
     .map_err(|e| {
-        eprintln!(
+        tracing::error!(
             "[whitelist/get] Failed premarket_id={} cursor={} limit={} err={:?}",
-            dto.premarket_id, dto.cursor, dto.limit, e
+            dto.premarket_id,
+            dto.cursor,
+            dto.limit,
+            e
         );
         map_whitelist_service_get_error(e)
     })?;
@@ -332,7 +342,7 @@ pub async fn remove_whitelist_user(
     )
     .await
     .map_err(|e| {
-        eprintln!(
+        tracing::error!(
             "[whitelist/remove_user] Failed premarket_id={} caller={} user_id={:?} user_pubkey={:?} err={:?}",
             dto.premarket_id, ctx.user.internal_id, dto.user_id, dto.user_pubkey, e
         );
@@ -364,9 +374,12 @@ pub async fn whitelist_approve(
     whitelist_service::approve_user(pool.get_ref(), dto.premarket_id, user_id)
         .await
         .map_err(|e| {
-            eprintln!(
+            tracing::error!(
                 "[whitelist/approve] Failed premarket_id={} caller={} user_id={} err={:?}",
-                dto.premarket_id, ctx.user.internal_id, user_id, e
+                dto.premarket_id,
+                ctx.user.internal_id,
+                user_id,
+                e
             );
             map_whitelist_service_update_error(e)
         })?;
@@ -394,9 +407,12 @@ pub async fn whitelist_reject(
     whitelist_service::reject_user(pool.get_ref(), dto.premarket_id, user_id)
         .await
         .map_err(|e| {
-            eprintln!(
+            tracing::error!(
                 "[whitelist/reject] Failed premarket_id={} caller={} user_id={} err={:?}",
-                dto.premarket_id, ctx.user.internal_id, user_id, e
+                dto.premarket_id,
+                ctx.user.internal_id,
+                user_id,
+                e
             );
             map_whitelist_service_update_error(e)
         })?;

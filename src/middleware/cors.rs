@@ -14,19 +14,19 @@ pub fn cors_middleware() -> Cors {
 
     let origins = config::get_cors_origins();
     if origins.trim().is_empty() {
-        eprintln!(
+        tracing::error!(
             "⚠️  {} not set — allow_any_origin()",
             config::CORS_ORIGINS_ENV
         );
         cors = cors.allow_any_origin();
     } else {
-        println!("🔐 Allow CORS with settings: {}", origins);
+        tracing::info!("🔐 Allow CORS with settings: {}", origins);
         for origin in origins
             .split(',')
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
         {
-            println!("🔐 Allow CORS origin: {}", origin);
+            tracing::info!("🔐 Allow CORS origin: {}", origin);
             cors = cors.allowed_origin(origin);
         }
     }

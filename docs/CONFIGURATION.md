@@ -32,6 +32,7 @@ For the `pump-key-generator` worker:
 - `PURPLE_PROGRAM_ID_MAIN`: mainnet program id; code has a fallback.
 - `REVELCY_AUTH_PRIVATE_KEY`: legacy private key accessor, default empty string.
 - `TARGET_SUFFIX`: suffix used by the `pump-key-generator` binary, default `pump`.
+- `RUST_LOG`: tracing filter for local/runtime logs, default effectively `info` in the API binary.
 
 ## Where Variables Are Read
 
@@ -39,7 +40,9 @@ For the `pump-key-generator` worker:
 - `src/config/`: env names, defaults, and validators.
 - `src/middleware/cors.rs`: `CORS_ORIGINS`.
 - `src/services/file_service.rs`: `STORAGE_DIR`.
-- `src/services/solana_service.rs`: devnet/mainnet RPC defaults.
+- `src/services/public_info_service.rs`: default `SOLANA_RPC` through the shared Solana RPC client factory.
+- `src/services/solana_rpc_client.rs`: default and network-specific Solana RPC client construction.
+- `src/services/solana_service.rs`: network-specific Solana RPC client construction through the shared factory.
 - `src/services/solana_service_v2/env.rs`: network-specific RPC/env behavior.
 - `src/bin/pump_keys_generator.rs`: pump-key validation, `DATABASE_URL`, optional `TARGET_SUFFIX`.
 

@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bincode;
 use borsh::{BorshDeserialize, BorshSerialize};
-use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     message::Message,
@@ -11,12 +10,12 @@ use solana_sdk::{
     system_program,
     transaction::Transaction,
 };
-use std::time::Duration;
 
 use crate::models::premarket::{BuiltTx, SolanaNetwork};
 
 use super::constants::UPDATE_PREMARKET_DATA_METHOD_NAME;
-use super::env::{program_id_for, read_revelcy_auth, rpc_url};
+use super::env::{program_id_for, read_revelcy_auth};
+use super::solana_methods::make_async_rpc_client;
 use super::utils::{anchor_sighash_global, get_valid_latest_blockhash};
 
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
@@ -39,7 +38,7 @@ pub async fn build_update_premarket_data_tx_unsigned(
     args: UpdatePremarketDataArgs,
 ) -> Result<BuiltTx> {
     let program_id = program_id_for(network);
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
+    let rpc = make_async_rpc_client(network);
 
     let revelcy_auth = read_revelcy_auth(network);
 

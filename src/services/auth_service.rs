@@ -1,11 +1,31 @@
 use crate::models::user::{Session, User, WalletAddress};
 use crate::storage::user_repo;
-use actix_web::web;
 use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
 use solana_sdk::{pubkey::Pubkey, signature::Signature};
 use sqlx::PgPool;
+use std::error::Error;
+use std::fmt;
 use std::str::FromStr;
+
+#[derive(Debug)]
+pub enum AuthServiceError {
+    FetchUser(sqlx::Error),
+    CreateUser(sqlx::Error),
+}
+
+impl fmt::Display for AuthServiceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::FetchUser(err) => write!(f, "failed to fetch user: {err}"),
+            Self::CreateUser(err) => write!(f, "failed to create user: {err}"),
+        }
+    }
+}
+
+impl Error for AuthServiceError {}
+
+pub type AuthServiceResult<T> = Result<T, AuthServiceError>;
 
 pub fn generate_session_rand() -> Session {
     use rand::{distributions::Alphanumeric, Rng};
@@ -32,7 +52,7 @@ pub fn verify_signature(wallet: &WalletAddress, nonce: &str, signature_base64: &
                     let sig_array: [u8; 64] = match signature_bytes.try_into() {
                         Ok(arr) => arr,
                         Err(_) => {
-                            println!(
+                            tracing::info!(
                                 "Failed to convert signature bytes for wallet {}",
                                 wallet.address
                             );
@@ -44,14 +64,14 @@ pub fn verify_signature(wallet: &WalletAddress, nonce: &str, signature_base64: &
                     if signature.verify(pubkey.as_ref(), nonce.as_bytes()) {
                         true
                     } else {
-                        println!(
+                        tracing::info!(
                             "Signature verification failed for wallet {}",
                             wallet.address
                         );
                         false
                     }
                 } else {
-                    println!(
+                    tracing::info!(
                         "Invalid signature length: {} (expected 64) for wallet {}",
                         signature_bytes.len(),
                         wallet.address
@@ -60,30 +80,31 @@ pub fn verify_signature(wallet: &WalletAddress, nonce: &str, signature_base64: &
                 }
             }
             Err(err) => {
-                println!(
+                tracing::info!(
                     "Failed to decode signature: {} for wallet {}",
-                    err, wallet.address
+                    err,
+                    wallet.address
                 );
                 false
             }
         },
         Err(err) => {
-            println!("Invalid wallet address '{}': {}", wallet.address, err);
+            tracing::info!("Invalid wallet address '{}': {}", wallet.address, err);
             false
         }
     }
 }
 
 pub async fn get_or_create_user_info(
-    pool: web::Data<PgPool>,
+    pool: &PgPool,
     wallet_address: &str,
-) -> Result<(User, bool), String> {
-    match user_repo::get_user_by_wallet(&pool, wallet_address).await {
+) -> AuthServiceResult<(User, bool)> {
+    match user_repo::get_user_by_wallet(pool, wallet_address).await {
         Ok(Some(user)) => Ok((user, false)),
-        Ok(None) => match user_repo::create_user_with_wallet(&pool, wallet_address).await {
+        Ok(None) => match user_repo::create_user_with_wallet(pool, wallet_address).await {
             Ok(user) => Ok((user, true)),
-            Err(_) => Err("Failed to create user".to_string()),
+            Err(err) => Err(AuthServiceError::CreateUser(err)),
         },
-        Err(_) => Err("Failed to fetch user".to_string()),
+        Err(err) => Err(AuthServiceError::FetchUser(err)),
     }
 }

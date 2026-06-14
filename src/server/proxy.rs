@@ -1,14 +1,15 @@
 use actix_web::http::header;
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
-use awc::Client;
 use futures_util::TryStreamExt as _;
+
+use crate::services::http_client;
 
 pub fn proxy_scope() -> Scope {
     web::scope("/proxy").route("/pump_ipfs", web::post().to(pump_ipfs))
 }
 
 async fn pump_ipfs(req: HttpRequest, mut payload: web::Payload) -> actix_web::Result<HttpResponse> {
-    println!(">>> /proxy/pump_ipfs {} {}", req.method(), req.uri());
+    tracing::info!(">>> /proxy/pump_ipfs {} {}", req.method(), req.uri());
 
     let content_type = req
         .headers()
@@ -21,21 +22,26 @@ async fn pump_ipfs(req: HttpRequest, mut payload: web::Payload) -> actix_web::Re
     while let Some(chunk) = payload.try_next().await? {
         body.extend_from_slice(&chunk);
     }
-    println!("  body size: {} bytes", body.len());
+    tracing::info!("  body size: {} bytes", body.len());
 
-    let client = Client::builder()
-        .timeout(std::time::Duration::from_secs(90))
-        .finish();
+    let client = match http_client::long_timeout_client() {
+        Ok(client) => client,
+        Err(e) => {
+            tracing::error!("!!! http client build error: {:?}", e);
+            return Ok(HttpResponse::BadGateway().body("failed to build upstream http client"));
+        }
+    };
 
-    let mut upstream = match client
+    let upstream = match client
         .post("https://pump.fun/api/ipfs")
-        .insert_header((header::CONTENT_TYPE, content_type))
-        .send_body(body.freeze())
+        .header(reqwest::header::CONTENT_TYPE, content_type)
+        .body(body.freeze())
+        .send()
         .await
     {
         Ok(resp) => resp,
         Err(e) => {
-            eprintln!("!!! upstream send error: {:?}", e);
+            tracing::error!("!!! upstream send error: {:?}", e);
             // ВАЖНО: возвращаем Ok(HttpResponse), а не Err(...)
             return Ok(
                 HttpResponse::BadGateway().body("upstream (pump.fun) error while sending request")
@@ -43,18 +49,19 @@ async fn pump_ipfs(req: HttpRequest, mut payload: web::Payload) -> actix_web::Re
         }
     };
 
-    let status = upstream.status();
-    let bytes = match upstream.body().await {
+    let status = actix_web::http::StatusCode::from_u16(upstream.status().as_u16())
+        .unwrap_or(actix_web::http::StatusCode::BAD_GATEWAY);
+    let bytes = match upstream.bytes().await {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("!!! upstream read error: {:?}", e);
+            tracing::error!("!!! upstream read error: {:?}", e);
             return Ok(
                 HttpResponse::BadGateway().body("upstream (pump.fun) error while reading response")
             );
         }
     };
 
-    println!("<<< upstream status: {}, bytes: {}", status, bytes.len());
+    tracing::info!("<<< upstream status: {}, bytes: {}", status, bytes.len());
 
     Ok(HttpResponse::build(status).body(bytes))
 }

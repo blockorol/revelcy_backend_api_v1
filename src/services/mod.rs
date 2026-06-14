@@ -1,10 +1,13 @@
 pub mod auth_service;
 pub mod background_finaliser;
 pub mod file_service;
+pub mod http_client;
 pub mod ipfs_service;
 pub mod jwt_service;
 pub mod premarket_service;
+pub mod public_info_service;
 pub mod solana_price_service;
+pub mod solana_rpc_client;
 pub mod solana_service;
 pub mod solana_service_v2;
 pub mod user_info_service;

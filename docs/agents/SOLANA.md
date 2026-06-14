@@ -9,6 +9,7 @@ Treat this area as security and funds sensitive. Do not change account derivatio
 ## Files
 
 - `src/services/solana_service.rs`: older/general Solana helpers.
+- `src/services/solana_rpc_client.rs`: central nonblocking RPC client factory, timeout, and network URL selection.
 - `src/services/solana_service_v2/`: current transaction-building modules.
 - `src/services/solana_service_v2/env.rs`: network and env resolution.
 - `src/services/solana_service_v2/constants.rs`: chain/program constants.
@@ -37,6 +38,8 @@ Treat this area as security and funds sensitive. Do not change account derivatio
 
 Solana-related env names live under `src/config/`; Solana modules should use config accessors instead of reading env vars directly.
 
+Create nonblocking RPC clients through `src/services/solana_rpc_client.rs` or the `solana_service_v2::make_async_rpc_client` wrapper. Do not call `RpcClient::new`, `new_with_timeout`, or duplicate RPC timeout selection in transaction modules.
+
 Important names:
 
 - `SOLANA_RPC`
@@ -55,7 +58,7 @@ Do not log private key material, signatures, seed material, or secret config.
 
 ## Interface Level Rule
 
-Solana builders should use internal/domain models from `src/models`, not API DTOs or storage rows directly, unless an existing local pattern forces it.
+Solana builders should use internal/domain models from `src/models`, not API DTOs, storage rows, or database pools directly. Resolve database-backed inputs such as mint key material in `src/services/*_service.rs` before calling `src/services/solana_service_v2/*` builders.
 
 Preferred flow:
 

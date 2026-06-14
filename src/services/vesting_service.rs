@@ -246,7 +246,7 @@ pub async fn sync_finish_premarket_holder_amount_tokens(
         let amount_token = match i64::try_from(u.tokens_total) {
             Ok(v) => v,
             Err(_) => {
-                eprintln!(
+                tracing::error!(
                     "sync_finish_premarket_holder_amount_tokens: tokens_total overflow for wallet {}",
                     wallet
                 );

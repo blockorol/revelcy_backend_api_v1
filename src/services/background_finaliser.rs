@@ -25,7 +25,7 @@ pub fn background_finalize_action(
                 (update)(sig, rpc).await;
             }
             Err(e) => {
-                eprintln!("wait_for_finalized failed: sig={} err={:#}", sig, e);
+                tracing::error!("wait_for_finalized failed: sig={} err={:#}", sig, e);
             }
         }
     });

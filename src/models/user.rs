@@ -41,6 +41,13 @@ pub struct WalletAddress {
     pub address: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct WalletInfo {
+    pub creation_time: String,
+    pub balance: f64,
+    pub tx_amount: String,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct UserFingerprintEventInsert {
     pub id: Uuid,

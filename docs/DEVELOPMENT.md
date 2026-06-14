@@ -32,6 +32,7 @@ cargo run --bin revelcy-backend-api
 ```
 
 The service binds to `PORT` or defaults to `8080`.
+Runtime logs use `tracing`; set `RUST_LOG` when you need a different filter.
 
 ## Common Commands
 

@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bincode;
-use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
 use solana_sdk::signature::Signer;
 use solana_sdk::system_program::ID as SYSTEM_PROGRAM_ID;
 use solana_sdk::{
@@ -10,14 +9,13 @@ use solana_sdk::{
     pubkey::Pubkey,
     transaction::Transaction,
 };
-use sqlx::PgPool;
 use std::str::FromStr;
-use std::time::Duration;
 
 use crate::models::premarket::{BuildKillTxParams, BuiltTx};
 
 use super::constants::KILL_METHOD_NAME;
-use super::env::{program_id_for, read_revelcy_auth, rpc_url};
+use super::env::{program_id_for, read_revelcy_auth};
+use super::solana_methods::make_async_rpc_client;
 use super::utils::{anchor_sighash_global, get_valid_latest_blockhash};
 
 #[derive(Debug, Clone)]
@@ -28,12 +26,9 @@ pub struct ParsedKillPremarketTx {
     pub params: BuildKillTxParams,
 }
 
-pub async fn build_kill_premarket_tx_unsigned(
-    _pool: &PgPool,
-    params: BuildKillTxParams,
-) -> Result<BuiltTx> {
+pub async fn build_kill_premarket_tx_unsigned(params: BuildKillTxParams) -> Result<BuiltTx> {
     let program_id = program_id_for(params.network);
-    let client = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
+    let client = make_async_rpc_client(params.network);
     let revelcy = read_revelcy_auth(params.network);
     let revelcy_pub = revelcy.pubkey();
     let premarket_account = params.premarket;
@@ -48,7 +43,8 @@ pub async fn build_kill_premarket_tx_unsigned(
     ];
 
     for user in all_entered_users {
-        accounts.push(AccountMeta::new(Pubkey::from_str(&user).unwrap(), false));
+        let user = Pubkey::from_str(&user).context("invalid entered user pubkey")?;
+        accounts.push(AccountMeta::new(user, false));
     }
 
     let _discriminator: [u8; 8] = [10, 112, 216, 238, 253, 26, 122, 160];

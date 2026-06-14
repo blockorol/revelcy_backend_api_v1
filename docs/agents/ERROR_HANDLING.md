@@ -21,6 +21,8 @@ Do not expose storage error strings directly as public API responses unless exis
 
 For service cleanup work, prefer a small service-owned error enum and map it to `ApiError` in the handler or nearby API/server boundary where API DTOs are converted to internal models. Do not import `src/api/errors.rs` from `src/services`, `src/models`, or `src/storage`.
 
+Premarket transaction handlers should return `ApiResult<HttpResponse>` when possible. Avoid adding new manual `HttpResponse::BadRequest`, `Unauthorized`, or `InternalServerError` branches inside transaction handlers; use `ApiError` helpers or a local mapper instead.
+
 ## API Error Rules
 
 Treat these as API contract changes:
@@ -45,6 +47,8 @@ Do not log:
 - Pyth or IPFS secret tokens.
 
 Prefer logging stable identifiers and contextual operation names over full request bodies for sensitive flows.
+
+Runtime code should use `tracing` macros instead of `println!` or `eprintln!`. The API binary initializes `tracing_subscriber` in `src/main.rs` with an environment filter and a default `info` level.
 
 ## Solana Error Notes
 

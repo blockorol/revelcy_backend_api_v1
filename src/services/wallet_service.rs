@@ -15,7 +15,7 @@ pub fn get_signatures_for_wallet(client: &RpcClient, wallet_pubkey: &Pubkey) -> 
 
     loop {
         if all_signatures.len() >= MAX_AMOUNT_SIG as usize {
-            println!(
+            tracing::info!(
                 "Reached {:?} signatures, stopping further fetch.",
                 MAX_AMOUNT_SIG
             );
@@ -40,14 +40,14 @@ pub fn get_signatures_for_wallet(client: &RpcClient, wallet_pubkey: &Pubkey) -> 
                 all_signatures.extend(signatures.into_iter().map(|s| s.signature));
             }
             Err(err) => {
-                eprintln!("Failed to fetch signatures: {}", err);
+                tracing::error!("Failed to fetch signatures: {}", err);
                 std::process::exit(1);
             }
         }
     }
 
-    println!("Signatures for wallet {}:", wallet_pubkey);
-    println!("Total signatures: {}", all_signatures.len());
+    tracing::info!("Signatures for wallet {}:", wallet_pubkey);
+    tracing::info!("Total signatures: {}", all_signatures.len());
 
     return all_signatures;
 }
@@ -65,20 +65,20 @@ pub fn get_creation_time(
         };
         match client.get_transaction_with_config(&signature, config) {
             Ok(transaction) => {
-                println!("Last signature: {}", last_signature);
-                println!("Block number (slot): {}", transaction.slot);
+                tracing::info!("Last signature: {}", last_signature);
+                tracing::info!("Block number (slot): {}", transaction.slot);
                 if let Some(block_time) = transaction.block_time {
                     // Convert Unix timestamp to DateTime<Utc>
                     let dt_first_sig =
                         DateTime::<Utc>::from_timestamp(block_time, 0).unwrap_or_default();
                     return Some(dt_first_sig);
                 } else {
-                    println!("Timestamp: Not available");
+                    tracing::info!("Timestamp: Not available");
                     return None;
                 }
             }
             Err(err) => {
-                eprintln!(
+                tracing::error!(
                     "Failed to fetch transaction details for the last signature: {}",
                     err
                 );
@@ -86,7 +86,7 @@ pub fn get_creation_time(
             }
         }
     } else {
-        println!("No signatures found.");
+        tracing::info!("No signatures found.");
         return None;
     }
 }

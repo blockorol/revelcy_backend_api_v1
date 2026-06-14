@@ -2,18 +2,15 @@ use anyhow::Context;
 use anyhow::Result;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bincode;
-use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
 use solana_sdk::{
     compute_budget::ComputeBudgetInstruction,
     instruction::{AccountMeta, Instruction},
     message::Message,
     pubkey::Pubkey,
-    signature::{Keypair, Signer},
+    signature::Signer,
     system_program,
     transaction::Transaction,
 };
-use sqlx::PgPool;
-use std::time::Duration;
 
 use spl_associated_token_account::get_associated_token_address;
 use spl_associated_token_account::ID as associated_token_program_id;
@@ -22,29 +19,13 @@ use spl_token::ID as token_program_id;
 use crate::models::premarket::{BuildFinishTxParams, BuiltTx};
 
 use super::constants::{constants, FINISH_METHOD_NAME};
-use super::env::{program_id_for, read_revelcy_auth, rpc_url};
-use super::utils::{anchor_sighash_global, get_valid_latest_blockhash, parse_privkey_64, pda};
+use super::env::{program_id_for, read_revelcy_auth};
+use super::solana_methods::make_async_rpc_client;
+use super::utils::{anchor_sighash_global, get_valid_latest_blockhash, pda};
 
-use crate::storage::signing_keys::get_mint_signing_keypair_by_premarket;
-
-pub async fn get_mint_kp(pool: &PgPool, premarket: Pubkey) -> Result<Keypair> {
-    let pair = get_mint_signing_keypair_by_premarket(pool, &premarket.to_string())
-        .await
-        .context("signing_keys: mint key not found for this premarket")?
-        .ok_or_else(|| anyhow::anyhow!("mint key not found for premarket {}", premarket))?;
-
-    let mint_bytes = parse_privkey_64(&pair.priv_key).context("mint priv_key parse failed")?;
-    let mint_kp =
-        Keypair::from_bytes(&mint_bytes).context("mint priv_key: invalid keypair bytes")?;
-    Ok(mint_kp)
-}
-
-pub async fn build_finish_premarket_tx_unsigned(
-    pool: &PgPool,
-    params: BuildFinishTxParams,
-) -> Result<BuiltTx> {
+pub async fn build_finish_premarket_tx_unsigned(params: BuildFinishTxParams) -> Result<BuiltTx> {
     let program_id = program_id_for(params.network);
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
+    let rpc = make_async_rpc_client(params.network);
 
     let (
         mint_auth,
@@ -59,8 +40,7 @@ pub async fn build_finish_premarket_tx_unsigned(
     ) = constants(params.network);
 
     // mint key из БД
-    let mint_kp = get_mint_kp(pool, params.premarket).await?;
-    let mint_pub = mint_kp.pubkey();
+    let mint_pub = params.mint;
 
     // PDAs/ATAs
     let (bonding_curve, _) = pda(&pump_fun_program_id, &[b"bonding-curve", mint_pub.as_ref()]);
@@ -100,38 +80,38 @@ pub async fn build_finish_premarket_tx_unsigned(
     ];
     let (fee_config, _) = Pubkey::find_program_address(&[seed1, &seed2], &fee_program);
 
-    println!("finish_premarket accounts:");
-    println!("  program_id: {}", program_id);
-    println!("  revelcy_auth: {}", revelcy_pub);
-    println!("  revelcy_ata: {}", revelcy_ata);
-    println!("  premarket_account: {}", params.premarket);
-    println!("  token_mint: {}", mint_pub);
-    println!("  mint_auth: {}", mint_auth);
-    println!("  bonding_curve: {}", bonding_curve);
-    println!("  bonding_curve_v2: {}", bonding_curve_v2);
-    println!("  bonding_curve_ata: {}", bonding_curve_ata);
-    println!("  global: {}", pumpfun_global);
-    println!("  mpl_token_metadata: {}", metaplex_program);
-    println!("  metadata: {}", metadata);
-    println!("  user: {}", params.user);
-    println!("  vesting_account: {}", vesting_account);
-    println!("  vesting_ata: {}", vesting_ata);
-    println!("  system_program: {}", system_program::ID);
-    println!("  token_program: {}", token_program_id);
-    println!(
+    tracing::info!("finish_premarket accounts:");
+    tracing::info!("  program_id: {}", program_id);
+    tracing::info!("  revelcy_auth: {}", revelcy_pub);
+    tracing::info!("  revelcy_ata: {}", revelcy_ata);
+    tracing::info!("  premarket_account: {}", params.premarket);
+    tracing::info!("  token_mint: {}", mint_pub);
+    tracing::info!("  mint_auth: {}", mint_auth);
+    tracing::info!("  bonding_curve: {}", bonding_curve);
+    tracing::info!("  bonding_curve_v2: {}", bonding_curve_v2);
+    tracing::info!("  bonding_curve_ata: {}", bonding_curve_ata);
+    tracing::info!("  global: {}", pumpfun_global);
+    tracing::info!("  mpl_token_metadata: {}", metaplex_program);
+    tracing::info!("  metadata: {}", metadata);
+    tracing::info!("  user: {}", params.user);
+    tracing::info!("  vesting_account: {}", vesting_account);
+    tracing::info!("  vesting_ata: {}", vesting_ata);
+    tracing::info!("  system_program: {}", system_program::ID);
+    tracing::info!("  token_program: {}", token_program_id);
+    tracing::info!(
         "  associated_token_program: {}",
         associated_token_program_id
     );
-    println!("  rent: {}", rent_sysvar);
-    println!("  event_auth: {}", event_auth);
-    println!("  pump_fun_program_id: {}", pump_fun_program_id);
-    println!("  fee_recipient: {}", fee_recipient);
-    println!("  associated_user: {}", associated_user_ata);
-    println!("  creator_vault: {}", creator_vault);
-    println!("  global_volume_accumulator: {}", global_volume_accum);
-    println!("  user_volume_accumulator: {}", user_volume_accum);
-    println!("  fee_config: {}", fee_config);
-    println!("  fee_program: {}", fee_program);
+    tracing::info!("  rent: {}", rent_sysvar);
+    tracing::info!("  event_auth: {}", event_auth);
+    tracing::info!("  pump_fun_program_id: {}", pump_fun_program_id);
+    tracing::info!("  fee_recipient: {}", fee_recipient);
+    tracing::info!("  associated_user: {}", associated_user_ata);
+    tracing::info!("  creator_vault: {}", creator_vault);
+    tracing::info!("  global_volume_accumulator: {}", global_volume_accum);
+    tracing::info!("  user_volume_accumulator: {}", user_volume_accum);
+    tracing::info!("  fee_config: {}", fee_config);
+    tracing::info!("  fee_program: {}", fee_program);
 
     // Serialize discriminator + args
     let mut data = Vec::with_capacity(32);

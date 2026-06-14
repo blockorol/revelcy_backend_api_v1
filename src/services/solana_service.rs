@@ -1,13 +1,11 @@
-use crate::config;
 use anyhow::{anyhow, Result};
-use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
-use std::time::Duration;
 
 use crate::models::premarket::{
     GetPremarketDataParams, PremarketOnchainData, PremarketOnchainUser, SolanaNetwork,
 };
+use crate::services::solana_rpc_client;
 
 impl TryFrom<&str> for SolanaNetwork {
     type Error = anyhow::Error;
@@ -17,13 +15,6 @@ impl TryFrom<&str> for SolanaNetwork {
             "mainnet-beta" | "mainnet_beta" | "mainnetbeta" => Ok(Self::MainnetBeta),
             _ => Err(anyhow!("unsupported network: {}", s)),
         }
-    }
-}
-
-fn rpc_url(network: SolanaNetwork) -> String {
-    match network {
-        SolanaNetwork::Devnet => config::get_solana_devnet_rpc(),
-        SolanaNetwork::MainnetBeta => config::get_solana_mainnet_rpc(),
     }
 }
 
@@ -37,19 +28,19 @@ fn assert_len_64(bytes: &[u8], label: &str) {
 pub async fn get_premarket_data(
     params: GetPremarketDataParams,
 ) -> Result<PremarketOnchainData, Box<dyn std::error::Error>> {
-    let client = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
+    let client = solana_rpc_client::make_async_rpc_client(params.network);
 
     let account = client.get_account(&params.premarket).await?;
 
-    println!("Account owner: {}", account.owner);
-    println!("Account data length: {} bytes", account.data.len());
+    tracing::info!("Account owner: {}", account.owner);
+    tracing::info!("Account data length: {} bytes", account.data.len());
 
     // Skip the 8-byte discriminator
     let data = &account.data[8..];
 
     // Get the user vector length
     let users_len = u32::from_le_bytes(data[0..4].try_into()?);
-    println!("\nUsers vector length: {}", users_len);
+    tracing::info!("\nUsers vector length: {}", users_len);
 
     // Calculate offset after the user vector
     // Format: 4 bytes for length + (users_len * (32 bytes for pubkey + 8 bytes for lamports + 1 byte for claimed))
@@ -75,9 +66,12 @@ pub async fn get_premarket_data(
             };
             all_entered_users.push(user);
 
-            println!(
+            tracing::info!(
                 "User {}: {} contributed {} lamports, claimed: {}",
-                i, pubkey, lamports, claimed
+                i,
+                pubkey,
+                lamports,
+                claimed
             );
         }
     }
@@ -85,22 +79,22 @@ pub async fn get_premarket_data(
     // Now extract the rest of the fields after the user vector
     let end_timestamp =
         i64::from_le_bytes(data[offset_after_users..offset_after_users + 8].try_into()?);
-    println!("End timestamp: {}", end_timestamp);
+    tracing::info!("End timestamp: {}", end_timestamp);
 
     let end_timestamp_updated = data[offset_after_users + 8] != 0;
-    println!("End timestamp updated: {}", end_timestamp_updated);
+    tracing::info!("End timestamp updated: {}", end_timestamp_updated);
 
     let goal_sol =
         u64::from_le_bytes(data[offset_after_users + 9..offset_after_users + 17].try_into()?);
-    println!("Goal SOL: {}", goal_sol);
+    tracing::info!("Goal SOL: {}", goal_sol);
 
     let max_sol =
         u64::from_le_bytes(data[offset_after_users + 17..offset_after_users + 25].try_into()?);
-    println!("Max SOL: {}", max_sol);
+    tracing::info!("Max SOL: {}", max_sol);
 
     let mint =
         Pubkey::new_from_array(data[offset_after_users + 25..offset_after_users + 57].try_into()?);
-    println!("Mint: {}", mint);
+    tracing::info!("Mint: {}", mint);
 
     Ok(PremarketOnchainData {
         users: all_entered_users,

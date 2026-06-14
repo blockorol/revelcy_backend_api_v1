@@ -20,6 +20,7 @@ Resolved cleanup:
 
 - `src/models/premarket.rs` no longer imports premarket API DTOs for dynamic info mapping; internal-to-API conversions for those DTOs live in `src/api/premarket.rs`.
 - `src/services/user_info_service.rs` no longer imports API errors; it returns a service-owned error that `src/server/user_server.rs` maps to `ApiError`.
+- `src/services/auth_service.rs` no longer imports Actix request data; it accepts `&PgPool` and returns `AuthServiceError` for handlers to map.
 - `src/services/user_service.rs` no longer imports Actix HTTP errors; it returns `UserServiceError` that handlers map at the server/API boundary.
 - `src/services/whitelist_service.rs` no longer imports Actix HTTP errors; it returns `WhitelistServiceError` that `src/server/whitelist_handlers.rs` maps to `ApiError`.
 - `src/services/ipfs_service.rs` no longer imports Actix HTTP errors; it returns `IpfsServiceError` for callers to map at the API/server boundary when re-enabled.
@@ -27,8 +28,13 @@ Resolved cleanup:
 - `src/services/premarket_service.rs` no longer imports Actix HTTP errors; it returns `PremarketServiceError` and handlers map it at the server/API boundary.
 - `src/services/premarket_service.rs` no longer imports `src/storage/models.rs` row structs; `src/storage/premarket_repo.rs` maps premarket storage rows to internal models before returning to services.
 - `src/storage/vesting_repo.rs` and `src/storage/signing_keys.rs` no longer expose storage row structs in their public return types; they map rows to internal models before returning to services.
+- `src/server/public_server.rs` no longer owns Solana RPC calls or on-chain parsing for `/auth/wallet_info` and `/auth/premarket_info`; `src/services/public_info_service.rs` returns internal models and the handler maps them to API DTOs.
+- `src/services/solana_service_v2` transaction builders no longer accept `PgPool` or call storage repositories; database-backed mint key resolution happens before builder calls.
+- Solana RPC client creation is centralized in `src/services/solana_rpc_client.rs`; transaction modules use the shared factory instead of duplicating `RpcClient::new_with_timeout` and timeout values.
+- Outbound HTTP client construction is centralized in `src/services/http_client.rs`; integrations use `reqwest` through the shared factory instead of mixing `reqwest` and `awc`.
 - `src/services/file_service.rs` no longer reads `STORAGE_DIR` directly; it uses the `src/config` accessor.
 - Runtime env access is centralized under `src/config/`; application modules should use config accessors instead of reading env vars directly.
+- Premarket handlers and transaction parsing no longer use panic-prone unwraps for request numeric conversion, kill transaction user pubkey parsing, or anchor sighash parsing.
 
 ## `vesing_server_handler.rs` Typo
 

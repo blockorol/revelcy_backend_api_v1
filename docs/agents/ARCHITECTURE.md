@@ -7,13 +7,14 @@ This backend follows a mostly layered Actix/SQLx service architecture with Solan
 The binary starts in `src/main.rs`.
 
 1. Load `.env` through `dotenvy`.
-2. Read `DATABASE_URL`.
-3. Create a SQLx Postgres pool.
-4. Read `SOLANA_RPC`.
-5. Create a shared nonblocking Solana RPC client.
-6. Build an Actix `App`.
-7. Register CORS, database pool, RPC client, and server scopes.
-8. Bind to `PORT`, defaulting to `8080`.
+2. Initialize tracing/logging from the environment, defaulting to `info`.
+3. Read `DATABASE_URL`.
+4. Create a SQLx Postgres pool.
+5. Read `SOLANA_RPC`.
+6. Create a shared nonblocking Solana RPC client through `src/services/solana_rpc_client.rs`.
+7. Build an Actix `App`.
+8. Register CORS, database pool, RPC client, and server scopes.
+9. Bind to `PORT`, defaulting to `8080`.
 
 ## Request Flow
 
@@ -83,6 +84,7 @@ API DTOs should not own persistence behavior.
 - Solana and price integration orchestration.
 
 Services may call storage and integration helpers. They should not depend on Actix response details.
+Outbound HTTP integrations use `src/services/http_client.rs` for shared `reqwest` client construction and timeout presets.
 
 ### Storage Layer
 
@@ -114,6 +116,7 @@ Solana behavior is split between:
 - `src/services/solana_service.rs`: older/general Solana helpers.
 - `src/services/solana_service_v2/`: current transaction-building modules.
 - `src/models/premarket.rs`: transaction input/output and on-chain models.
+- `src/services/solana_rpc_client.rs`: central nonblocking RPC client factory, timeout, and network URL selection.
 - `src/services/premarket_service.rs` and `src/services/vesting_service.rs`: domain orchestration around transaction flows.
 
 Transaction modules should keep account derivation, instruction data, program constants, network behavior, and signer assumptions explicit.
@@ -147,8 +150,9 @@ Current callers include:
 
 - `src/main.rs`
 - `src/middleware/cors.rs`
-- `src/server/public_server.rs`
 - `src/services/file_service.rs`
+- `src/services/public_info_service.rs`
+- `src/services/solana_rpc_client.rs`
 - `src/services/solana_service.rs`
 - `src/services/solana_service_v2/env.rs`
 - `src/bin/pump_keys_generator.rs`

@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bincode;
-use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     message::Message,
@@ -9,7 +8,6 @@ use solana_sdk::{
     system_program,
     transaction::Transaction,
 };
-use std::time::Duration;
 
 use spl_associated_token_account::get_associated_token_address;
 use spl_associated_token_account::ID as associated_token_program_id;
@@ -18,12 +16,13 @@ use spl_token::ID as token_program_id;
 use crate::models::premarket::{BuildClaimTokensTxParams, BuiltTx};
 
 use super::constants::CLAIM_TOKENS_METHOD_NAME;
-use super::env::{program_id_for, read_revelcy_auth, rpc_url};
+use super::env::{program_id_for, read_revelcy_auth};
+use super::solana_methods::make_async_rpc_client;
 use super::utils::{anchor_sighash_global, get_valid_latest_blockhash};
 
 pub async fn build_claim_tokens_tx_unsigned(params: BuildClaimTokensTxParams) -> Result<BuiltTx> {
     let program_id = program_id_for(params.network);
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
+    let rpc = make_async_rpc_client(params.network);
     let revelcy_auth = read_revelcy_auth(params.network);
 
     let revelcy_auth_ata = get_associated_token_address(&revelcy_auth.pubkey(), &params.token_mint);

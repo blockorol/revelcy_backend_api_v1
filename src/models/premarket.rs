@@ -32,6 +32,7 @@ pub struct BuildFinishTxParams {
     pub network: SolanaNetwork,
     pub user: solana_sdk::pubkey::Pubkey,
     pub premarket: solana_sdk::pubkey::Pubkey,
+    pub mint: solana_sdk::pubkey::Pubkey,
     pub timestamp_start: i64,
     pub timestamp_end: i64,
     pub init_unlock: u64,
@@ -351,6 +352,19 @@ pub struct PremarketOnchainData {
     pub goal_lamports: u64,
     pub max_lamports: u64,
     pub mint: Pubkey,
+}
+
+#[derive(Debug, Clone)]
+pub struct PublicPremarketInfo {
+    pub users: Vec<(String, u64, bool)>,
+    pub end_timestamp: i64,
+    pub goal_sol: u64,
+    pub max_sol: u64,
+    pub mint: String,
+    pub name: String,
+    pub symbol: String,
+    pub uri: String,
+    pub creator: String,
 }
 
 #[derive(Debug, Clone)]

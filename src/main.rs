@@ -1,9 +1,10 @@
 use crate::middleware::cors::cors_middleware;
 use crate::server::init_servers;
+use crate::services::solana_rpc_client;
 use actix_web::{web, App, HttpServer};
 use dotenvy::dotenv;
-use solana_client::nonblocking::rpc_client::RpcClient;
 use sqlx::postgres::PgPoolOptions;
+use tracing_subscriber::EnvFilter;
 
 mod api;
 mod config;
@@ -18,6 +19,11 @@ mod storage;
 async fn main() -> std::io::Result<()> {
     // load .env
     dotenv().ok();
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .init();
     config::validate_startup_config().unwrap_or_else(|err| panic!("{err}"));
 
     // DB Connect
@@ -29,9 +35,10 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to connect to the database");
 
-    let rpc_url = config::get_solana_rpc()
-        .unwrap_or_else(|_| panic!("{} must be set", config::SOLANA_RPC_ENV));
-    let rpc_client = web::Data::new(RpcClient::new(rpc_url));
+    let rpc_client = web::Data::new(
+        solana_rpc_client::make_default_async_rpc_client()
+            .unwrap_or_else(|_| panic!("{} must be set", config::SOLANA_RPC_ENV)),
+    );
 
     // run server
     HttpServer::new(move || {

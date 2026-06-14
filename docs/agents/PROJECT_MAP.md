@@ -62,8 +62,11 @@ Business logic and external integrations.
 - `vesting_service.rs`: vesting business rules.
 - `background_finaliser.rs`: background finalization behavior.
 - `file_service.rs`: local file storage helpers.
+- `http_client.rs`: shared `reqwest` client factory and HTTP timeout presets.
 - `ipfs_service.rs`: IPFS upload/proxy logic.
+- `public_info_service.rs`: public wallet and premarket on-chain info lookups used by `/auth` public info routes.
 - `solana_price_service.rs`: Solana/Pyth price-related logic.
+- `solana_rpc_client.rs`: central factory for nonblocking Solana RPC clients and shared timeout/network URL selection.
 - `solana_service.rs`: older/general Solana helpers.
 - `solana_service_v2/`: current Solana transaction-building modules.
 

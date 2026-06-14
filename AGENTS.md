@@ -55,7 +55,7 @@ This project has Docker and Railway deployment files. Do not change deployment b
 
 ## Environment Variables
 
-Required or commonly used variables are referenced in `src/main.rs`, `src/config/mod.rs`, `src/middleware/cors.rs`, `src/server/public_server.rs`, and Solana service modules.
+Required or commonly used variables are referenced through `src/config/`, with startup validation in `src/config/mod.rs` and process wiring in `src/main.rs`.
 
 Important names:
 
@@ -73,6 +73,10 @@ Important names:
 - `PYTH_SECRET_TOKEN`
 - `PYTH_MAINNET_URL`
 - `REVELCY_AUTH_PRIVATE_KEY`
+- `REVELCY_AUTH_PRIVATE_KEY_DEV`
+- `REVELCY_AUTH_PRIVATE_KEY_MAIN`
+- `PURPLE_PROGRAM_ID_DEV`
+- `PURPLE_PROGRAM_ID_MAIN`
 - `TARGET_SUFFIX`
 
 Do not add real values to tracked files.

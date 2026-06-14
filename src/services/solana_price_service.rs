@@ -1,5 +1,6 @@
 use crate::config::{get_pyth_mainnet_url, PYTH_MAINNET_URL_ENV};
 use crate::models::premarket::PythResponse;
+use crate::services::http_client;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
@@ -15,7 +16,12 @@ struct CacheEntry {
 static SOL_PRICE_CACHE: RwLock<Option<CacheEntry>> = RwLock::const_new(None);
 
 async fn fetch_sol_price_uncached(url: &str) -> f64 {
-    match reqwest::get(url).await {
+    let client = match http_client::default_client() {
+        Ok(client) => client,
+        Err(_) => return 0.0,
+    };
+
+    match client.get(url).send().await {
         Ok(resp) => match resp.json::<PythResponse>().await {
             Ok(pyth_response) => {
                 if let Some(parsed) = pyth_response.parsed.first() {
@@ -35,7 +41,7 @@ async fn fetch_sol_price_uncached(url: &str) -> f64 {
 pub async fn get_sol_price() -> f64 {
     let url = get_pyth_mainnet_url();
     if url == "" {
-        println!("{} environment variable not set", PYTH_MAINNET_URL_ENV);
+        tracing::info!("{} environment variable not set", PYTH_MAINNET_URL_ENV);
         return 0.0;
     };
 

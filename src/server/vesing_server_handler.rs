@@ -70,9 +70,10 @@ pub async fn update_vesting(
         premarket_service::get_main_premarket_info(pool.get_ref(), &premarket_pubkey)
             .await
             .map_err(|e| {
-                eprintln!(
+                tracing::error!(
                     "[update_vesting] DB error while loading premarket {}: {:?}",
-                    premarket_pubkey, e
+                    premarket_pubkey,
+                    e
                 );
                 ApiError::internal_get_db_error()
             })?
@@ -96,7 +97,7 @@ pub async fn update_vesting(
     )
     .await
     .map_err(|e| {
-        eprintln!("[update_vesting] failed: {:?}", e);
+        tracing::error!("[update_vesting] failed: {:?}", e);
         map_vesting_service_update_error(e)
     })?;
 

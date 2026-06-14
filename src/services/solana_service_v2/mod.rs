@@ -42,7 +42,7 @@ pub use tx_extend_premarket::{
     build_extend_premarket_tx_unsigned, parse_extend_premarket_tx_from_base64,
     ParsedExtendPremarketTx,
 };
-pub use tx_finish_premarket::{build_finish_premarket_tx_unsigned, get_mint_kp};
+pub use tx_finish_premarket::build_finish_premarket_tx_unsigned;
 pub use tx_kill_premarket::build_kill_premarket_tx_unsigned;
 pub use tx_update_premarket_data::{
     build_update_premarket_data_tx_unsigned, UpdatePremarketDataArgs,

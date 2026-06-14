@@ -1,5 +1,5 @@
 use crate::models::premarket::SolanaNetwork;
-use crate::services::solana_service_v2::env::rpc_url;
+use crate::services::solana_rpc_client;
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bincode::deserialize;
@@ -15,7 +15,7 @@ use std::str::FromStr;
 use tokio::time::{sleep, Duration, Instant};
 
 pub fn make_async_rpc_client(network: SolanaNetwork) -> AsyncRpcClient {
-    AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15))
+    solana_rpc_client::make_async_rpc_client(network)
 }
 
 pub async fn send_signed_tx_base64(
@@ -137,7 +137,7 @@ pub async fn get_spl_token_delta(
     mint: &str,
     owner: &str,
 ) -> Result<i128> {
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(network), Duration::from_secs(15));
+    let rpc = make_async_rpc_client(network);
 
     let tx = rpc
         .get_transaction_with_config(

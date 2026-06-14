@@ -51,10 +51,7 @@ pub fn read_revelcy_auth(network: SolanaNetwork) -> Keypair {
 }
 
 pub fn rpc_url(network: SolanaNetwork) -> String {
-    match network {
-        SolanaNetwork::Devnet => config::get_solana_devnet_rpc(),
-        SolanaNetwork::MainnetBeta => config::get_solana_mainnet_rpc(),
-    }
+    crate::services::solana_rpc_client::rpc_url_for_network(network)
 }
 
 pub fn program_id_for(network: SolanaNetwork) -> Pubkey {
@@ -76,7 +73,7 @@ pub fn program_id_for(network: SolanaNetwork) -> Pubkey {
             Pubkey::from_str(&v).unwrap_or_else(|_| panic!("invalid {} pubkey: {}", env_key, v))
         }
         None => {
-            eprintln!("WARN: {} not set; using fallback {}", env_key, fallback);
+            tracing::error!("WARN: {} not set; using fallback {}", env_key, fallback);
             pk(fallback)
         }
     }

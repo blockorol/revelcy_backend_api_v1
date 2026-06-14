@@ -2,7 +2,6 @@ use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bincode;
 use borsh::{BorshDeserialize, BorshSerialize};
-use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     message::Message,
@@ -11,13 +10,12 @@ use solana_sdk::{
     system_program,
     transaction::Transaction,
 };
-use sqlx::PgPool;
-use std::time::Duration;
 
 use crate::models::premarket::{BuildPremarketTxParams, BuiltTxCreation, SolanaNetwork};
 
 use super::constants::CREATE_METHOD_NAME;
-use super::env::{program_id_for, read_revelcy_auth, rpc_url};
+use super::env::{program_id_for, read_revelcy_auth};
+use super::solana_methods::make_async_rpc_client;
 use super::utils::{
     anchor_sighash_global, find_anchor_instruction, get_valid_latest_blockhash, parse_privkey_64,
     resolve_account,
@@ -59,11 +57,10 @@ pub async fn generate_premarket_pda(network: SolanaNetwork, mint_priv: &str) -> 
 }
 
 pub async fn build_create_premarket_tx_unsigned(
-    _pool: &PgPool,
     params: BuildPremarketTxParams,
 ) -> Result<BuiltTxCreation> {
     let program_id = program_id_for(params.network);
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
+    let rpc = make_async_rpc_client(params.network);
 
     let revelcy = read_revelcy_auth(params.network);
     let revelcy_pub = revelcy.pubkey();

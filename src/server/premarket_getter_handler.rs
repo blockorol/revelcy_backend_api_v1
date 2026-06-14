@@ -32,7 +32,7 @@ pub async fn get_user_entry(
     {
         Ok(info) => info,
         Err(err) => {
-            eprintln!("Error fetching premarket info: {:?}", err);
+            tracing::error!("Error fetching premarket info: {:?}", err);
             return Ok(HttpResponse::InternalServerError().finish());
         }
     };

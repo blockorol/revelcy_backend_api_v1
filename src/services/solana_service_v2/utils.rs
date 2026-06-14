@@ -89,7 +89,9 @@ pub fn find_anchor_instruction<'a>(
         if ix.data.len() < 8 {
             continue;
         }
-        let sighash: [u8; 8] = ix.data[0..8].try_into().unwrap();
+        let sighash: [u8; 8] = ix.data[0..8]
+            .try_into()
+            .context("invalid anchor sighash bytes")?;
         if &sighash == expected_sighash {
             return Ok(ix);
         }

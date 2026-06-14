@@ -183,7 +183,7 @@ pub async fn get_premarket_info_by_bc_address(
 
             (cm, links)
         } else {
-            println!("community not found! set dummy");
+            tracing::info!("community not found! set dummy");
             (
                 CommunityInfoDbModel {
                     id: pm.id,
@@ -238,7 +238,7 @@ pub async fn get_premarket_info_by_id(
 
             (cm, links)
         } else {
-            println!("community not found! set dummy");
+            tracing::info!("community not found! set dummy");
             (
                 CommunityInfoDbModel {
                     id: pm.id,
@@ -588,7 +588,7 @@ pub async fn create_premarket_and_community(
     }
 
     if let Err(e) = tx.commit().await {
-        eprintln!("❌ Failed to commit transaction: {:?}", e);
+        tracing::error!("❌ Failed to commit transaction: {:?}", e);
         return Err(e.into());
     }
     Ok(())
@@ -790,9 +790,11 @@ pub async fn soft_delete_holder(
 ) -> Result<u64> {
     let id_option = get_premarket_id_by_bc_address(pool, premarket_pubkey).await?;
     if let Some(premarket_info_id) = id_option {
-        println!(
+        tracing::info!(
             "out_timestamp:{}, premarket_info_id:{:?}, holder_wallet:{}",
-            out_timestamp, premarket_info_id, holder_wallet
+            out_timestamp,
+            premarket_info_id,
+            holder_wallet
         );
         let result = sqlx::query(
             r#"

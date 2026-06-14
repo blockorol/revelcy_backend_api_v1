@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bincode;
-use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     message::Message,
@@ -10,12 +9,12 @@ use solana_sdk::{
     system_program,
     transaction::Transaction,
 };
-use std::time::Duration;
 
 use crate::models::premarket::{BuildOutTxParams, BuiltTx, SolanaNetwork};
 
 use super::constants::OUT_METHOD_NAME;
-use super::env::{program_id_for, read_revelcy_auth, rpc_url};
+use super::env::{program_id_for, read_revelcy_auth};
+use super::solana_methods::make_async_rpc_client;
 
 use super::utils::{
     anchor_sighash_global, find_anchor_instruction, get_valid_latest_blockhash, resolve_account,
@@ -32,7 +31,7 @@ pub struct ParsedOutPremarketTx {
 // out → unsigned
 pub async fn build_out_premarket_tx_unsigned(params: BuildOutTxParams) -> Result<BuiltTx> {
     let program_id = program_id_for(params.network);
-    let rpc = AsyncRpcClient::new_with_timeout(rpc_url(params.network), Duration::from_secs(15));
+    let rpc = make_async_rpc_client(params.network);
 
     let mut data = Vec::with_capacity(8);
     data.extend_from_slice(&anchor_sighash_global(OUT_METHOD_NAME));

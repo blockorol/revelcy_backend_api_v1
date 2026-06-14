@@ -8,8 +8,11 @@ use crate::models::premarket::{
 };
 use crate::models::user::UserContextData;
 use crate::services::solana_service_v2::generate_premarket_pda;
+use crate::services::solana_service_v2::utils::parse_privkey_64;
 use crate::services::user_service;
-use crate::storage::signing_keys::{acquire_signing_key, update_premarket_pubkey};
+use crate::storage::signing_keys::{
+    acquire_signing_key, get_mint_signing_keypair_by_premarket, update_premarket_pubkey,
+};
 
 use crate::storage::premarket_repo;
 use crate::storage::vesting_repo;
@@ -21,6 +24,7 @@ use uuid::Uuid;
 
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::Keypair;
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
@@ -67,6 +71,21 @@ impl From<AnyhowError> for PremarketServiceError {
 }
 
 pub type PremarketServiceResult<T> = Result<T, PremarketServiceError>;
+
+pub async fn get_mint_keypair(pool: &PgPool, premarket: Pubkey) -> PremarketServiceResult<Keypair> {
+    let pair = get_mint_signing_keypair_by_premarket(pool, &premarket.to_string())
+        .await
+        .map_err(|err| PremarketServiceError::Storage(AnyhowError::new(err)))?
+        .ok_or_else(|| PremarketServiceError::NotFound(format!("mint key for {premarket}")))?;
+
+    let mint_bytes = parse_privkey_64(&pair.priv_key).map_err(|err| {
+        PremarketServiceError::Internal(format!("mint priv_key parse failed: {err}"))
+    })?;
+
+    Keypair::from_bytes(&mint_bytes).map_err(|err| {
+        PremarketServiceError::Internal(format!("invalid mint keypair bytes: {err}"))
+    })
+}
 
 pub async fn get_full_premarket_info(
     pool: &PgPool,
@@ -595,7 +614,7 @@ pub async fn get_price_by_market_cap(real_lamp_amount: u64) -> f64 {
     let price = virtual_lamp_amount / virtual_token_amount as f64 * current_sol_price;
     let final_price = (price * 1_000_000_000.0).round() / 1_000_000_000.0;
 
-    // println!("Real sol: {}, token: {}, Virtual sol: {}, token: {} => price {}, Final price: {}", real_sol_amount, real_token_amount, virtual_lamp_amount, virtual_token_amount, price, final_price  );
+    // tracing::info!("Real sol: {}, token: {}, Virtual sol: {}, token: {} => price {}, Final price: {}", real_sol_amount, real_token_amount, virtual_lamp_amount, virtual_token_amount, price, final_price  );
     final_price
 }
 
