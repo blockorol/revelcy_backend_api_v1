@@ -1,19 +1,28 @@
+use anyhow::Result;
 use sqlx::PgPool;
 use uuid::Uuid;
-use anyhow::Result;
 
-use super::models::{
-    FullVestingInfoDbModel, HolderDbModel,
-    VestingInfoDbModel,
-};
-use crate::models::vesting::VestingInfo;
+use super::models::{FullVestingInfoDbModel, HolderDbModel, VestingInfoDbModel};
+use crate::models::vesting::{VestingHolderPosition, VestingInfo};
+
+fn map_holder_position(holder: HolderDbModel) -> VestingHolderPosition {
+    VestingHolderPosition {
+        holder_id: holder.holder_id,
+        holder_wallet: holder.holder_wallet,
+        amount_sol_lamp: holder.amount_lamport,
+        amount_token: holder.amount_token,
+        claimed_amount_token: holder.claimed_amount_token,
+        username: holder.username,
+        avatar_url: holder.avatar_url,
+    }
+}
 
 /// Get vesting info by premarket_id
 pub async fn get_vesting_info_by_premarket_id(
     pool: &PgPool,
     premarket_id: Uuid,
-) -> Result<Option<FullVestingInfoDbModel>, sqlx::Error> {
-    sqlx::query_as::<_, FullVestingInfoDbModel>(
+) -> Result<Option<VestingInfo>> {
+    let row = sqlx::query_as::<_, FullVestingInfoDbModel>(
         r#"
         SELECT 
             vi.id as vesting_id,
@@ -32,19 +41,21 @@ pub async fn get_vesting_info_by_premarket_id(
         FROM vesting_info vi
         INNER JOIN premarket_info pi ON vi.premarket_id = pi.id
         WHERE pi.id = $1
-        "#
+        "#,
     )
     .bind(premarket_id)
     .fetch_optional(pool)
-    .await
+    .await?;
+
+    row.map(TryInto::try_into).transpose()
 }
 
 /// Get vesting info by vesting_address
 pub async fn get_vesting_info_by_vesting_address(
     pool: &PgPool,
     vesting_address: &str,
-) -> Result<Option<FullVestingInfoDbModel>, sqlx::Error> {
-    sqlx::query_as::<_, FullVestingInfoDbModel>(
+) -> Result<Option<VestingInfo>> {
+    let row = sqlx::query_as::<_, FullVestingInfoDbModel>(
         r#"
         SELECT 
             vi.id as vesting_id,
@@ -63,19 +74,21 @@ pub async fn get_vesting_info_by_vesting_address(
         FROM vesting_info vi
         INNER JOIN premarket_info pi ON vi.premarket_id = pi.id
         WHERE vi.vesting_address = $1
-        "#
+        "#,
     )
     .bind(vesting_address)
     .fetch_optional(pool)
-    .await
+    .await?;
+
+    row.map(TryInto::try_into).transpose()
 }
 
 /// Get vesting info by mint_address
 pub async fn get_vesting_info_by_mint_address(
     pool: &PgPool,
     mint_address: &str,
-) -> Result<Option<FullVestingInfoDbModel>, sqlx::Error> {
-    sqlx::query_as::<_, FullVestingInfoDbModel>(
+) -> Result<Option<VestingInfo>> {
+    let row = sqlx::query_as::<_, FullVestingInfoDbModel>(
         r#"
         SELECT 
             vi.id as vesting_id,
@@ -95,19 +108,21 @@ pub async fn get_vesting_info_by_mint_address(
         INNER JOIN premarket_info pi ON vi.premarket_id = pi.id
         WHERE pi.mint_address = $1
         LIMIT 1
-        "#
+        "#,
     )
     .bind(mint_address)
     .fetch_optional(pool)
-    .await
+    .await?;
+
+    row.map(TryInto::try_into).transpose()
 }
 
 /// Get vesting info by premarket bc_address
 pub async fn get_vesting_info_by_premarket_address(
     pool: &PgPool,
     premarket_address: &str,
-) -> Result<Option<FullVestingInfoDbModel>, sqlx::Error> {
-    sqlx::query_as::<_, FullVestingInfoDbModel>(
+) -> Result<Option<VestingInfo>> {
+    let row = sqlx::query_as::<_, FullVestingInfoDbModel>(
         r#"
         SELECT 
             vi.id as vesting_id,
@@ -127,19 +142,21 @@ pub async fn get_vesting_info_by_premarket_address(
         INNER JOIN premarket_info pi ON vi.premarket_id = pi.id
         WHERE pi.bc_address = $1
         LIMIT 1
-        "#
+        "#,
     )
     .bind(premarket_address)
     .fetch_optional(pool)
-    .await
+    .await?;
+
+    row.map(TryInto::try_into).transpose()
 }
 
 /// Get all vesting holders (from premarket_holders) for a premarket_id with user information
 pub async fn get_vesting_holders_by_premarket_id(
     pool: &PgPool,
     premarket_id: Uuid,
-) -> Result<Vec<HolderDbModel>, sqlx::Error> {
-    sqlx::query_as::<_, HolderDbModel>(
+) -> Result<Vec<VestingHolderPosition>> {
+    let rows = sqlx::query_as::<_, HolderDbModel>(
         r#"
         SELECT 
             ph.id,
@@ -160,11 +177,13 @@ pub async fn get_vesting_holders_by_premarket_id(
         WHERE ph.premarket_info_id = $1
           AND ph.out_timestamp IS NULL
         ORDER BY ph.amount_token DESC NULLS LAST, ph.amount_lamport DESC
-        "#
+        "#,
     )
     .bind(premarket_id)
     .fetch_all(pool)
-    .await
+    .await?;
+
+    Ok(rows.into_iter().map(map_holder_position).collect())
 }
 
 /// Create vesting info record
@@ -196,14 +215,10 @@ pub async fn create_vesting_info(
     .await
     .map_err(|e| anyhow::anyhow!("Failed to create vesting info: {}", e))?;
 
-    // Fetch full vesting info with premarket data
-    let full_vesting_db = get_vesting_info_by_premarket_id(pool, premarket_id)
+    get_vesting_info_by_premarket_id(pool, premarket_id)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to fetch vesting info: {}", e))?
-        .ok_or_else(|| anyhow::anyhow!("Vesting info not found after creation"))?;
-
-    // Convert to service model
-    full_vesting_db.try_into()
+        .ok_or_else(|| anyhow::anyhow!("Vesting info not found after creation"))
 }
 
 /// Update vesting info record by premarket_id
@@ -227,7 +242,7 @@ pub async fn update_vesting_info(
             timestamp_end   = $5,
             updated_at      = now()
         WHERE premarket_id = $1
-        "#
+        "#,
     )
     .bind(premarket_id)
     .bind(vesting_period)
@@ -246,16 +261,11 @@ pub async fn update_vesting_info(
         ));
     }
 
-    // Fetch full vesting info with premarket data
-    let full_vesting_db = get_vesting_info_by_premarket_id(pool, premarket_id)
+    get_vesting_info_by_premarket_id(pool, premarket_id)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to fetch vesting info after update: {}", e))?
-        .ok_or_else(|| anyhow::anyhow!("Vesting info not found after update"))?;
-
-    // Convert to service model
-    full_vesting_db.try_into()
+        .ok_or_else(|| anyhow::anyhow!("Vesting info not found after update"))
 }
-
 
 /// Update vesting timestamps (when vesting starts)
 pub async fn update_vesting_timestamps(
@@ -269,7 +279,7 @@ pub async fn update_vesting_timestamps(
         UPDATE vesting_info 
         SET timestamp_start = $2, timestamp_end = $3, updated_at = now()
         WHERE id = $1
-        "#
+        "#,
     )
     .bind(vesting_id)
     .bind(timestamp_start)
@@ -292,7 +302,7 @@ pub async fn update_holder_token_amounts(
         UPDATE premarket_holders 
         SET amount_token = $3, claimed_amount_token = $4, updated_at = now()
         WHERE premarket_info_id = $1 AND holder_wallet = $2
-        "#
+        "#,
     )
     .bind(premarket_id)
     .bind(holder_wallet)
@@ -315,7 +325,7 @@ pub async fn update_tokens_claimed(
         UPDATE premarket_holders 
         SET claimed_amount_token = $3, updated_at = now()
         WHERE premarket_info_id = $1 AND holder_wallet = $2
-        "#
+        "#,
     )
     .bind(premarket_id)
     .bind(holder_wallet)
@@ -330,8 +340,8 @@ pub async fn get_holder_by_wallet(
     pool: &PgPool,
     premarket_id: Uuid,
     holder_wallet: &str,
-) -> Result<Option<HolderDbModel>, sqlx::Error> {
-    sqlx::query_as::<_, HolderDbModel>(
+) -> Result<Option<VestingHolderPosition>> {
+    let row = sqlx::query_as::<_, HolderDbModel>(
         r#"
         SELECT 
             ph.id,
@@ -350,10 +360,12 @@ pub async fn get_holder_by_wallet(
         FROM premarket_holders ph
         LEFT JOIN users u ON ph.holder_id = u.id
         WHERE ph.premarket_info_id = $1 AND ph.holder_wallet = $2
-        "#
+        "#,
     )
     .bind(premarket_id)
     .bind(holder_wallet)
     .fetch_optional(pool)
-    .await
+    .await?;
+
+    Ok(row.map(map_holder_position))
 }

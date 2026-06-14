@@ -1,12 +1,12 @@
-use crate::models::vesting::{VestingHolderInfo, VestingInfo};
-use crate::storage::vesting_repo;
-use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
-use solana_sdk::signature::Signature;
-use solana_sdk::pubkey::Pubkey;
 use crate::models::premarket::SolanaNetwork;
+use crate::models::vesting::{VestingHolderInfo, VestingInfo};
 use crate::services::solana_service_v2::vesting::generate_vesting_pda;
+use crate::storage::vesting_repo;
 use actix_web::error::{ErrorInternalServerError, ErrorNotFound};
 use chrono::Utc;
+use solana_client::nonblocking::rpc_client::RpcClient as AsyncRpcClient;
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::Signature;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -25,7 +25,7 @@ pub async fn get_full_vesting_info(
     key: &str,
     lookup_type: VestingLookupType,
 ) -> Result<Option<VestingInfo>, actix_web::Error> {
-    let vesting_db = match lookup_type {
+    match lookup_type {
         VestingLookupType::PremarketId => {
             let uuid = Uuid::parse_str(key)
                 .map_err(|e| ErrorInternalServerError(format!("Invalid UUID: {}", e)))?;
@@ -37,31 +37,11 @@ pub async fn get_full_vesting_info(
         VestingLookupType::VestingAddress => {
             vesting_repo::get_vesting_info_by_vesting_address(pool, key).await
         }
-        VestingLookupType::MintAddress => vesting_repo::get_vesting_info_by_mint_address(pool, key).await,
+        VestingLookupType::MintAddress => {
+            vesting_repo::get_vesting_info_by_mint_address(pool, key).await
+        }
     }
-    .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))?;
-
-    let vesting_db = match vesting_db {
-        Some(v) => v,
-        None => return Ok(None),
-    };
-
-    let is_active = vesting_db.timestamp_start.is_some() && vesting_db.timestamp_end.is_some();
-
-    Ok(Some(VestingInfo {
-        vesting_id: vesting_db.vesting_id,
-        vesting_address: vesting_db.vesting_address,
-        premarket_id: vesting_db.premarket_id,
-        premarket_address: vesting_db.premarket_address,
-        mint_address: vesting_db.mint_address,
-        creator_id: vesting_db.creator_id,
-        creator_address: vesting_db.creator_address,
-        vesting_period: vesting_db.vesting_period,
-        init_unlock: vesting_db.init_unlock,
-        timestamp_start: vesting_db.timestamp_start,
-        timestamp_end: vesting_db.timestamp_end,
-        is_active,
-    }))
+    .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))
 }
 
 pub fn calculate_available_tokens(
@@ -122,8 +102,16 @@ pub async fn get_vesting_holder_info(
                 .ok_or_else(|| ErrorNotFound("Vesting not found"))?;
 
             let now = Utc::now().timestamp();
-            let total_opt = if h.amount_token == 0 { None } else { Some(h.amount_token) };
-            let claimed_opt = if h.claimed_amount_token == 0 { None } else { Some(h.claimed_amount_token) };
+            let total_opt = if h.amount_token == 0 {
+                None
+            } else {
+                Some(h.amount_token)
+            };
+            let claimed_opt = if h.claimed_amount_token == 0 {
+                None
+            } else {
+                Some(h.claimed_amount_token)
+            };
             let available_tokens = if let (Some(total), Some(claimed)) = (total_opt, claimed_opt) {
                 calculate_available_tokens(
                     total,
@@ -140,7 +128,7 @@ pub async fn get_vesting_holder_info(
             Ok(Some(VestingHolderInfo {
                 holder_id: h.holder_id,
                 holder_wallet: h.holder_wallet,
-                amount_sol_lamp: h.amount_lamport,
+                amount_sol_lamp: h.amount_sol_lamp,
                 amount_tokens: total_opt,
                 claimed_tokens: claimed_opt,
                 available_tokens,
@@ -162,20 +150,16 @@ pub async fn finalize_withdraw_vesting(
     let vesting = get_full_vesting_info(pool, token_mint, VestingLookupType::MintAddress)
         .await?
         .ok_or_else(|| ErrorNotFound("Vesting not found for mint"))?;
-    
+
     let holder = vesting_repo::get_holder_by_wallet(pool, vesting.premarket_id, holder_wallet)
         .await
         .map_err(|e| ErrorInternalServerError(format!("Database error: {}", e)))?
         .ok_or_else(|| ErrorNotFound("Holder not found in premarket"))?;
 
     let total_amount = holder.amount_token;
-    let claimed_now = calculate_claimed_tokens_delta_from_tx(
-        network,
-        signature,
-        token_mint,
-        holder_wallet,
-    )
-    .await?;
+    let claimed_now =
+        calculate_claimed_tokens_delta_from_tx(network, signature, token_mint, holder_wallet)
+            .await?;
     let claimed_next = holder.claimed_amount_token.saturating_add(claimed_now);
 
     vesting_repo::update_holder_token_amounts(
@@ -202,12 +186,13 @@ pub async fn sync_finish_premarket_holder_amount_tokens(
         .map_err(|_| ErrorInternalServerError("Invalid mint address"))?;
     let vesting_account = generate_vesting_pda(network, mint);
 
-    let onchain_vesting = crate::services::solana_service_v2::vesting::get_vesting_account_data_with_client(
-        rpc,
-        vesting_account,
-    )
-    .await
-    .map_err(|e| ErrorInternalServerError(format!("Failed to read vesting account: {}", e)))?;
+    let onchain_vesting =
+        crate::services::solana_service_v2::vesting::get_vesting_account_data_with_client(
+            rpc,
+            vesting_account,
+        )
+        .await
+        .map_err(|e| ErrorInternalServerError(format!("Failed to read vesting account: {}", e)))?;
 
     let holders = vesting_repo::get_vesting_holders_by_premarket_id(pool, premarket_id)
         .await

@@ -353,6 +353,19 @@ pub struct PremarketOnchainData {
     pub mint: Pubkey,
 }
 
+#[derive(Debug, Clone)]
+pub struct MintKeyMaterial {
+    pub pub_key: String,
+    pub priv_key: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AcquiredMintKeyMaterial {
+    pub id: Uuid,
+    pub pub_key: String,
+    pub priv_key: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct PythPriceData {
     pub price: String,
