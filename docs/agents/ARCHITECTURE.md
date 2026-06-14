@@ -120,7 +120,19 @@ Transaction modules should keep account derivation, instruction data, program co
 
 ## Configuration
 
-Environment access is centralized in `src/config/mod.rs`. Other modules should call config accessors instead of reading `std::env::var` directly.
+Environment access is centralized under `src/config/`. Other modules should call config accessors instead of reading `std::env::var` directly.
+
+`src/config/mod.rs` is the public facade. It re-exports section-specific accessors and runs startup validation. Section files own env names and defaults:
+
+- `src/config/database.rs`: `DATABASE_URL`.
+- `src/config/server.rs`: host, port, and CORS settings.
+- `src/config/security.rs`: JWT and Revelcy signer secrets.
+- `src/config/pyth.rs`: Pyth URL/subdomain/token settings.
+- `src/config/storage.rs`: local storage directory settings.
+- `src/config/solana.rs`: Solana RPC URLs, network, and program ids.
+- `src/config/pump_keys.rs`: pump key generator settings.
+
+`src/main.rs` calls `config::validate_startup_config()` after loading `.env` and before creating clients. At startup, `DATABASE_URL` and `SOLANA_RPC` are required because the process cannot create the Postgres pool or shared Solana RPC client without them.
 
 Current callers include:
 

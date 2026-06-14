@@ -18,6 +18,7 @@ mod storage;
 async fn main() -> std::io::Result<()> {
     // load .env
     dotenv().ok();
+    config::validate_startup_config().unwrap_or_else(|err| panic!("{err}"));
 
     // DB Connect
     let database_url = config::get_database_url()
